@@ -1,0 +1,140 @@
+===============================================================================
+flags-verificadas-LAIA.txt — Resumen verificado y adaptado AL BUILD REAL
+===============================================================================
+Complemento de llama-flags.txt (que es el --help COMPLETO del build del
+Director en D:\llama.cpp\build\bin\llama-server.exe — FUENTE DE VERDAD #1).
+Este archivo lo genera LAIA. Verificado el 2026-10-24 contra:
+  (1) el dump real del build del Director (llama-flags.txt, UTF-16)
+  (2) docs oficiales de llama.cpp master (para el build ACTUALIZADO)
+
+JERARQUIA DE VERDAD:
+  1. llama-flags.txt  -> lo que TU build acepta HOY (nada fuera de ahi)
+  2. este archivo     -> destilado verificado + mapa de lo que falta
+  3. docs oficiales   -> lo que existira cuando actualices el build
+
+RUTAS REALES DEL DIRECTOR (de RutasArchivos.md):
+  Modelo      : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  llama-server: D:\llama.cpp\build\bin\llama-server.exe
+===============================================================================
+
+!!! HALLAZGO CRITICO DE LA AUDITORIA !!!
+El build actual del Director es INTERMEDIO:
+  - TIENE el framework especulativo nuevo (--spec-draft-*, --spec-default,
+    --spec-replace, --backend-sampling)
+  - PERO su --spec-type solo acepta:
+      none | ngram-cache | ngram-simple | ngram-map-k | ngram-map-k4v | ngram-mod
+  - NO EXISTE draft-mtp en su build (cero ocurrencias de "mtp" en el dump)
+  - TODAVIA usa el sistema viejo de carga: --mlock / --mmap / --no-mmap /
+    --direct-io  (la flag nueva -lm/--load-mode NO existe en su build)
+CONSECUENCIA: el multiplicador x2 (draft-mtp) REQUIERE actualizar el build.
+Sin actualizarlo, el techo practico con este GGUF son ~20-26 t/s (sweep de
+-ncmoe + ngram/draft externo). Con draft-mtp: ~30-38 t/s.
+
+--- A. FLAGS VALIDAS EN TU BUILD ACTUAL (auditadas en tu dump) ----------------
+[modelo y servidor]
+-m, --model FNAME            ruta del GGUF
+-a, --alias STRING           nombre en la API
+--host HOST / --port PORT
+--jinja                      chat template (tool-calls / thinking)
+--mmproj FILE                vision (si se usa mmproj)
+[capas y memoria]
+-ngl, --gpu-layers, --n-gpu-layers N
+-cmoe, --cpu-moe             TODOS los expertos en RAM (boot garantizado)
+-ncmoe, --n-cpu-moe N        expertos de las primeras N capas en RAM (SWEEP)
+-ot, --override-tensor PATRON=BUFTYPE
+--fit / --fit-target / --fit-ctx
+[contexto y batch]
+-c, --ctx-size N             (default 0)
+-b, --batch-size N
+-ub, --ubatch-size N         (default 512)
+-np, --parallel N
+[kv cache]
+-fa, --flash-attn [on|off|auto]   (default auto -> fijar ON)
+-ctk, --cache-type-k TYPE    f32|f16|bf16|q8_0|q4_0|q4_1|iq4_nl|q5_0|q5_1
+-ctv, --cache-type-v TYPE    (mismos valores; sin turbo* — no existen aqui)
+[hilos]
+-t, --threads N              usar 4 (fisicos)
+-tb, --threads-batch N
+--prio N                     -1 low .. 3 realtime (default 0)
+--poll <0..100>              (default 50)
+[carga — sistema VIEJO, valido HOY en tu build]
+--mmap / --no-mmap           (default: mmap activado)
+--mlock                      PROHIBIDO EN ESTE RIG por RAM (16 GB vs 12.2 GB
+                             de pesos) aunque la flag exista
+--direct-io / --no-direct-io
+--warmup / --no-warmup
+[especulativa — lo que tu build SI tiene]
+--spec-type none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod
+--spec-default
+--spec-ngram-mod-n-match N (24) / --spec-ngram-mod-n-min N / --spec-ngram-mod-n-max N
+--spec-ngram-simple-size-n/-size-m/-min-hits
+--spec-ngram-map-k-size-n/-size-m/-min-hits / --spec-ngram-map-k4v-*
+--spec-draft-n-max N         (default 16 en tu build — fijarlo explicito)
+--spec-draft-n-min N
+--spec-draft-p-min P / --spec-draft-p-split P (alias --draft-p-min/-p-split)
+--spec-draft-ngl / -ngld     capas del draft en VRAM
+-md, --model-draft FNAME / -hfd, --hf-repo-draft USER/MOD
+-td / -tbd (hilos del draft), --spec-draft-prio, --spec-draft-poll
+-ctkd / -ctvd                KV del draft (mismos valores que -ctk)
+-cmoed / -ncmoed             expertos del draft en CPU
+-otd, --override-tensor-draft
+-bs, --backend-sampling
+--spec-replace TARGET DRAFT
+
+--- B. FLAGS QUE TU BUILD NO TIENE (existen solo tras ACTUALIZAR llama.cpp) ---
+--spec-type draft-mtp        LA del x2 (usa las 20 capas MTP del GGUF)
+--spec-type draft-simple|draft-eagle3|draft-dflash|draft-dspark
+--spec-draft-n-ubatch N
+-lm, --load-mode auto|none|mmap|mlock|mmap+mlock|dio
+                             (reemplaza a --mlock/--no-mmap; en el build
+                             actualizado quedan ELIMINADAS — no mezclar reglas)
+--moe-cache-mib N
+Regla de oro: tras actualizar, re-auditar con
+  llama-server.exe --help > llama-flags.txt   (regenerar el dump)
+y re-verificar este archivo.
+
+--- C. BLOQUEADAS --------------------------------------------------------------
+turbo2/turbo3/turbo4 en -ctk/-ctv   (solo forks; tu build NO las lista)
+--spec-type mtp                      (nombre mal escrito; es draft-mtp)
+--mlock en este rig                  (la flag existe, la RAM no)
+-nkvo / --no-kv-offload              (hunde la generacion)
+-ngl 0 / -ngl bajo como control de memoria (el control es -ncmoe)
+-mlock/-no-mmap/-direct-io despues de actualizar el build (borradas)
+--draft-max / -draft / --draft-min   (nombres muertos; usar --spec-draft-n-max)
+
+===============================================================================
+COMANDO V1 — BUILD ACTUAL (sin MTP; base para el sweep, ~20-26 t/s esperado)
+===============================================================================
+D:\llama.cpp\build\bin\llama-server.exe ^
+  -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
+  -a apex35b ^
+  -ngl 99 -cmoe ^
+  -c 16384 -b 2048 -ub 256 ^
+  -fa on -ctk q8_0 -ctv q8_0 ^
+  -t 4 --prio 2 ^
+  --jinja ^
+  --host 127.0.0.1 --port 8080
+
+Luego del sweep (RUTAS.md): sustituir -cmoe por -ncmoe N (ganador).
+
+Especulativa INTERINA (sin actualizar build), dos opciones validas HOY:
+  a) n-gram (sin draft externo, ideal para codigo/repeticiones):
+     --spec-type ngram-mod --spec-ngram-mod-n-match 24 ^
+     --spec-ngram-mod-n-min 48 --spec-ngram-mod-n-max 64 --spec-draft-n-max 64
+  b) draft pequeño en GPU (RAM lo permite, ~0.6 GB):
+     -md D:\ZLia\models\qwen36-0.8b-q4_0.gguf -ngld all --spec-draft-n-max 4
+
+===============================================================================
+COMANDO V2 — BUILD ACTUALIZADO (con MTP; objetivo ~30-38 t/s)
+===============================================================================
+D:\llama.cpp\build\bin\llama-server.exe ^
+  -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
+  -a apex35b ^
+  -ngl 99 -ncmoe N_GANADOR ^
+  -c 16384 -b 2048 -ub 256 ^
+  -fa on -ctk q8_0 -ctv q8_0 ^
+  -t 4 --prio 2 ^
+  --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75 ^
+  --jinja ^
+  --host 127.0.0.1 --port 8080
+===============================================================================
