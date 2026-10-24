@@ -99,7 +99,17 @@ Sin actualizarlo, el techo practico con este GGUF son ~20-26 t/s (sweep de
 -lm, --load-mode auto|none|mmap|mlock|mmap+mlock|dio
                              (reemplaza a --mlock/--no-mmap; en el build
                              actualizado quedan ELIMINADAS — no mezclar reglas)
---moe-cache-mib N
+--moe-cache-mib N            (cache de expertos en RAM host; release notes
+                             v0.7.0 oficiales declaran "up to 2.2x faster
+                             decode" — NO usar hasta auditarla contra el
+                             dump nuevo del build actualizado)
+
+ACTUALIZAR SIN COMPILAR: los zips oficiales ya traen CUDA listo —
+  ver RUTAS.md seccion 3-A (llama-bXXXX-bin-win-cuda-12.4-x64.zip +
+  cudart-llama-bXXXX-bin-win-cuda-12.4-x64.zip; nightly del dia: b11856).
+OJO v0.7.0: el puerto default del server cambio 8080 -> 9931 — NO quitar
+  `--port 8080` del comando o airi/pi perdara la conexion.
+
 Regla de oro: tras actualizar, re-auditar con
   llama-server.exe --help > llama-flags.txt   (regenerar el dump)
 y re-verificar este archivo.

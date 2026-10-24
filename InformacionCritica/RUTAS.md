@@ -36,7 +36,7 @@ actualizar el build — sin eso, la palanca del x2 no existe.**
 
 | # | Palanca | Flags | Estado en el build actual | Efecto esperado |
 |---|---------|-------|---------------------------|-----------------|
-| 0 | **Actualizar build** | `git pull` + recompilar | ⛔ bloqueante para MTP | desbloquea el x2 |
+| 0 | **Actualizar binario** | zip oficial precompilado (§3-A) o `git pull` + recompilar (§3-B) | ⛔ bloqueante para MTP | desbloquea el x2 |
 | 1 | **MTP nativo** (20 capas preservadas en el GGUF) | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` | ❌ requiere RUTA 0 | **+20–50%** (dato del autor) y más con `p-min` |
 | 2 | **Barrido `-ncmoe`** | `-ngl 99` + `-ncmoe N` | ✅ disponible HOY | base 20–28 t/s (vs 16) |
 | 3 | **VRAM liberada** | `-fa on -ctk q8_0 -ctv q8_0` | ✅ disponible HOY | habilita la palanca 2 |
@@ -51,17 +51,72 @@ actualizar el build — sin eso, la palanca del x2 no existe.**
 | [Foro NVIDIA](https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298) | DGX Spark GB10 | Qwen3.6-27B, `n-max 5` + `p-min 0.75` | **28–31 t/s** estables |
 | [llama.cpp #25198](https://github.com/ggml-org/llama.cpp/discussions/25198) | RTX 5090 | `n-max 8` + `p-min 0.8` | 47 → **163–178 t/s** |
 | **[PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673)** "llama + spec: MTP Support" — VERIFICADO: fusionado **2026-05-16** | — | introduce `--spec-type draft-mtp`, `--spec-draft-n-max`, `ngram-mod`, `--spec-default` | declara **"more than 2x speed-up over baseline with ~75% acceptance"** |
+| [Release notes v0.7.0](https://github.com/ggml-org/llama.cpp/releases/tag/v0.7.0) (oficial, 2026-10-15) | — | — | puerto default 8080→9931; nueva caché MoE en RAM host ("up to 2.2x faster decode"); nightly del día: b11856 |
 | [Unsloth MTP](https://unsloth.ai/docs/models/mtp) | RTX 6000 | 35B-A3B MTP | 240 t/s (techo de referencia) |
 | Auditoría del dump del Director | su build | `--help` completo | build intermedio: sin `draft-mtp`, con `--mlock/--no-mmap`, sin `-lm` |
 
 ---
 
-## 3. RUTA 0 — Actualizar el build local (~15 min, $0) ← EMPEZAR AQUÍ
+## 3. RUTA 0 — Actualizar el binario (~10–15 min, $0) ← EMPEZAR AQUÍ
 
-El server vive en `D:\llama.cpp\build\bin\` → es un build local de fuentes. Actualizarlo:
+**¿Recompilar? NO es obligatorio.** Dos caminos; el 3-A no necesita Visual Studio ni
+CUDA Toolkit. Ambos terminan igual: dump regenerado + b-number anotado.
 
-Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El directorio
-`build/` existente se reutiliza — CMake reconfigura solo tras el pull.
+Antes de tocar nada, registrar el punto de partida (la flag existe en tu build, línea 4
+del dump):
+
+```bat
+D:\llama.cpp\build\bin\llama-server.exe --version
+```
+
+### 3-A. Zip precompilado oficial (RECOMENDADA — cero compilación)
+
+Los zips oficiales ya traen CUDA compilado. Verificado 2026-10-24 vía API de GitHub:
+el nightly del día es **b11856** (publicado 2026-10-24).
+
+1. Ir a <https://github.com/ggml-org/llama.cpp/releases> → descargar el nightly más
+   reciente (hoy b11856), **LOS DOS zips, misma carpeta destino**:
+   - `llama-b11856-bin-win-cuda-12.4-x64.zip` (binarios)
+   - `cudart-llama-b11856-bin-win-cuda-12.4-x64.zip` (DLLs CUDA)
+   - Elegir **CUDA 12.4** (no 13.4): máxima compatibilidad con el driver de la GTX 1650.
+2. Descomprimir AMBOS en una carpeta NUEVA, ej. `D:\llama.cpp\bin-new\` (las DLLs deben
+   quedar junto a los .exe). **NO borrar** `D:\llama.cpp\build\bin\` — es tu rollback.
+3. Verificar ANTES de usar (DEBE aparecer `draft-mtp`; PR #22673, fusionado 2026-05-16;
+   `--version` es válido en todos los builds recientes):
+
+```bat
+D:\llama.cpp\bin-new\llama-server.exe --version
+D:\llama.cpp\bin-new\llama-server.exe --help | findstr draft-mtp
+```
+
+   Si `findstr` no devuelve nada → no usar ese binario, avisar. Si en el zip NO existe
+   `llama-server.exe` → **NO improvisar**: un blog tercero afirma que los binarios se
+   consolidaron en `llama.exe serve`, pero el README oficial del server no lo menciona
+   (claim NO verificado) — anotar qué .exe trae el zip y avisar antes de seguir.
+4. Si `findstr draft-mtp` responde: regenerar el dump (igual que el actual, generado
+   desde PowerShell → queda UTF-16 como el original):
+
+```bat
+D:\llama.cpp\bin-new\llama-server.exe --help > D:\ZLia\llama-flags-nuevo.txt
+```
+
+   Luego subir `llama-flags-nuevo.txt` a `InformacionCritica/` del repo en lugar del
+   anterior (generado desde PowerShell conserva el formato UTF-16 del original). Cuando
+   el nuevo dump esté en el repo, LAIA re-audita las flags contra él antes de ejecutar V2.
+
+**Avisos verificados en las release notes oficiales v0.7.0 (2026-10-15):**
+- El **puerto por defecto cambió de 8080 a 9931** → los comandos V1/V2 ya pasan
+  `--port 8080` explícito: **NO quitarlo** o airi/pi perderá la conexión.
+- Nueva palanca MoE: caché de expertos en RAM host (`moe_cache_size`, el autor declara
+  "up to 2.2x faster decode") → candidata real para este rig, pero NO se toca hasta
+  re-auditarla contra TU nuevo dump (regla del guardarrail 2).
+- Las flags de MoE (`-cmoe/-ncmoe`) pueden haber cambiado de nombre/forma — por eso el
+  paso 4 regenera el dump ANTES de ejecutar V2.
+
+### 3-B. Recompilar tu build local (alternativa, mismo resultado)
+
+Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El
+directorio `build/` existente se reutiliza — CMake reconfigura solo tras el pull.
 
 ```bat
 cd D:\llama.cpp
@@ -77,16 +132,18 @@ D:\llama.cpp\build\bin\llama-server.exe --help | findstr draft-mtp
 D:\llama.cpp\build\bin\llama-server.exe --help > InformacionCritica\llama-flags.txt   (regenerar el dump tras actualizar)
 ```
 
-📌 **ANOTAR el `b-number` que imprima `--version`** (ej. `b8797`) aquí abajo — es el pin
-de versión del proyecto; todo diagnóstico futuro cita ese número:
-
-```text
-Build actualizado: b-XXXX (pegar aquí) — fecha: __/__/____
-```
-
 Si `git pull` rompe el build (deps nuevas): `rmdir /s /q build` y reconfigurar
 `cmake -B build -DGGML_CUDA=ON` + compilar. Tras actualizar, **las reglas de carga
 cambian** (`--mlock/--no-mmap` desaparecen, entra `-lm`) — ver sección 8.
+
+📌 **ANOTAR el `b-number` que imprima `--version`** (ej. `b8797`) aquí abajo — es el pin
+de versión del proyecto; todo diagnóstico futuro cita ese número. Anotar también el
+b-number del build VIEJO como referencia de comparación:
+
+```text
+Build VIEJO (base 16 t/s): b-XXXX (pegar aquí) — fecha: __/__/____
+Build actualizado:        b-XXXX (pegar aquí) — fecha: __/__/____
+```
 
 ## 4. RUTA 1 — Arranque garantizado (línea base, HOY, ~10 min)
 
@@ -145,7 +202,7 @@ De a una y midiendo: `-c 8192` → `-ub 128` → `-b 1024` → `-ctv q4_0` (mant
 
 ## 9. RUTA 6 — Planes B y C (solo si lo anterior falla)
 
-- **Plan B (quant):** mirror APEX de LocalAI ([mudler](https://www.modelscope.cn/models/mudler/Qwen3.6-35B-A3B-APEX-GGUF)) o [MTP-GGUF de Unsloth](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) — solo tiers ≤ 13 GB caben en 16 GB de RAM. I-Compact (15.85 GB) e I-Quality (21.9 GB) quedan fuera hasta haber hardware.
+- **Plan B (quant):** mirror APEX de LocalAI ([mudler](https://www.modelscope.cn/models/mudler/Qwen3.6-35B-A3B-APEX-GGUF)) o [MTP-GGUF de Unsloth](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) — en 16 GB de RAM solo cabe I-MINI (14.27 GB, justo — ver sección 8). I-Compact (**17.02 GB**) e I-Quality (**23.51 GB**, verificados en API de HF) quedan fuera hasta haber hardware.
 - **Plan C (rompe el $0):** +16 GB RAM (~$35 usado) habilita mlock e I-Compact; RTX 3060 12GB usada lleva TODOS los expertos a VRAM.
 
 ## 10. Conexión de airi / pi dev (intocable)
@@ -156,6 +213,10 @@ De a una y midiendo: `-c 8192` → `-ub 128` → `-b 1024` → `-ctv q4_0` (mant
 |-----|---------------|
 | **airi** | Provider OpenAI-compatible → `http://127.0.0.1:8080/v1` · API key `no-key` · Model `apex35b` |
 | **pi dev** | Ídem, endpoint OpenAI apuntando a `/v1` |
+
+⚠ **Tras actualizar el binario (v0.7.0+):** el puerto por defecto del server cambió de
+8080 a 9931 → **mantener `--port 8080` explícito** en el comando (V1/V2 ya lo llevan).
+Si algún día lo quitas, airi/pi deja de conectar sin mensaje de error claro.
 
 **Visión (opcional, al FINAL de todo):** el repo SÍ incluye
 `mmproj-Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-F16.gguf` (0.90 GB,
@@ -176,6 +237,9 @@ RAM/VRAM: activarlo solo después de tener el comando ganador estable.
 4. Tras actualizar build: `--mlock/--no-mmap/--direct-io` dejan de existir → usar `-lm`.
 5. Cero scripts Python custom. Cero Ollama para este modelo (no expone MTP ni `-ncmoe` fino).
 6. Medir siempre: t/s, aceptación del draft, VRAM y RAM. Sin medición no hay conclusión.
+7. Tras actualizar: **no quitar `--port 8080`** (default nuevo: 9931) y regenerar el dump
+   antes de creerle a cualquier flag nueva (ej. la caché MoE en host de v0.7.0: auditar
+   contra el dump primero, ejecutar después).
 
 ## 13. Fuentes
 
