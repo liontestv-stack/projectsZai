@@ -1,11 +1,13 @@
 # 03 — Software: llama.cpp, MTP, --n-cpu-moe y ecosystem
 
+> ⚠ Doc de investigación original (2026-10-24, mañana). Estado operativo ACTUAL + auditoría del build del Director: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md) y [../InformacionCritica/flags-verificadas-LAIA.txt](../InformacionCritica/flags-verificadas-LAIA.txt).
+
 ## 1. llama.cpp — requisitos de versión
 
 | Requisito | Detalle |
 |-----------|---------|
 | Soporte arquitectura `qwen3_5_moe` | Necesario para cargar el GGUF — presente en builds recientes (2026) |
-| MTP especulativo | **PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673)** (am17an), fusionado a master (anuncio r/LocalLLaMA "MTP support merged into llama.cpp") |
+| MTP especulativo | **PR [#22673](https://github.com/ggml-org/llama.cpp/pull/22673)** (am17an) — **fusionado a master el 2026-05-16 (verificado vía página del PR, 2026-10-24)** |
 | Documentación oficial | [docs/speculative.md](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md) — implementa `draft`, `draft-eagle3`, `draft-dflash` y **`draft-mtp`** |
 | Regla práctica | **Instalar la última release de llama.cpp** (o compilar master). Builds viejos = modelo no carga o sin draft-mtp |
 
@@ -24,6 +26,8 @@
 -c                   contexto. Primero fijar el contexto que SE USA, luego barrer ncmoe.
 -lm none / -lm mlock (antes --no-mmap / --mlock): con expertos en RAM, mmap puede
                      provocar evicciones; -lm none reportó bajar RAM 98%→71% a igual velocidad.
+                     ⚠ POR BUILD: en el build ACTUAL del Director aún existen --mlock/--no-mmap
+                     y NO existe -lm — reglas exactas en InformacionCritica/flags-verificadas-LAIA.txt.
 -b / -ub             buffers de batch en GPU: bajarlos (-b 1024 -ub 256) libera VRAM
                      para más expertos; penaliza prompt processing, no la generación.
 --spec-type draft-mtp --spec-draft-n-max N   activa MTP (N=2 recomendado; probar 1-6).
@@ -41,7 +45,7 @@
 | r/LocalLLaMA | RTX 5090 | sweep -ncmoe 20→12 | 54 → 69.4 t/s; colapso a 27.5 al pasarse (VRAM spill silencioso) |
 | [Foro NVIDIA (blainesworld)](https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298) | DGX Spark GB10 | Qwen3.6-27B MTP Q4_K_M, draft-n-max 5 + p-min 0.75 | **28-31 t/s** estables, c1-c4; notas de crashes ocasionales en el PR |
 | [Unsloth docs MTP](https://unsloth.ai/docs/models/mtp) | RTX 6000 | Qwen3.6-35B-A3B MTP | **240 t/s** (referencia techo) |
-| **Nuestro rig (estimación física)** | i3-10100F + 1650 4GB + 16GB DDR4-2666 | APEX-I-MINI 12.2GB, expertos en RAM | **12-18 t/s esperadas** (base 10-16 + MTP) |
+| **Nuestro rig (estimación corregida)** | i3-10100F + 1650 4GB + 16GB DDR4-2666 | APEX-I-MINI 14.27 GB reales, expertos en RAM | base **14-24 t/s** tras sweep+pagefile; con draft-mtp **28-36 t/s** (ver InformacionCritica/RUTAS.md) |
 
 ⚠️ Advertencias recopiladas:
 - MTP: "gains are smaller on devices with lower memory bandwidth" (Unsloth) y "+~2GB RAM/VRAM" — en nuestro rig probar con y sin MTP.
@@ -52,7 +56,7 @@
 
 - Fork [TheTom/llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant) rama `feature/turboquant-kv-cache` (documentado en apex-quant README): KV cache 4.6× comprimido, `-ctk q8_0 -ctv turbo3 -fa on`, +14% prompt processing.
 - Requiere compilar el fork (CMake + CUDA). En presupuesto $0 y Windows es factible pero opcional: **primero probar llama.cpp estándar con `-ctk q8_0 -ctv q8_0`**.
-- Nota: builds recientes de mainline ya listan `turbo2/turbo3/turbo4` en la ayuda de `-ctk` (observado en documentación de flags) — verificar con `llama-server --help` antes de compilar nada.
+- Nota CORREGIDA (auditoría 2026-10-24): mainline **NO** lista `turbo2/turbo3/turbo4` en `-ctk/-ctv` (valores verificados en doc oficial y en el dump del build del Director: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1). Los valores turbo aparecen solo en forks o en artículos que los prueban (ej. mdda.net) — NO usarlos en mainline.
 
 ## 5. Runtimes y compatibilidad con apps
 

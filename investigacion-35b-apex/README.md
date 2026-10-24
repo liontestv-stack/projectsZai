@@ -5,6 +5,8 @@
 > `SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF`
 > y su viabilidad real en el rig: **i3-10100F · GTX 1650 4GB · 16GB RAM · SSD 500GB**.
 > Presupuesto: **$0**.
+>
+> ⚠ **ACTUALIZADO (tarde 2026-10-24):** auditoría del build del Director (sin draft-mtp → RUTA 0: actualizar build), corrección del techo (el x2 es alcanzable: PR #22673 ">2x, ~75% acceptance") y tamaños reales de archivo (I-MINI = **14.27 GB**, no 12.2). Guía operativa vigente: **[../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md)**. Este dossier conserva el análisis de fondo; donde difiera, manda InformacionCritica.
 
 ---
 
@@ -29,18 +31,18 @@ Requantización **APEX** (por mudler / equipo LocalAI) del Qwen3.6-35B-A3B **dec
 ### Hallazgo crítico para nuestro rig (16GB RAM)
 El repo tiene 4 tiers. **Solo uno es viable en 16GB de RAM**:
 
-| Tier | Tamaño | ¿Cabe en nuestro rig? |
+| Tier | Tamaño real (API HF) | ¿Cabe en nuestro rig? |
 |------|--------|:---:|
-| I-Quality | 21.90 GB | ❌ Excede la RAM usable |
-| I-Balanced | 24.18 GB | ❌ Excede la RAM usable |
-| I-Compact | 15.85 GB | ❌ 16GB − OS ≈ 13GB usable → swap |
-| **I-MINI** | **12.2 GB** | ✅ **La única opción real** |
+| I-Quality | 23.51 GB | ❌ Excede la RAM usable |
+| I-Balanced | 25.96 GB | ❌ Excede la RAM usable |
+| I-Compact | 17.02 GB | ❌ 16GB − OS ≈ 13GB usable → swap |
+| **I-MINI** | **14.27 GB** | ✅ **La única opción real** — al filo: pageouts probables |
 
 ### Veredicto de viabilidad (detallado en 04)
 - ✅ **VIABLE** con `APEX-I-MINI` + `llama-server` + `-ncmoe alto` (expertos en RAM, atención en GPU)
-- 🎯 Velocidad esperada honesta: **12-18 t/s** (base 10-16 + boost MTP 20-40%)
-- 🏆 Frente al intento anterior: **misma velocidad pero estable, con API OpenAI estándar → airi y pi dev conectan directo**, con visión opcional (mmproj incluido en el repo)
-- ⚠️ Riesgo principal: RAM al límite (12.2GB modelo + OS en 16GB) → mitigable con mmap y cierre de apps
+- 🎯 Velocidad esperada honesta (corregida): base **14-24 t/s** tras sweep → **28-36 t/s** con draft-mtp (PR #22673: ">2x con ~75% acceptance")
+- 🏆 Frente al intento anterior: **MÁS velocidad (techo corregido), estable, con API OpenAI estándar → airi y pi dev conectan directo**, con visión opcional (mmproj incluido en el repo)
+- ⚠️ Riesgo principal: RAM al filo (**14.27 GB reales** + OS en 16GB) → pageouts probables; mitigable con pagefile en SSD, mmap y cierre de apps
 - 🚫 Lo que NO intentar: Ollama no expone `--spec-type draft-mtp` ni ajuste fino de `-ncmoe` → **llama-server es el camino**
 
 ### Los 3 comandos que lo resumen
@@ -50,6 +52,7 @@ hf download SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-G
   --include "*MINI*" --include "mmproj*" --local-dir ./models
 
 # 2. Servir (calibrado para 4GB VRAM + 16GB RAM — ver 05 para el sweep)
+#    ⚠ draft-mtp requiere build actualizado (RUTA 0 en InformacionCritica/RUTAS.md)
 ./llama-server -m models/*APEX-I-MINI.gguf -ngl 999 -ncmoe 36 -c 16384 \
   -fa on -ctk q8_0 -ctv q8_0 --spec-type draft-mtp --spec-draft-n-max 2 \
   --host 127.0.0.1 --port 8080

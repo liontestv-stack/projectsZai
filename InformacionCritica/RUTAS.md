@@ -46,7 +46,7 @@ actualizar el build — sin eso, la palanca del x2 no existe.**
 | Fuente | Hardware | Config | Resultado |
 |--------|----------|--------|-----------|
 | [Model card SC117](https://huggingface.co/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF) | DGX Spark GB10 | `--spec-type draft-mtp --spec-draft-n-max 2` | **+20–50%** declarado por el autor; APEX Mini 12.2 GB: PPL 7.088, HellaSwag 81.0%, 74.4 t/s |
-| [mdda.net](https://mdda.net/blog/tech/dl/llama-cpp-moe-on-an-old-gpu) | GTX 1080 8GB + CPU vieja | `-ngl 999 -ncmoe 30`, 35B-A3B Q4_K_M | **~25 t/s** tg |
+| [mdda.net](https://mdda.net/blog/tech/dl/llama-cpp-moe-on-an-old-gtx-1080) | GTX 1080 8GB + CPU vieja | `-ngl 999 -ncmoe 30`, 35B-A3B Q4_K_M | **~25 t/s** tg (24.94 medidos; verificado 2026-10-24) |
 | r/LocalLLaMA (2026) | 8GB VRAM | `-ncmoe 38` tuneado | 10–12 → **36.6 t/s** |
 | [Foro NVIDIA](https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298) | DGX Spark GB10 | Qwen3.6-27B, `n-max 5` + `p-min 0.75` | **28–31 t/s** estables |
 | [llama.cpp #25198](https://github.com/ggml-org/llama.cpp/discussions/25198) | RTX 5090 | `n-max 8` + `p-min 0.8` | 47 → **163–178 t/s** |
@@ -126,7 +126,7 @@ el +20–50% ya está cobrado.
 
 **Interinos válidos HOY (build sin MTP), en orden de preferencia:**
 1. `--spec-type ngram-mod --spec-ngram-mod-n-match 24 --spec-ngram-mod-n-min 48 --spec-ngram-mod-n-max 64 --spec-draft-n-max 64` — gratis, brilla en código/repeticiones.
-2. Draft pequeño en GPU: `-md D:\ZLia\models\qwen36-0.8b-q4_0.gguf -ngld all --spec-draft-n-max 4` (~0.6 GB de RAM/VRAM extra).
+2. Draft pequeño en GPU: `-md <draft.gguf> -ngld all --spec-draft-n-max 4` (~0.6 GB extra). ⚠ El draft NO está en tu disco: hay que descargarlo primero (GGUF pequeño de la MISMA familia/tokenizer — ej. el 0.8B/2B de Qwen3.x en HF) y dejarlo en `D:\ZLia\models\`. Sin draft descargado esta opción no existe — usa la 1.
 
 ## 7. RUTA 4 — Alivio de VRAM (si el acantilado llega muy pronto)
 

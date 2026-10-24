@@ -7,7 +7,7 @@
 
 1. 🏢 **HuggingFace — página del modelo** (SC117)
    https://huggingface.co/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF
-   → Model card completo: tiers APEX (Quality 21.9 / Balanced 24.18 / Compact 15.85 / **Mini 12.2 GB**), benchmarks, MTP `--spec-type draft-mtp --spec-draft-n-max 2` (+20-50%), samplers recomendados, comandos llama.cpp/Ollama, links de la cadena de creación.
+   → Model card completo: tiers APEX (tamaños de perfil: 21.9 / 24.18 / 15.85 / 12.2; **tamaños reales de archivo: 23.51 / 25.96 / 17.02 / 14.27 GB** — ver fuente 2), benchmarks, MTP `--spec-type draft-mtp --spec-draft-n-max 2` (+20-50%), samplers recomendados, comandos llama.cpp/Ollama, links de la cadena de creación.
 
 2. 🏢 **HuggingFace API — metadatos del repo**
    https://huggingface.co/api/models/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF
@@ -37,13 +37,13 @@
 
 8. 👨‍💻 **PR #22673 de llama.cpp — "llama + spec: MTP Support" (am17an)**
    https://github.com/ggml-org/llama.cpp/pull/22673
-   → Origen del soporte MTP; fusionado a master (confirmado por anuncio en r/LocalLLaMA y uso en foros).
+   → Origen del soporte MTP; **fusionado a master el 2026-05-16; autor am17an (verificado vía página del PR, 2026-10-24)**.
 
 ## Foros y comunidad
 
 9. 💬 **Foro NVIDIA (DGX Spark) — blainesworld, may 2026**
    https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298
-   → Comando real completo de llama-server con MTP; resultados llama-benchy: 28-31 t/s con Qwen3.6-27B MTP Q4_K_M; truco `--spec-draft-p-min 0.75` para subir aceptación con draft-n-max alto; aviso de crashes ocasionales ligados al PR.
+   → Comando real completo de llama-server con MTP; resultados medidos: 28-31 t/s con Qwen3.6-27B MTP Q4_K_M; truco `--spec-draft-p-min 0.75` para subir aceptación con draft-n-max alto; aviso de crashes ocasionales ligados al PR.
 
 10. 💬 **r/LocalLLaMA — "MTP support merged into llama.cpp"**
     https://www.reddit.com/r/LocalLLaMA/comments/1tes1wx/ (título verificado; hilo protegido contra fetch)
@@ -61,7 +61,7 @@
 
 13. 📰 **mdda.net — "Running ~30B MoE models on an old GTX 1080"**
     https://mdda.net/blog/tech/dl/llama-cpp-moe-on-an-old-gtx-1080
-    → Guía práctica completa: `-ngl 999 -ncmoe 30 --no-mmap`, ~25 t/s con 35B-A3B en GPU vieja; texto íntegro de flags `-ctk/-ctv` (valores turbo), smoke test con curl contra `/v1/chat/completions`.
+    → Guía práctica completa: `-ngl 999 -ncmoe 30 --no-mmap`, ~25 t/s (24.94 medidos; verificado 2026-10-24) con 35B-A3B; texto íntegro de flags `-ctk/-ctv` (incluye valores turbo de FORK — no mainline); smoke test con curl contra `/v1/chat/completions`.
 
 14. 📰 **openclawdc.com — "--n-cpu-moe Explained (2026)"**
     https://openclawdc.com/blog/llama-cpp-moe-offload-flags-explained

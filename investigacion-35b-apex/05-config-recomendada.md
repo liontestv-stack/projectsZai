@@ -1,15 +1,19 @@
 # 05 — Configuración recomendada paso a paso
 
+> ⚠ ACTUALIZADO por auditoría 2026-10-24: rutas reales del Director = `D:\ZLia\models\...` y `D:\llama.cpp\build\bin\...` (ver [../InformacionCritica/RutasArchivos.md](../InformacionCritica/RutasArchivos.md)); el build actual NO tiene draft-mtp → RUTA 0; guía operativa vigente: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md). Rutas ya corregidas abajo.
+
 ## 0. Supuestos
 - Windows 10/11 x64 (si es Linux, mismos flags; rutas cambian).
-- SSD de 500GB dedicado (ej. `D:\apex35b\`).
-- Cuenta con ~13 GB de descarga y ~13 GB de RAM libre al servir.
+- SSD de 500GB dedicado al proyecto (el Director ya usa `D:\ZLia` y `D:\llama.cpp`).
+- Descarga real: ~15.2 GB (I-MINI 14.27 + mmproj 0.90). RAM al servir: al filo — pageouts probables, pagefile en el SSD dedicado.
 
 ## 1. Instalar llama.cpp (5 min, sin compilar)
 
+**Nota 2026-10-24:** el Director ya compila local en `D:\llama.cpp` — para actualizar usar la RUTA 0 de RUTAS.md (`git pull` + `cmake --build build --config Release -j`). El zip de release solo como plan alterno.
+
 1. Ir a https://github.com/ggml-org/llama.cpp/releases
 2. Descargar el binario **cudart + CUDA para Windows** (`llama-<version>-bin-win-cuda-cu12.*-x64.zip` — el más nuevo).
-3. Descomprimir en `D:\apex35b\llama\`.
+3. Descomprimir en `D:\apex35b\llama\` (solo si usas el plan alterno del zip).
 4. Verificar: abrir terminal en esa carpeta → `llama-server.exe --version` y confirmar que `--help` lista `--spec-type` con valor `draft-mtp` (si no aparece, la build es vieja → actualizar).
 
 ## 2. Descargar el modelo (solo lo viable)
@@ -17,15 +21,15 @@
 ```powershell
 pip install -U "huggingface_hub[cli]"
 hf download SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF `
-  --include "*MINI*" --include "mmproj*" --local-dir D:\apex35b\models
+  --include "*MINI*" --include "mmproj*" --local-dir D:\ZLia\models
 ```
-→ Resultado: `APEX-I-MINI.gguf` (12.2 GB) + `mmproj-...F16.gguf` (~0.8 GB).
+→ Resultado: `APEX-I-MINI.gguf` (14.27 GB) + `mmproj-...F16.gguf` (0.90 GB).
 
 ## 3. Comando de arranque (config inicial conservadora)
 
 ```powershell
-D:\apex35b\llama\llama-server.exe ^
-  -m D:\apex35b\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
+D:\llama.cpp\build\bin\llama-server.exe ^
+  -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
   --alias apex35b ^
   -ngl 999 -ncmoe 40 ^
   -c 16384 -b 1024 -ub 256 ^
@@ -38,7 +42,7 @@ Notas:
 - `--jinja` activa el chat template del modelo (necesario para thinking/tool-calls correctos).
 - `-ncmoe 40` = todos los expertos en RAM al inicio (garantía de arranque). El sweep bajará este número.
 - Sin `--mlock` (16GB RAM no da para fijar 10 GB).
-- Visión (opcional, probar DESPUÉS del sweep): añadir `--mmproj D:\apex35b\models\mmproj-...-F16.gguf`.
+- Visión (opcional, probar DESPUÉS del sweep): añadir `--mmproj D:\ZLia\models\mmproj-...-F16.gguf`.
 
 ## 4. Sweep de rendimiento (protocolo del doc 04)
 
@@ -71,7 +75,7 @@ Notas:
 | Síntoma | Causa probable | Solución |
 |---------|----------------|----------|
 | `unknown architecture qwen3_5_moe` | Build vieja de llama.cpp | Actualizar a la última release |
-| OOM RAM al cargar | OS sin espacio | Cerrar apps; verificar que usas I-MINI (12.2) y no otro tier; mantener mmap |
+| OOM RAM al cargar | OS sin espacio | Cerrar apps; verificar que usas I-MINI (14.27 GB) y no otro tier; mantener mmap |
 | t/s brutalmente lentas de golpe | VRAM spill silencioso | Subir `-ncmoe`, bajar `-ub`, bajar contexto |
 | MTP no aparece / error spec | Build sin PR #22673 | Actualizar llama.cpp; verificar `--help` |
 | Generación se corta o basura | Contexto mayor que la memoria permite | Bajar `-c` (8192) |

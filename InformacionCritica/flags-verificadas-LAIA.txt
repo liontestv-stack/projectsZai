@@ -42,7 +42,10 @@ Sin actualizarlo, el techo practico con este GGUF son ~20-26 t/s (sweep de
 -m, --model FNAME            ruta del GGUF
 -a, --alias STRING           nombre en la API
 --host HOST / --port PORT
---jinja                      chat template (tool-calls / thinking)
+--jinja / --no-jinja         chat template (tool-calls / thinking). EN TU BUILD va
+                             enabled POR DEFECTO; se deja explicito por claridad
+--chat-template JINJA_TEMPLATE / --chat-template-file FILE
+                             template custom (verificado en tu dump, opcional)
 --mmproj FILE                vision (si se usa mmproj)
 [capas y memoria]
 -ngl, --gpu-layers, --n-gpu-layers N
@@ -55,6 +58,7 @@ Sin actualizarlo, el techo practico con este GGUF son ~20-26 t/s (sweep de
 -b, --batch-size N
 -ub, --ubatch-size N         (default 512)
 -np, --parallel N
+-kvo, --kv-offload           KV en GPU (default activado; NUNCA -nkvo aqui)
 [kv cache]
 -fa, --flash-attn [on|off|auto]   (default auto -> fijar ON)
 -ctk, --cache-type-k TYPE    f32|f16|bf16|q8_0|q4_0|q4_1|iq4_nl|q5_0|q5_1
@@ -66,8 +70,8 @@ Sin actualizarlo, el techo practico con este GGUF son ~20-26 t/s (sweep de
 --poll <0..100>              (default 50)
 [carga — sistema VIEJO, valido HOY en tu build]
 --mmap / --no-mmap           (default: mmap activado)
---mlock                      PROHIBIDO EN ESTE RIG por RAM (16 GB vs 12.2 GB
-                             de pesos) aunque la flag exista
+--mlock                      PROHIBIDO EN ESTE RIG por RAM (16 GB vs 14.27 GB
+                             de pesos reales) aunque la flag exista
 --direct-io / --no-direct-io
 --warmup / --no-warmup
 [especulativa — lo que tu build SI tiene]
@@ -130,7 +134,9 @@ Especulativa INTERINA (sin actualizar build), dos opciones validas HOY:
      --spec-type ngram-mod --spec-ngram-mod-n-match 24 ^
      --spec-ngram-mod-n-min 48 --spec-ngram-mod-n-max 64 --spec-draft-n-max 64
   b) draft pequeño en GPU (RAM lo permite, ~0.6 GB):
-     -md D:\ZLia\models\qwen36-0.8b-q4_0.gguf -ngld all --spec-draft-n-max 4
+     -md D:\ZLia\models\<draft.gguf> -ngld all --spec-draft-n-max 4
+     ⚠ NO EXISTE AUN: hay que descargar un GGUF pequeño de la misma
+     familia/tokenizer (0.8B/2B de Qwen3.x) a D:\ZLia\models\ primero.
 
 ===============================================================================
 COMANDO V2 — BUILD ACTUALIZADO (con MTP; objetivo ~28-36 t/s; el PR #22673 — verificado,

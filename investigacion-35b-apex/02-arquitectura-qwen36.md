@@ -27,7 +27,7 @@ Qwen3.6 usa **Gated DeltaNet** (variante de atención lineal) en 30 de sus 40 ca
 
 - Los pesos se concentran en **expertos enrutados** (la mayoría de los 35B), pero por token solo se activan 8/256.
 - Al hacer offload de expertos a RAM: por token solo se leen los expertos activos → **el ancho de banda consumido por token es bajo** → un MoE es el ÚNICO tipo de modelo 35B que corre decente en RAM DDR4.
-- Un modelo denso de 20B leería ~12 GB/token en Q4 → imposible (<1 t/s en DDR4). El MoE A3B lee ~0.3-0.5 GB/token → 10-25 t/s. **Esta es la razón física de todo el proyecto.**
+- Un modelo denso de 20B leería ~12 GB/token en Q4 → imposible (<1 t/s en DDR4). El MoE A3B lee **~1.0-1.2 GB/token** (≈2.6B de expertos activos a ~3.3 bpw en APEX Mini) → techo físico **~25-35 t/s** en DDR4-2666 (38 GB/s útiles). **Esta es la razón física de todo el proyecto.**
 
 ## 4. Nota técnica sobre `--n-cpu-moe` con esta arquitectura
 
@@ -44,4 +44,4 @@ Qwen3.6 usa **Gated DeltaNet** (variante de atención lineal) en 30 de sus 40 ca
 ## 6. Multimodalidad
 
 - Repo incluye `mmproj-*-F16.gguf` (proyector CLIP ~0.4B) → el modelo acepta imágenes.
-- En llama-server se habilita con `--mmproj`. Coste: ~0.8GB extra en VRAM/RAM — opcional en nuestro rig (evaluar tras el sweep).
+- En llama-server se habilita con `--mmproj`. Coste: **~0.9 GB extra** (archivo real: 0.90 GB, API HF) en VRAM/RAM — opcional en nuestro rig (evaluar tras el sweep).
