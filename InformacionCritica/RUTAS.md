@@ -28,9 +28,12 @@ draft no cambia el tráfico de expertos por pase).
 
 **PERO la auditoría del dump del Director (`llama-flags.txt`) reveló:** su build actual
 **no tiene `draft-mtp`** (su `--spec-type` solo lista tipos n-gram; cero ocurrencias de
-"mtp"). El build es una versión intermedia: tiene `--spec-draft-*` pero todavía usa el
-sistema viejo de carga (`--mlock/--no-mmap`, sin `-lm`). **Por eso la RUTA 0 es
-actualizar el build — sin eso, la palanca del x2 no existe.**
+"mtp"). El build es una versión intermedia — fechado 2026-10-24 vía `--version` + página
+del commit en GitHub: fuente del **2026-05-06** (commit `2496f9c`, "mtmd : support
+MiniCPM-V 4.6" #22529), **10 días ANTES** del merge de draft-mtp (PR #22673,
+2026-05-16). Tiene `--spec-draft-*` pero todavía usa el sistema viejo de carga
+(`--mlock/--no-mmap`, sin `-lm`). **Por eso la RUTA 0 es actualizar el build — sin eso,
+la palanca del x2 no existe.**
 
 ## 1. Las palancas, en orden de impacto
 
@@ -105,7 +108,9 @@ echo LISTO — abrir D:\ZLia\revision-laia.txt
    - `cudart-llama-bin-win-cuda-12.4-x64.zip` (DLLs CUDA 12.4 — **OJO: este zip NO lleva
      el b-number en el nombre**; así es exactamente como se llama, verificado verbatim
      contra la página de assets del release)
-   - Elegir **CUDA 12.4** (no 13.4): máxima compatibilidad con el driver de la GTX 1650.
+   - Elegir **CUDA 12.4** (no 13.4): máxima compatibilidad con el driver de la GTX 1650
+     — CONFIRMADO con tu hardware: driver 610.88 / CUDA UMD 13.3 → el 12.4 va de serie,
+     el 13.4 NO (tu UMD es 13.3).
    - Plan B solo si el driver diera problemas: `llama-b11856-bin-win-vulkan-x64.zip`
      (no usa CUDA para nada) — CUDA rinde más; vulkan solo como rescate.
 2. Descomprimir AMBOS en una carpeta NUEVA, ej. `D:\llama.cpp\bin-new\` (las DLLs deben
@@ -173,7 +178,20 @@ de versión del proyecto; todo diagnóstico futuro cita ese número. Anotar tamb
 b-number del build VIEJO como referencia de comparación:
 
 ```text
-Build VIEJO (base 16 t/s): b-XXXX (pegar aquí) — fecha: __/__/____
+Build VIEJO (base 16 t/s): version 1 (2496f9c) — fuente del 2026-05-06 (mtmd MiniCPM-V
+  4.6, #22529), 10 días antes del merge de draft-mtp (#22673). Build local MSVC 19.44
+  (VS2022 presente), clon sin tags (por eso "version: 1" y no b-number). Registrado
+  2026-10-24.
+VEREDICTO verificación 2026-10-24: VERDE para los zips CUDA 12.4 de b11856.
+  - Driver: NVIDIA 610.88, CUDA UMD 13.3 → zip 12.4 SOPORTADO; el zip 13.4 queda
+    DESCARTADO (tu driver llega a 13.3, no a 13.4).
+  - DLLs junto al exe: cublas64_12 / cublasLt64_12 / cudart64_12 (serie CUDA 12.4,
+    fechadas 27/02/2024) → build dinámico ya en serie 12; el cudart zip nuevo (12.4)
+    encaja de serie.
+  - GPU: GTX 1650, compute 7.5, VMM yes, 4095 MiB totales. ~963 MiB ya en uso por el
+    escritorio (Firefox, Wallpaper Engine, Copilot) → cerrarlos antes del sweep:
+    libera ~1 GB de VRAM.
+  - D: SSD con 222 GB libres (espacio de sobra para los zips).
 Build actualizado:        b-XXXX (pegar aquí) — fecha: __/__/____
 ```
 
