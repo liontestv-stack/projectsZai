@@ -15,6 +15,13 @@ JERARQUIA DE VERDAD:
 RUTAS REALES DEL DIRECTOR (de RutasArchivos.md):
   Modelo      : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
   llama-server: D:\llama.cpp\build\bin\llama-server.exe
+
+DATOS VERIFICADOS VIA API HUGGINGFACE (2026-10-24):
+  APEX-I-MINI.gguf = 14.27 GB (el "12.2 GB" de la model card es tamano de perfil)
+  mmproj-...-APEX-F16.gguf = 0.90 GB (vision, opcional — caro en este rig)
+  I-Compact = 17.02 GB / I-Quality = 23.51 GB / I-Balanced = 25.96 GB (NO caben en 16 GB RAM)
+  Repo con 59.5k descargas/mes (activo y sano)
+  => RAM: 14.27 GB de pesos + SO => pageouts probables; pagefile en el SSD dedicado.
 ===============================================================================
 
 !!! HALLAZGO CRITICO DE LA AUDITORIA !!!
@@ -103,7 +110,8 @@ turbo2/turbo3/turbo4 en -ctk/-ctv   (solo forks; tu build NO las lista)
 --draft-max / -draft / --draft-min   (nombres muertos; usar --spec-draft-n-max)
 
 ===============================================================================
-COMANDO V1 — BUILD ACTUAL (sin MTP; base para el sweep, ~20-26 t/s esperado)
+COMANDO V1 — BUILD ACTUAL (sin MTP; base para el sweep; expectativa honesta con el
+archivo real de 14.27 GB: ~14-24 t/s segun pageouts — el sweep y el pagefile deciden)
 ===============================================================================
 D:\llama.cpp\build\bin\llama-server.exe ^
   -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
@@ -125,7 +133,8 @@ Especulativa INTERINA (sin actualizar build), dos opciones validas HOY:
      -md D:\ZLia\models\qwen36-0.8b-q4_0.gguf -ngld all --spec-draft-n-max 4
 
 ===============================================================================
-COMANDO V2 — BUILD ACTUALIZADO (con MTP; objetivo ~30-38 t/s)
+COMANDO V2 — BUILD ACTUALIZADO (con MTP; objetivo ~28-36 t/s; el PR #22673 — verificado,
+fusionado 2026-05-16 — declara "more than 2x speed-up with ~75% acceptance")
 ===============================================================================
 D:\llama.cpp\build\bin\llama-server.exe ^
   -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^

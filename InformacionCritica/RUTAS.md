@@ -6,7 +6,7 @@
 > - [`RutasArchivos.md`](RutasArchivos.md) — rutas reales en disco: modelo `D:\ZLia\models\...APEX-I-MINI.gguf` · server `D:\llama.cpp\build\bin\llama-server.exe`.
 
 **Rig:** i3-10100F (4C/8T) · GTX 1650 4GB · 16GB DDR4-2666 · SSD 500GB · Presupuesto $0
-**Modelo:** `...APEX-I-MINI.gguf` (12.2 GB, 20 capas MTP preservadas, heretic: −88% rechazos)
+**Modelo:** `...APEX-I-MINI.gguf` (**14.27 GB reales**, verificado vía [API de HF](https://huggingface.co/api/models/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF?blobs=true); la tabla del autor dice "12.2 GB" de perfil — manda el archivo real. 20 capas MTP preservadas, heretic: −88% rechazos, 59.5k descargas/mes)
 
 ---
 
@@ -19,6 +19,12 @@ gobierna la **lectura de expertos activos por token** (~1.0–1.1 GB/token en AP
 aritmética honesta da un techo base de **~30–35 t/s** antes de trucos, y el truco correcto
 (MTP) lo multiplica **sin gastar un byte más de ancho de banda**: un pase forward lee los
 expertos UNA vez y verifica N tokens a la vez — N tokens por el precio de una lectura.
+
+**Segunda causa identificada (auditoría 2026-10-24):** el archivo real pesa **14.27 GB**
+sobre 16 GB de RAM → margen de ~1.5 GB para SO + KV + buffers → pageouts casi garantizados
+con mmap. Eso roba t/s por sí solo. Mitigación: pagefile en el SSD dedicado (absorbe el
+overflow), medir varianza, y contar con que **MTP multiplica igual** (la aceptación del
+draft no cambia el tráfico de expertos por pase).
 
 **PERO la auditoría del dump del Director (`llama-flags.txt`) reveló:** su build actual
 **no tiene `draft-mtp`** (su `--spec-type` solo lista tipos n-gram; cero ocurrencias de
@@ -44,6 +50,7 @@ actualizar el build — sin eso, la palanca del x2 no existe.**
 | r/LocalLLaMA (2026) | 8GB VRAM | `-ncmoe 38` tuneado | 10–12 → **36.6 t/s** |
 | [Foro NVIDIA](https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298) | DGX Spark GB10 | Qwen3.6-27B, `n-max 5` + `p-min 0.75` | **28–31 t/s** estables |
 | [llama.cpp #25198](https://github.com/ggml-org/llama.cpp/discussions/25198) | RTX 5090 | `n-max 8` + `p-min 0.8` | 47 → **163–178 t/s** |
+| **[PR #22673](https://github.com/ggml-org/llama.cpp/pull/22673)** "llama + spec: MTP Support" — VERIFICADO: fusionado **2026-05-16** | — | introduce `--spec-type draft-mtp`, `--spec-draft-n-max`, `ngram-mod`, `--spec-default` | declara **"more than 2x speed-up over baseline with ~75% acceptance"** |
 | [Unsloth MTP](https://unsloth.ai/docs/models/mtp) | RTX 6000 | 35B-A3B MTP | 240 t/s (techo de referencia) |
 | Auditoría del dump del Director | su build | `--help` completo | build intermedio: sin `draft-mtp`, con `--mlock/--no-mmap`, sin `-lm` |
 
@@ -53,18 +60,28 @@ actualizar el build — sin eso, la palanca del x2 no existe.**
 
 El server vive en `D:\llama.cpp\build\bin\` → es un build local de fuentes. Actualizarlo:
 
+Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El directorio
+`build/` existente se reutiliza — CMake reconfigura solo tras el pull.
+
 ```bat
 cd D:\llama.cpp
 git pull
 cmake --build build --config Release -j
 ```
 
-Verificación post-build (DEBE aparecer draft-mtp):
+Verificación post-build (DEBE aparecer draft-mtp; PR #22673, fusionado 2026-05-16):
 
 ```bat
 D:\llama.cpp\build\bin\llama-server.exe --version
 D:\llama.cpp\build\bin\llama-server.exe --help | findstr draft-mtp
 D:\llama.cpp\build\bin\llama-server.exe --help > InformacionCritica\llama-flags.txt   (regenerar el dump tras actualizar)
+```
+
+📌 **ANOTAR el `b-number` que imprima `--version`** (ej. `b8797`) aquí abajo — es el pin
+de versión del proyecto; todo diagnóstico futuro cita ese número:
+
+```text
+Build actualizado: b-XXXX (pegar aquí) — fecha: __/__/____
 ```
 
 Si `git pull` rompe el build (deps nuevas): `rmdir /s /q build` y reconfigurar
@@ -118,9 +135,11 @@ De a una y midiendo: `-c 8192` → `-ub 128` → `-b 1024` → `-ctv q4_0` (mant
 
 ## 8. RUTA 5 — Alivio de RAM (regla relativa al build, OJO)
 
+- **Realidad del archivo real (14.27 GB / 16 GB de RAM):** margen ~1.5 GB → pageouts
+  probables. Pagefile en el SSD dedicado, administrado por el sistema (absorbe overflow).
 - **Build actual (auditado):** `--mmap` activo por defecto. Si hay pageouts →
-  `--no-mmap` (carga plana, menos pageouts). `--mlock` **prohibido en este rig**
-  (12.2 GB de pesos sobre 16 GB de RAM), aunque la flag exista.
+  `--no-mmap` (carga plana, menos pageouts) — ⚠ con 14.27 GB proba primero con margen;
+  si OOM, volver a mmap. `--mlock` **prohibido en este rig**, aunque la flag exista.
 - **Build actualizado:** esas flags desaparecen; el control pasa a `-lm none` /
   `-lm mmap` / `-lm mlock`. Misma prohibición de mlock por RAM.
 
@@ -137,6 +156,11 @@ De a una y midiendo: `-c 8192` → `-ub 128` → `-b 1024` → `-ctv q4_0` (mant
 |-----|---------------|
 | **airi** | Provider OpenAI-compatible → `http://127.0.0.1:8080/v1` · API key `no-key` · Model `apex35b` |
 | **pi dev** | Ídem, endpoint OpenAI apuntando a `/v1` |
+
+**Visión (opcional, al FINAL de todo):** el repo SÍ incluye
+`mmproj-Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-F16.gguf` (0.90 GB,
+verificado en la API de HF) → flag `-mm <archivo>`. En este rig cuesta ~0.9 GB de
+RAM/VRAM: activarlo solo después de tener el comando ganador estable.
 
 ## 11. Registro del comando ganador (lo escribe el Director tras medir)
 
