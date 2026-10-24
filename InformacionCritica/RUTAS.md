@@ -69,18 +69,41 @@ del dump):
 D:\llama.cpp\build\bin\llama-server.exe --version
 ```
 
-### 3-A. Zip precompilado oficial (RECOMENDADA — cero compilación)
+### 3-A.0 Verificación previa en TU máquina (2 min, antes de descargar nada)
 
-Los zips oficiales ya traen CUDA compilado. Verificado 2026-10-24 vía API de GitHub:
-el nightly del día es **b11856** (publicado 2026-10-24).
+```bat
+D:\llama.cpp\build\bin\llama-server.exe --version
+dir D:\llama.cpp\build\bin\*.dll
+nvidia-smi
+```
 
-1. Ir a <https://github.com/ggml-org/llama.cpp/releases> → descargar el nightly más
-   reciente (hoy b11856), **LOS DOS zips, misma carpeta destino**:
-   - `llama-b11856-bin-win-cuda-12.4-x64.zip` (binarios)
-   - `cudart-llama-b11856-bin-win-cuda-12.4-x64.zip` (DLLs CUDA)
+- 1ª: imprime tu **b-number VIEJO** → anótalo en el registro de abajo (pin de comparación).
+- 2ª: lista las DLLs junto a tu exe actual (`cudart64_*.dll`, `cublas64_*.dll`,
+  `cublasLt64_*.dll` si tu build es dinámico; si no aparece ninguna, tu build las lleva
+  enlazadas por dentro — también vale).
+- 3ª: arriba a la derecha dice **"CUDA Version"** = CUDA MÁXIMO que soporta tu driver.
+  Para los zips 12.4 basta **≥ 12.0** (ideal ≥ 12.4). GTX 1650 con driver de los últimos
+  años da 12.x de sobra.
+- Lógica: tu build VIEJO ya corre el modelo en GPU → tu CUDA actual funciona. Los zips
+  nuevos traen SUS PROPIAS DLLs (para eso existe el zip cudart): lo único compartido es
+  el driver. Pegar las 3 salidas en el chat → LAIA las registra en el repo.
+
+### 3-A.1 Descarga (nombres VERBATIM verificados 2026-10-24 en la página oficial de assets)
+
+1. Ir a <https://github.com/ggml-org/llama.cpp/releases> → nightly b11856 (o el más
+   reciente), descargar **LOS DOS zips, misma carpeta destino**:
+   - `llama-b11856-bin-win-cuda-12.4-x64.zip` (binarios: exe + ggml-cuda.dll)
+   - `cudart-llama-bin-win-cuda-12.4-x64.zip` (DLLs CUDA 12.4 — **OJO: este zip NO lleva
+     el b-number en el nombre**; así es exactamente como se llama, verificado verbatim
+     contra la página de assets del release)
    - Elegir **CUDA 12.4** (no 13.4): máxima compatibilidad con el driver de la GTX 1650.
+   - Plan B solo si el driver diera problemas: `llama-b11856-bin-win-vulkan-x64.zip`
+     (no usa CUDA para nada) — CUDA rinde más; vulkan solo como rescate.
 2. Descomprimir AMBOS en una carpeta NUEVA, ej. `D:\llama.cpp\bin-new\` (las DLLs deben
    quedar junto a los .exe). **NO borrar** `D:\llama.cpp\build\bin\` — es tu rollback.
+   Verificación inmediata: `dir D:\llama.cpp\bin-new\*.dll` debe mostrar las DLLs de la
+   serie CUDA 12 (`cudart64_12.dll`, `cublas64_12.dll`, `cublasLt64_12.dll`) junto a los
+   .exe. Si falta alguna, no se siguió descomprimiendo bien.
 3. Verificar ANTES de usar (DEBE aparecer `draft-mtp`; PR #22673, fusionado 2026-05-16;
    `--version` es válido en todos los builds recientes):
 
