@@ -1,0 +1,169 @@
+===============================================================================
+llama-flags.txt — FLAGS PERMITIDAS (unica fuente de verdad de LAIA)
+===============================================================================
+Verificadas contra documentacion oficial el 2026-10-24:
+  - docs/speculative.md @ master (ggml-org/llama.cpp)
+  - tools/server/README.md @ master
+  - manpage llama-server(1) (Debian unstable, build 2026)
+
+REGLA ABSOLUTA PARA LAIA:
+  Ningun comando, config o ejemplo puede contener una flag que no este aqui.
+  Si una flag no esta en este archivo: NO EXISTE para este proyecto.
+  Ante la duda: `llama-server --help` en la build real del Director manda.
+
+Rig del Director: i3-10100F (4C/8T) | GTX 1650 4GB | 16GB DDR4-2666 | SSD 500GB
+Modelo: SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF
+        (archivo: ...APEX-I-MINI.gguf, 12.2 GB, 20 capas MTP preservadas)
+===============================================================================
+
+--- 1. MODELO Y SERVIDOR ------------------------------------------------------
+-m,  --model FNAME            ruta del GGUF a cargar
+-a,  --alias STRING           nombre expuesto en la API (ej: apex35b)
+--host HOST                   direccion de escucha (usar 127.0.0.1)
+--port PORT                   puerto (usar 8080)
+--jinja                       activa el chat template del modelo (tool-calls
+                              y thinking correctos en airi / pi dev)
+-mm, --mmproj FILE            proyector multimodal (vision, opcional)
+-hf, -hfr, --hf-repo USER/MOD[:quant]   descarga directa desde HuggingFace
+-mu, --model-url URL          cargar modelo desde URL
+
+--- 2. CAPAS Y MEMORIA  (LA PALANCA PRINCIPAL) --------------------------------
+-ngl, --gpu-layers, --n-gpu-layers N|auto|all
+                              capas en VRAM. Default actual: auto.
+                              Regla del proyecto: fijar SIEMPRE alto (99) y
+                              controlar la memoria SOLO con -ncmoe.
+-ncmoe, --n-cpu-moe N         los expertos (MoE) de las primeras N capas
+                              quedan en RAM.  <- PALANCA #1 del rendimiento
+                              Se BARRERA (sweep), no se copia de foros.
+-cmoe, --cpu-moe              TODOS los expertos en RAM (modo boot garantizado;
+                              equivalente a -ncmoe con N = total de capas)
+-ncffn, --n-cpu-ffn N         igual idea para FFN de modelos DENSE (no aplica
+                              a este MoE; documentada solo como referencia)
+-ot,  --override-tensor PATRON=BUFTYPE[,...]
+                              override avanzado de buffers por tensor
+                              (version fina de lo que -ncmoe hace solo)
+-fit,  --fit [on|off]         auto-ajuste de argumentos para caber en VRAM
+                              (default: on)
+-fitt, --fit-target MiB[,...] margen por dispositivo para --fit (default 1024)
+-fitc, --fit-ctx N            ctx minimo que --fit puede asignar (default 4096)
+
+--- 3. CONTEXTO Y BATCH -------------------------------------------------------
+-c,  --ctx-size N             contexto (default 0 = lo lee del modelo)
+-b,  --batch-size N           batch logico (default 2048)
+-ub, --ubatch-size N          batch fisico (default 512). Bajarlo (256/128)
+                              libera VRAM; sube el prompt processing, NO la
+                              velocidad de generacion.
+-np, --parallel N             slots concurrentes (default -1 = auto)
+-cb, --cont-batching          continuos batching (default: activado)
+-nocb, --no-cont-batching
+-kvo, --kv-offload            KV cache en GPU (default: activado)
+-nkvo, --no-kv-offload        NO usar en este rig: mandaria el KV a RAM y
+                              hundiria la velocidad de generacion.
+--swa-full                    cache SWA de tamano completo (gasta VRAM)
+
+--- 4. KV CACHE ---------------------------------------------------------------
+-fa,  --flash-attn [on|off|auto]   flash attention (default auto). Fijar ON.
+-ctk, --cache-type-k TYPE     tipo del cache K
+-ctv, --cache-type-v TYPE     tipo del cache V
+     Valores validos (mainline, verificados):
+       f32 | f16 | bf16 | q8_0 | q4_0 | q4_1 | iq4_nl | q5_0 | q5_1
+     En este rig: -ctk q8_0 -ctv q8_0 (calidad casi f16, mitad de VRAM).
+     Si VRAM no da: -ctv q4_0 manteniendo -ctk q8_0.
+
+--- 5. HILOS Y SCHEDULING (i3-10100F: 4 fisicos / 8 hilos) --------------------
+-t,  --threads N              hilos de generacion. USAR 4 (fisicos).
+-tb, --threads-batch N        hilos de prompt processing (default = -t;
+                              probar 8 aqui, HT si ayuda al pp)
+--prio N                      prioridad: -1 low, 0 normal, 1 medium, 2 high,
+                              3 realtime (default 0). En Windows: 2.
+--poll N                      nivel de polling 0..100 (default 50).
+                              Micro-ajuste: probar 0 vs 50 y medir.
+--threads-http N              hilos del servidor HTTP
+
+--- 6. CARGA DEL MODELO  (OJO: 2026) ------------------------------------------
+-lm, --load-mode MODE         reemplaza a --mlock / --no-mmap (ELIMINADOS).
+     Modos: auto | none | mmap | mlock | mmap+mlock | dio   (default auto)
+     - auto: mmap salvo que el dispositivo no lo soporte
+     - none: carga plana en RAM (carga mas lenta, menos pageouts)
+     - mlock: fuerza mantener el modelo en RAM (NO con 16GB y 12.2GB de pesos)
+--warmup / --no-warmup         warmup con pasada vacia (default: activado)
+
+--- 7. ESPECULATIVA / MTP  (EL MULTIPLICADOR x2) ------------------------------
+--spec-type TYPE              none | draft-simple | draft-eagle3 | draft-dflash
+                              | draft-dspark | draft-mtp | ngram-cache
+                              | ngram-simple | ngram-map-k | ngram-map-k4v
+                              | ngram-mod        (default none)
+     Para ESTE modelo: draft-mtp  (usa la cabeza MTP NATIVA preservada en el
+     GGUF: 20 capas MTP. NO lleva -md ni draft model externo).
+--spec-default                activa la config especulativa por defecto
+                              (habilita ngram-mod)
+--spec-draft-n-max N          tokens redactados por paso (default 3)
+                              Empezar en 2; luego probar 4 y 8 con p-min alto.
+--spec-draft-n-min N          minimo de drafts (default 0)
+--spec-draft-p-min P          prob. minima para seguir redactando
+                              (default 0.0). La palanca fina: 0.75 - 0.80
+--spec-draft-p-split P        prob. de split (default 0.10)
+--spec-draft-n-ubatch N       ubatch fisico del draft (default 0 = igual a -ub)
+                              bajarlo ahorra VRAM del draft
+--spec-draft-ngl, -ngld, --gpu-layers-draft, --n-gpu-layers-draft N|auto|all
+--spec-draft-model, -md, --model-draft FNAME
+                              SOLO para draft-simple / eagle3 / dflash /
+                              dspark. draft-mtp NO lo usa.
+--spec-draft-hf, -hfd, --hf-repo-draft USER/MOD[:quant]
+-td,  --spec-draft-threads N        hilos del draft
+-tbd, --spec-draft-threads-batch N
+--spec-draft-prio, --prio-draft N
+-ctkd, --cache-type-k-draft TYPE    KV del draft (mismos valores que -ctk)
+-ctvd, --cache-type-v-draft TYPE
+-cmoed, --cpu-moe-draft
+-ncmoed, --n-cpu-moe-draft N
+--spec-draft-cpu-mask / --cpu-mask-draft, --spec-draft-cpu-range, etc.
+                              afinidad CPU del draft (avanzado, opcional)
+
+--- 8. MULTI-GPU / AVANZADAS (no aplican al rig de 1 GPU, solo referencia) ----
+-sm,  --split-mode none|layer|row|tensor
+-ts,  --tensor-split N0,N1,...
+-mg,  --main-gpu INDEX
+--override-kv KEY=TYPE:VALUE[,...]
+--check-tensors
+--op-offload / --no-op-offload   (default: offload activado)
+--lora FNAME / --lora-scaled FNAME:SCALE / --control-vector FNAME
+
+===============================================================================
+BLOQUEADAS — NO USAR BAJO NINGUN CONCEPTO (flag falsa, vieja o de fork)
+===============================================================================
+--mlock, --no-mmap, --direct-io     ELIMINADAS de mainline (PR #20834 las
+                                    fusiono en -lm/--load-mode; PR #28334 las
+                                    borro). Cualquier comando con ellas falla
+                                    con "error: invalid argument".
+--draft-max, -draft, --draft-min, --draft-n-min
+                                    nombres viejos de la era pre-spec. Los
+                                    actuales: --spec-draft-n-max / -n-min.
+                                    (OJO: --draft-p-min y --draft-p-split SI
+                                    siguen vivos como alias.)
+--spec-type mtp                     nombre mal escrito. El correcto es:
+                                    --spec-type draft-mtp
+turbo2 / turbo3 / turbo4 en -ctk/-ctv
+                                    SOLO existen en forks (ik_llama.cpp /
+                                    TurboQuant). En mainline NO cargan.
+-ngl 0 como forma de "controlar memoria"   regla del proyecto: -ngl SIEMPRE
+                                    alto (99) y la memoria se controla con
+                                    -ncmoe.
+-nkvo / --no-kv-offload             en este rig hunde la generacion.
+
+===============================================================================
+COMANDO CANONICO DE ARRANQUE (boot garantizado, sin sweep previo)
+===============================================================================
+llama-server.exe ^
+  -m D:\apex35b\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
+  -a apex35b ^
+  -ngl 99 -cmoe ^
+  -c 16384 -b 2048 -ub 256 ^
+  -fa on -ctk q8_0 -ctv q8_0 ^
+  -t 4 --prio 2 ^
+  --jinja ^
+  --host 127.0.0.1 --port 8080
+
+Paso 2 (despues del sweep de -ncmoe, ver RUTAS.md): anadir
+  --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75
+===============================================================================
