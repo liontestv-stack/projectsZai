@@ -88,6 +88,15 @@ nvidia-smi
   nuevos traen SUS PROPIAS DLLs (para eso existe el zip cudart): lo único compartido es
   el driver. Pegar las 3 salidas en el chat → LAIA las registra en el repo.
 
+Variante que guarda las 3 salidas en un solo archivo (pegar después):
+
+```bat
+D:\llama.cpp\build\bin\llama-server.exe --version > D:\ZLia\revision-laia.txt 2>&1
+dir D:\llama.cpp\build\bin\*.dll >> D:\ZLia\revision-laia.txt 2>&1
+nvidia-smi >> D:\ZLia\revision-laia.txt 2>&1
+echo LISTO — abrir D:\ZLia\revision-laia.txt
+```
+
 ### 3-A.1 Descarga (nombres VERBATIM verificados 2026-10-24 en la página oficial de assets)
 
 1. Ir a <https://github.com/ggml-org/llama.cpp/releases> → nightly b11856 (o el más
