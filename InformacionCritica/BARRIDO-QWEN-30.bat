@@ -1,5 +1,5 @@
 @echo off
-title LAIA - BARRIDO 30 configs - Qwen t/s
+title LAIA - BARRIDO 37 configs - Qwen t/s
 cd /d "%~dp0"
 where py >nul 2>nul
 if %errorlevel%==0 (

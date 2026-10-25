@@ -35,7 +35,7 @@ El dump dice verbatim:
 
 - Hoy el launcher corre con `-t 4` y SIN `-tb` → **el prefill tambien usa 4 hilos**, cuando el rig tiene 8 logicos. El decode se queda con los 4 fisicos (campeon intacto); el prefill puede usar los 8: `-tb 8 -Crb 0-7`.
 - **`-ub 256` en BASE_FLAGS es la MITAD del default del build (512)** (dump L31: `-ub, --ubatch-size N ... default: 512`). Nunca se eligio por medicion: vino heredado de la linea de comandos original. En prefill, ubatch mas grande = menos lanzamientos de kernels y mejores lecturas amortizadas (mecanismo confirmado por docs/speculative.md: "computar n tokens en batch es mas eficiente que computarlos secuencialmente").
-- Candidatos: `-ub 512` (volver al default del build) y `-ub 1024` + `-b 4096` (escalada).
+- Candidatos: `-ub 512` (volver al default del build — NOTA v1.1: ya medido en el 25 como UB512 = 20.77 ruido decode; el candidato real es la escalada) y `-ub 1024` + `-b 4096` (escalada).
 - **Riesgo honesto**: los buffers de computo crecen con ub; en 4 GB de VRAM puede haber desborde → el fit lo anotaria, o se baja ctx. Coste de probar: bajo.
 - Las 30 descartaron `-b/-ub` mirando el DECODE (ahi el batch es 1 y no mueve nada); con la lupa en PREFILL vuelven legalmente.
 
@@ -232,8 +232,8 @@ Pre-fase (manual, 10 min): exclusión Defender (G6) — se mide sola comparando 
 | 1 | ANCLA-B | (repro campeon) | control | ~21.50 |
 | 2 | TB8 | `-tb 8` | prefill | +hilos de prefill, decode intacto |
 | 3 | TB8-CRB | `-tb 8 -Crb 0-7 --prio-batch 2` | prefill | prefill a 8 logicos con prioridad |
-| 4 | UB512 | `-ub 512` | prefill | default del build vs 256 heredado |
-| 5 | UB1K-B4K | `-ub 1024 -b 4096` | prefill | escalada; vigilar fit/VRAM |
+| 4 | UB512 | `-ub 512` | prefill | ~~default del build vs 256 heredado~~ **CORRECCION (integracion v1.1): UB512 ya se midio en el barrido-25 = 20.77 t/s (-0.08, ruido decode). NO se repite. Se sustituye por UB1K-B4K** |
+| 5 | UB1K-B4K | `-ub 1024 -b 4096` | prefill | escalada nunca medida; vigilar fit/VRAM |
 | 6 | FULLPRE | TB8-CRB + UB512 | prefill | fusion de ganadores prefill |
 | 7 | NGRAM-S | `--spec-type ngram-simple` | decode | 4 prompts distintos; acceptance del log |
 | 8 | NGRAM-M | `--spec-type ngram-mod` | decode | variante MoE de la comunidad |
@@ -244,7 +244,30 @@ Pre-fase (manual, 10 min): exclusión Defender (G6) — se mide sola comparando 
 
 Fuera del sweep: G3 (eagle3) queda como fase 3 con prerrequisitos; G7 (context-shift + cache-reuse) se activa en el uso diario tras validar el ganador.
 
-## 5. Fuentes
+## 6. INTEGRACION REALIZADA — las 7 ORO entran al barrido-30 como v1.1 (2026-10-25)
+
+El Director pidio anadir "esas 7" a las 30 pruebas y que el log final lleve todas las metricas. Se hizo asi:
+
+- **barrido-qwen-30.py v1.0 -> v1.1**: 30 -> 37 configs. Los ids 1-30 NO cambian; los ORO son los ids 31-37 con familia "ORO" y corren DESPUES de los 3 combos dinamicos (no entran a su pool: miden otros frentes/protocolo).
+- Mapeo ORO -> configs:
+
+| ORO | Config nueva | Flags | Metrica clave |
+|---|---|---|---|
+| G1a | 31 ORO-TB8 | `-tb 8` | prefill (decode intacto) |
+| G1b | 32 ORO-UB1K | `-ub 1024 -b 4096` | prefill (UB512 se retira: ya midio 20.77 en el 25) |
+| G2a | 33 ORO-NGRAMS | `--spec-type ngram-simple` | decode con protocolo ngram + acceptance |
+| G2b | 34 ORO-NGRAMM | `--spec-type ngram-mod` | idem |
+| G4 | 35 ORO-NOWARM | `--no-warmup` | load_s |
+| G5 | 36 ORO-CRAM512 | `-cram 512` | RAM/estabilidad (t/s ~ ancla esperado) |
+| G7 | 37 ORO-SHIFT | `--context-shift --cache-reuse 256` | retome (en sweep: sanity decode ~ ancla) |
+
+- G3 (eagle3) y G6 (Defender) NO son configs del sweep: G3 exige el GGUF del draft (fase 3); G6 es exclusion manual de Windows y se mide comparando el load_s de las ANCLAS antes/despues de excluirlas.
+- **Log final con TODAS las metricas** (lo que pidio el Director): ahora el CSV guarda 23 columnas (se anaden proto, pf_r1..pf_r4, prompt_n, accept) y la pantalla imprime 3 rankings: DECODE (t/s pasadas 2-4), PREFILL (tokens/s de la pasada 1 FRIA: con cache_prompt las pasadas 2-4 reutilizan la KV y su prompt eval no es prefill real; misma condicion para todas las configs) y CARGA (segundos hasta /health, menos es mejor), mas el bloque NGRAM con acceptance y el aviso de que su t/s no es comparable 1:1.
+- **Correccion de la auditoria (honestidad de registro)**: §4 fila 4 proponia UB512 sin ver que el barrido-25 ya lo midio (UB512 = 20.77, ruido decode). El test v1 del barrido-30 si lo tenia prohibido. Candidato sustituido por la escalada UB1K-B4K, nunca medida, con la metrica nueva de prefill. §1 tambien decia "Candidatos: -ub 512...": lease "-ub 1024 -b 4096".
+- Verificacion: test_barrido30.py ampliada de 47 a **80 checks VERDE** (verbatim de las 7 ORO en el dump, -ub 512 prohibido, --spec-* prohibido salvo --spec-type ngram-simple/ngram-mod, protocolo ngram 4 prompts distintos y pareados en longitud, acceptance del log, rankings prefill/carga, migracion de CSV v1.0 -> v1.1 idempotente con respaldo .bak).
+- Duracion estimada de la corrida: ~1 h 15 (7 configs x ~2-3 min). Resume por CSV intacto.
+
+## 7. Fuentes
 
 - Dump b11856 del Director (`llama-flags-nuevo.txt`, UTF-16LE, 751 lineas) — fuente de verdad #1, leida integra
 - docs/speculative.md oficial (mecanismo batch-vs-secuencial; lista EAGLE3 `AngelSlim/Qwen3-a3B_eagle3`, `Tengyunw/qwen3_30b_moe_eagle3`) — https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md

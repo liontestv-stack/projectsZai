@@ -259,15 +259,45 @@ Todas verbatim en el dump b11856 (llama-flags-nuevo.txt). Linea del dump:
   -kvo/--kv-offload, -nkvo           offload del KV, default enabled (L68)
   -kvu/--kv-unified                  KV unificada (default on si np auto) (L450)
   -lzm, --lazy-mode                  lectura on-demand (auto/on/off) (L99)
-  -cram, --cache-ram N               tope de cache en MiB (L446) — semantica
-      NO verificable con fuentes publicas => REGLA: no se usa sin entender
+  -cram, --cache-ram N               tope de cache en MiB (L446) — veredicto
+      ACTUALIZADO (ver SECCION F): semantica verificada en Task 13
+      (PR #16391 via tutorial #20574 + issue #22127); default 8192 MiB
   -ctk/-ctv valores: f32,f16,bf16,q8_0,q4_0,q4_1,iq4_nl,q5_0,q5_1 (L75-78)
       — SIN tipos turbo en este build (verificado: cero ocurrencias)
   -lm modos: auto|none|mmap|mlock|mmap+mlock|dio (L87-96) — mlock PROHIBIDO
       en este rig (aprendido §7)
-DESCARTADAS CON MOTIVO PARA EL BARRIDO-30: -nkvo (KV en RAM = atencion en
-CPU: techo ~16 t/s por aritmetica), -lzm on (disco por token), -cram (no
-entendida), NUMA (single-socket), -b/-ub (no afectan a la generacion).
-Test que cierra la auditoria: scripts/test_barrido30.py (47/47 VERDE) —
-25 tokens de flag distintos de las 30 configs, todos verbatim en el dump.
+DESCARTADAS CON MOTIVO PARA EL BARRIDO-30 (v1.0; ver SECCION F para lo que
+la auditoria de prefill revivio legalmente): -nkvo (KV en RAM = atencion en
+CPU: techo ~16 t/s por aritmetica), -lzm on (disco por token), NUMA
+(single-socket), -b/-ub para DECODE (no afectan a la generacion).
+Test que cierra la auditoria v1.1: scripts/test_barrido30.py (80/80 VERDE) —
+tokens de flag distintos de las 37 configs, todos verbatim en el dump.
+
+SECCION F — FLAGS ORO DE LA AUDITORIA b11856, INTEGRADAS AL BARRIDO-30 v1.1
+(LAIA, 2026-10-25; fuente: auditoria-flags-oro.md + verbatim del dump)
+
+Usadas por las configs ORO ids 31-37 (todas verbatim en el dump b11856):
+  -tb, --threads-batch N             hilos de BATCH/prompt processing, default
+      = -t (L9-10). ORO-TB8 usa -tb 8: prefill con los 8 logicos, decode
+      intacto (-t 4 sigue mandando en generacion).
+  -ub, --ubatch-size N               default 512 (L31-32). ORO-UB1K usa
+      -ub 1024 -b 4096 (escalada). PROHIBIDO -ub 512: ya midio 20.77 t/s en
+      el barrido-25 (UB512, ruido decode); _validar_configs lo rechaza.
+  --spec-type ngram-simple           borrador por lookup, coste ~0 (L390-414;
+      valores verbatim: none,draft-simple,draft-eagle3,draft-mtp,draft-dflash,
+      draft-dspark,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache)
+  --spec-type ngram-mod              variante recomendada para MoE. REGLA:
+      solo estos 2 valores de spec estan legalizados (protocolo de 4 prompts
+      DISTINTOS + acceptance del log); TODO otro --spec-* sigue prohibido
+      (draft-MTP sancionado, aprendido §1).
+  --warmup / --no-warmup             run vacio de calentamiento, default
+      enabled (L463). ORO-NOWARM: carga mas rapida, la pasada 1 paga.
+  -cram, --cache-ram N               default 8192 MiB de cache de prompts en
+      RAM (L446-449; PR #16391, issue #22127). ORO-CRAM512: 512 MiB para no
+      pelear con el modelo de 14.27 GB en RAM.
+  --context-shift / --no-context-shift   shift OFF por default (L458-460).
+      ORO-SHIFT lo activa con --cache-reuse 256 (reciclaje KV por chunks).
+METRICA NUEVA v1.1: prefill = tokens/s de la PASADA 1 FRIA (con cache_prompt
+las pasadas 2-4 reutilizan la KV y no son prefill real); acceptance del log
+en la columna accept (vacío = no aparecio; NO se inventa).
 ===============================================================================

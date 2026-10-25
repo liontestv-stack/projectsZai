@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BARRIDO-QWEN-30 v1.0 (2026-10-25) - barrido automatico de 30 configuraciones NUEVAS
+BARRIDO-QWEN-30 v1.1 (2026-10-25) - barrido automatico de 37 configuraciones NUEVAS
 ====================================================================================
-Que hace: prueba UNA A UNA en bucle 30 configuraciones que NUNCA se midieron
-en el barrido-25 (nada repetido), con el mismo protocolo riguroso, y al final
-imprime el ranking + el comando ganador + la linea FLAGS_GANADORAS.
+v1.1: se anaden las 7 configs ORO (ids 31-37) salidas de la auditoria flag-a
+flag del build b11856 (auditoria-flags-oro.md) y el log final pasa a tener
+TRES rankings (DECODE + PREFILL + CARGA), acceptance del ngram y columnas
+nuevas en el CSV (proto, prompt_n, accept, pf_r1..pf_r4). Los ids 1-30 NO
+cambian (el CSV ya medido sigue siendo valido; hay migracion automatica de
+cabecera si el CSV viejo existe).
+
+Que hace: prueba UNA A UNA en bucle 37 configuraciones que NUNCA se midieron
+en los barridos 25/30 (nada repetido; -ub 512 quedo FUERA porque ya midio
+20.77 en el 25), con el mismo protocolo riguroso, y al final imprime los
+rankings + el comando ganador + la linea FLAGS_GANADORAS.
 
 PUNTO DE PARTIDA (medido, barrido 25/25 del 2026-10-25):
   campeon = -lm none  ->  21.50 t/s  (BASE sin lm none = 20.85)
@@ -35,6 +43,18 @@ Este barrido busca ROMPER ese techo con 4 familias nuevas + cierres:
   CIERRES (9)- prio 3/0, poll 20/80, --no-host, -nr (repack off), KV q5_1,
                -lm dio, y los 3 COMBOS dinamicos del final (construidos con
                los ganadores medidos de esta corrida).
+  ORO    (7)- ids 31-37, las jugadas de la auditoria-flags-oro.md:
+               G1 prefill separado (-tb 8 y -ub 1024 -b 4096: el build tiene
+               un grupo de hilos/batch SOLO para prompt processing que nunca
+               se toco; -ub 512 no se re-prueba, ya midio 20.77 en el 25),
+               G2 speculative ngram (simple y mod: borrador por lookup,
+               coste ~0; PROTOCOLO ESPECIAL de 4 prompts DISTINTOS porque
+               repetir el mismo prompt infla fake el resultado x5),
+               G4 --no-warmup (carga), G5 -cram 512 (RAM) y
+               G7 --context-shift + --cache-reuse 256 (retome chats largos).
+               G3 (eagle3) queda en fase 3: requiere GGUF del draft.
+               G6 (exclusion de Defender) es manual de Windows: se mide
+               comparando el load_s de las ANCLAS antes/despues de excluirlas.
 
 Protocolo de medicion (identico al barrido-25, con 2 mejoras documentadas):
   - Prompt fijo ~230 tokens, n_predict 256, cache_prompt true, temp 0 (greedy
@@ -46,6 +66,14 @@ Protocolo de medicion (identico al barrido-25, con 2 mejoras documentadas):
   - NUEVO: columna load_s (segundos de carga) y hparams (arch + n_expert +
     n_expert_used leidos del log del server: prueba objetiva de si el
     override de expertos aplico)
+  - v1.1: PREFILL se mide DE VERDAD: prefill_tps = la pasada 1 FRIA (con
+    cache_prompt las pasadas 2-4 reutilizan la KV y su prompt eval no es
+    prefill real); pf_r1..pf_r4 guardan las 4 pasadas y prompt_n el tamano
+    del prompt que imprimio el server. Misma condicion para TODAS las configs.
+  - v1.1: proto=ngram (ORO-NGRAMS/NGRAMM): 4 PROMPTS DISTINTOS de la misma
+    familia (repetir el mismo prompt con spec activo infla el resultado,
+    caso documentado 88 -> 419 t/s); se lee el acceptance del log del server
+    y queda en la columna accept (vacío = no aparecio, no se inventa).
   - Pausa termica 60 s cada 8 configs; CSV append con RESUME (Ctrl+C seguro);
     log del server por config en sweep-logs-30\\NN-NOMBRE.log
 
@@ -54,8 +82,9 @@ Antes de correr:
   2. Cerrar CUALQUIER llama-server abierto (el script ABORTA si /health vive)
   3. No usar el PC mientras corre
 
-Doble click: BARRIDO-QWEN-30.bat  |  Duracion ~1 h (resume por CSV)
-Salidas: sweep-resultados-30.csv + sweep-logs-30\\ + ranking en pantalla
+Doble click: BARRIDO-QWEN-30.bat  |  Duracion ~1 h 15 (resume por CSV)
+Salidas: sweep-resultados-30.csv + sweep-logs-30\\ + 3 rankings en pantalla
+         (DECODE t/s, PREFILL tok/s pasada 1, CARGA s hasta /health)
 
 IMPORTANTE al interpretar (esta en el ranking tambien):
   - Si gana un EXP*: primero validar CALIDAD chateando (menos expertos activos
@@ -73,6 +102,7 @@ import csv
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -201,12 +231,122 @@ CONFIGS = [
     {"id": 27, "familia": "BUF", "nombre": "LMDIO", "flags": CM + ["-lm", "dio"],
      "hipotesis": "t/s ~ campeon esperado; el dato util es load_s (DirectIO vs none)"},
     # ---- COMBOS DINAMICOS (ids 28-30; se construyen con los ganadores medidos) ----
+    # Pool de ganadores = ids 3..27 (el gate "id > 27" de _combos_dinamicos
+    # deja fuera tambien a los ORO 31-37: se miden en otros frentes/protocolo
+    # y corren DESPUES de los combos; su veredicto va por ranking separado).
     {"id": 28, "familia": "COMBO", "nombre": "COMBO-TOP", "flags": None,
      "hipotesis": "fusion de los 2 mejores configs de esta corrida"},
     {"id": 29, "familia": "COMBO", "nombre": "COMBO-EXP", "flags": None,
      "hipotesis": "mejor EXP x mejor no-EXP (si ningun EXP gana: repro del COMBO-TOP)"},
     {"id": 30, "familia": "COMBO", "nombre": "COMBO-X3", "flags": None,
      "hipotesis": "fusion de los 3 mejores (mega-combo final)"},
+    # ---- ORO de la auditoria b11856 (ids 31-37; v1.1) ----
+    # Fuente: auditoria-flags-oro.md (G1/G2/G4/G5/G7). Todas llevan -cmoe.
+    # -ub 512 NO entra: UB512 ya midio 20.77 t/s en el barrido-25 (ruido
+    # decode, como predecia la fisica); el candidato ub es la ESCALADA que
+    # nunca se midio, con la metrica nueva de prefill de la pasada 1.
+    {"id": 31, "familia": "ORO", "nombre": "ORO-TB8", "flags": CM + ["-tb", "8"],
+     "hipotesis": "G1a: hilos de BATCH/PROMPT a 8 (default = -t 4): prefill con los 8 logicos; decode intacto (-t 4 sigue mandando en generacion)"},
+    {"id": 32, "familia": "ORO", "nombre": "ORO-UB1K",
+     "flags": CM + ["-ub", "1024", "-b", "4096"],
+     "hipotesis": "G1b: ubatch grande amortiza lecturas en prefill (escalada nunca medida; UB512 = 20.77 ya medido en el 25); riesgo: buffers de computo + VRAM"},
+    {"id": 33, "familia": "ORO", "nombre": "ORO-NGRAMS",
+     "flags": CM + ["--spec-type", "ngram-simple"], "proto": "ngram",
+     "hipotesis": "G2a: borrador por lookup de ngram (coste ~0) + verificacion batched; protocolo 4 prompts distintos + acceptance del log; NO comparable 1:1 con el ranking decode"},
+    {"id": 34, "familia": "ORO", "nombre": "ORO-NGRAMM",
+     "flags": CM + ["--spec-type", "ngram-mod"], "proto": "ngram",
+     "hipotesis": "G2b: variante ngram-mod (la que la comunidad recomienda para MoE); mismo protocolo estricto de 4 prompts"},
+    {"id": 35, "familia": "ORO", "nombre": "ORO-NOWARM", "flags": CM + ["--no-warmup"],
+     "hipotesis": "G4: salta el run vacio de calentamiento -> load_s menor (el coste lo paga la pasada 1, que ya se descarta); t/s esperado = ancla"},
+    {"id": 36, "familia": "ORO", "nombre": "ORO-CRAM512", "flags": CM + ["-cram", "512"],
+     "hipotesis": "G5: cache de prompts en RAM 8192 -> 512 MiB (el default pelea la RAM del modelo de 14.27 GB); t/s ~ ancla esperado; el dato util es RAM/estabilidad"},
+    {"id": 37, "familia": "ORO", "nombre": "ORO-SHIFT",
+     "flags": CM + ["--context-shift", "--cache-reuse", "256"],
+     "hipotesis": "G7: shift activado (default disabled) + reciclaje KV por chunks de 256: retome rapido en chats que pasan de 16k; en el sweep: sanity decode ~ ancla"},
+]
+
+# Prompts de la familia ngram (4 DISTINTOS, misma estructura y tamano ~230
+# tokens). Solo se usan cuando proto == "ngram" (ORO-NGRAMS/NGRAMM): con spec
+# activo, repetir el MISMO prompt infla el resultado porque el lookup clava
+# el texto (caso documentado 88 -> 419 t/s). Todos terminan con la misma
+# instruccion para que el ngram tenga material justo.
+PROMPTS_NGRAM = [
+    (
+        "Explica como funciona una base de datos relacional por dentro. El cliente "
+        "envia una consulta escrita en un lenguaje declarativo y el parser la "
+        "convierte en un arbol de operaciones. El optimizador examina ese arbol y "
+        "elige un plan: que indices usar, en que orden unir las tablas y cuando "
+        "filtrar las filas. El motor de ejecucion recorre el plan paso a paso. Los "
+        "indices funcionan como el indice de un libro: en lugar de leer todas las "
+        "filas, el motor salta directo a las que importan. Cada cambio de datos se "
+        "escribe primero en un registro de transacciones y despues en las paginas "
+        "de datos, asi si el proceso muere a mitad de camino la base se recupera al "
+        "reiniciar. Las transacciones garantizan cuatro propiedades: atomicidad, "
+        "consistencia, aislamiento y durabilidad. La atomicidad dice que todo o "
+        "nada, la consistencia que las reglas se cumplen, el aislamiento que las "
+        "transacciones simultaneas no se pisan y la durabilidad que lo confirmado "
+        "sobrevive a un corte de energia. Cuando hay muchos clientes a la vez el "
+        "motor usa bloqueos o control de concurrencia multiversion para que nadie "
+        "lea datos a medio escribir. La eleccion del plan tambien decide si escanear "
+        "la tabla completa o buscar por el indice, y esa eleccion puede cambiar la "
+        "consulta de segundos a milisegundos. Ahora resume este texto en cinco puntos breves."
+    ),
+    (
+        "Describe el viaje de un paquete por una red TCP/IP desde que una aplicacion "
+        "entrega un mensaje. La pila lo trocea en segmentos, cada uno con puertos de "
+        "origen y destino. IP le anade cabeceras con direcciones y decide la ruta "
+        "saltando de router en router: cada router mira su tabla de encaminamiento y "
+        "reenvia el paquete hacia la siguiente parada. Nada garantiza que el paquete "
+        "llegue ni que llegue en orden: la red es best-effort. La fiabilidad la pone "
+        "TCP entre emisor y receptor: numeros de secuencia para reordenar, "
+        "confirmaciones para saber que llego y temporizadores para retransmitir lo "
+        "perdido. El control de congestion evita inundar la red: la ventana crece "
+        "despacio cuando todo va bien y se recorta al detectar perdidas. El DNS "
+        "traduce nombres de dominio a direcciones numericas antes de empezar. NAT "
+        "permite que muchas maquinas compartan una sola direccion publica "
+        "reescribiendo puertos en la gateway. Cuando la conexion se establece ocurre "
+        "el saludo de tres vias: sincronizar, confirmar y confirmar la confirmacion. "
+        "Cada salto puede fragmentar o descartar paquetes segun el tamano maximo del "
+        "enlace, y el descubrimiento de la MTU evita partirlos dos veces. Ahora resume "
+        "este texto en cinco puntos breves."
+    ),
+    (
+        "Cuenta como un compilador transforma codigo fuente en un programa ejecutable. "
+        "El lexer lee caracteres y los agrupa en tokens: palabras clave, "
+        "identificadores, numeros y operadores. El parser consume esos tokens y "
+        "construye un arbol de sintaxis que respeta la gramatica del lenguaje. El "
+        "chequeo semantico recorre el arbol comprobando tipos, ambitos y "
+        "declaraciones: que ninguna variable se use sin definir y que las "
+        "operaciones tengan sentido. El optimizador de nivel intermedio reescribe el "
+        "arbol o una representacion intermedia: elimina codigo muerto, saca de los "
+        "bucles lo que no cambia, pliega constantes y elige instrucciones mas "
+        "baratas. El generador de codigo baja esa representacion a instrucciones del "
+        "procesador, asigna registros y ordena las instrucciones para que el pipeline "
+        "no se detenga. El enlazador junta los objetos compilados con las librerias y "
+        "resuelve las referencias cruzadas para producir el ejecutable final. Los "
+        "errores se reportan en orden: el parser no puede continuar si hay errores de "
+        "sintaxis, asi que muchas veces hay que arreglarlos antes de ver los "
+        "semanticos. Ahora "
+        "resume este texto en cinco puntos breves."
+    ),
+    (
+        "Explica que hace un sistema operativo mientras un programa corre. El programa "
+        "vive creyendo que tiene toda la memoria para el: la memoria virtual traduce "
+        "cada direccion con tablas de paginas y la unidad de gestion de memoria del "
+        "procesador. Si una pagina no esta en RAM, el kernel la trae del disco y si "
+        "hace falta expulsa otra. El planificador reparte el procesador entre "
+        "procesos listos cada pocos milisegundos, dando la sensacion de "
+        "simultaneidad. Las llamadas al sistema son la puerta entre el programa y el "
+        "kernel: abrir archivos, crear procesos, comunicarse por sockets. Los drivers "
+        "envuelven el hardware dispar bajo una interfaz comun. El sistema de archivos "
+        "organiza bloques en archivos y directorios y lleva registro de que bloques "
+        "estan libres. Cuando dos procesos quieren comunicarse existen tuberias, "
+        "memoria compartida y colas de mensajes. El arranque enciende en cadena: "
+        "firmware, gestor de arranque, kernel e init, que levanta servicios hasta "
+        "dejar el sistema listo. El journaling del sistema de archivos evita que un "
+        "corte de luz deje medio archivo escrito. Ahora resume este texto en cinco "
+        "puntos breves."
+    ),
 ]
 
 # Prompt de medicion (~230 tokens, fijo para todas las configs; mismo del 25)
@@ -231,9 +371,10 @@ PROMPT = (
     "Ahora resume este texto en cinco puntos breves."
 )
 
-CSV_COLS = ["id", "nombre", "familia", "flags", "tps", "tps_r1", "tps_r2",
-            "tps_r3", "tps_r4", "prefill_tps", "n_gen", "vram_mib", "load_s",
-            "hparams", "notas", "fecha"]
+CSV_COLS = ["id", "nombre", "familia", "flags", "proto", "tps", "tps_r1",
+            "tps_r2", "tps_r3", "tps_r4", "prefill_tps", "pf_r1", "pf_r2",
+            "pf_r3", "pf_r4", "n_gen", "prompt_n", "accept", "vram_mib",
+            "load_s", "hparams", "notas", "fecha"]
 
 # Estado global minimo para el diagnostico EXP (hparams de la ANCLA)
 _HP_ANCLA = {"log": "", "ruta": ""}
@@ -252,12 +393,13 @@ def _health_ok(timeout=2):
         return False
 
 
-def _medir_una_vez():
-    """POST /completion -> dict con tps, prefill, n tokens.
+def _medir_una_vez(prompt):
+    """POST /completion -> dict con tps, prefill, n tokens y prompt_n.
     ignore_eos: true -> todas las pasadas generan EXACTAMENTE n_predict tokens
-    (mejora del protocolo vs barrido-25: ventanas identicas siempre)."""
+    (mejora del protocolo vs barrido-25: ventanas identicas siempre).
+    v1.1: el prompt llega por parametro (proto ngram usa 4 DISTINTOS)."""
     body = json.dumps({
-        "prompt": PROMPT,
+        "prompt": prompt,
         "n_predict": N_PREDICT,
         "temperature": 0.0,      # greedy SOLO para bench (excepcion documentada)
         "top_k": 1,
@@ -273,6 +415,7 @@ def _medir_una_vez():
         "tps": t.get("predicted_per_second"),
         "prefill": t.get("prompt_per_second"),
         "n_gen": t.get("predicted_n"),
+        "prompt_n": t.get("prompt_n"),
     }
 
 
@@ -295,6 +438,20 @@ def _hparams_de_log(ruta_log):
     if m:
         partes.append("n_expert_used=" + m.group(1))
     return ";".join(partes)
+
+
+def _accept_de_log(ruta_log):
+    """Best-effort (v1.1): tasa de aceptacion del borrador speculative que el
+    server imprime en el log. Devuelve "" si no aparece la linea (NO se
+    inventa nada; el dato queda para revision manual del log)."""
+    try:
+        txt = open(ruta_log, "r", encoding="utf-8", errors="replace").read()
+    except Exception:
+        return ""
+    hits = re.findall(r"accept[^\n]*?(\d{1,3}(?:\.\d+)?)\s*%", txt, re.IGNORECASE)
+    if hits:
+        return hits[-1] + "%"
+    return ""
 
 
 def _vram_mib():
@@ -349,6 +506,30 @@ def _lanzar_y_esperar(flags, ruta_log):
 
 
 # ============================== CSV / RESUME ==============================
+def _migrar_csv():
+    """v1.1: si el CSV existe con la cabecera vieja (v1.0, 16 columnas), lo
+    respalda y lo reescribe con la cabecera nueva (23 columnas) rellenando
+    las columnas nuevas en blanco. Asi el resume de una corrida a medias no
+    se rompe al actualizar el script."""
+    if not os.path.exists(ARCH_CSV):
+        return
+    with open(ARCH_CSV, newline="", encoding="utf-8") as f:
+        filas = list(csv.reader(f))
+    if not filas or filas[0] == CSV_COLS:
+        return
+    respaldo = "%s.bak-%s" % (ARCH_CSV, time.strftime("%Y%m%d-%H%M%S"))
+    shutil.copyfile(ARCH_CSV, respaldo)
+    viejas = filas[0]
+    with open(ARCH_CSV, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(CSV_COLS)
+        for fila in filas[1:]:
+            d = dict(zip(viejas, fila))
+            w.writerow([d.get(col, "") for col in CSV_COLS])
+    print("[i] CSV viejo (%d columnas) migrado a %d columnas; respaldo: %s"
+          % (len(viejas), len(CSV_COLS), respaldo))
+
+
 def _leer_csv():
     filas = {}
     if os.path.exists(ARCH_CSV):
@@ -480,19 +661,23 @@ def _medir_config(cfg):
     finally:
         if proc is None:
             raise
-    print("    server arriba en %d s (carga), midiendo %d pasadas x %d tokens..."
-          % (load_s, RUNS, N_PREDICT))
-    tps_runs, prefill, n_gen = [], "", ""
+    print("    server arriba en %d s (carga), midiendo %d pasadas x %d tokens (%s)..."
+          % (load_s, RUNS, N_PREDICT, cfg.get("proto", "std")))
+    proto = cfg.get("proto", "std")
+    prompts = PROMPTS_NGRAM if proto == "ngram" else [PROMPT] * RUNS
+    tps_runs, pf_runs, n_gen, prompt_n = [], [], "", ""
     try:
         for i in range(1, RUNS + 1):
-            r = _medir_una_vez()
+            r = _medir_una_vez(prompts[i - 1])
             tps_runs.append(r["tps"])
-            if r["prefill"]:
-                prefill = "%.2f" % r["prefill"]
+            pf_runs.append(r["prefill"])
             if r["n_gen"]:
                 n_gen = str(r["n_gen"])
+            if i == 1 and r.get("prompt_n"):
+                prompt_n = str(r["prompt_n"])
             print("      pasada %d/%d: %.2f t/s (gen)  prefill %s t/s"
-                  % (i, RUNS, r["tps"] or -1, prefill or "?"))
+                  % (i, RUNS, r["tps"] or -1,
+                     ("%.2f" % r["prefill"]) if r["prefill"] else "?"))
     finally:
         vram = _vram_mib()
         hp = _hparams_de_log(ruta_log)
@@ -509,6 +694,11 @@ def _medir_config(cfg):
 
     validas = [t for t in tps_runs[1:] if isinstance(t, (int, float)) and t > 0]
     tps = sum(validas) / len(validas) if validas else ""
+    # prefill_tps = pasada 1 FRIA (v1.1): con cache_prompt las pasadas 2-4
+    # reutilizan la KV y su prompt eval no es prefill real. La pasada 1 es la
+    # misma condicion para TODAS las configs (incluidas las ngram, cuyo
+    # prompt 1 tambien es nuevo para el server).
+    pf1 = pf_runs[0] if pf_runs and isinstance(pf_runs[0], (int, float)) else ""
     notas = []
     if len(validas) < RUNS - 1:
         notas.append("medidas incompletas")
@@ -521,16 +711,31 @@ def _medir_config(cfg):
     d_exp = _diagnostico_exp(cfg, ruta_log)
     if d_exp:
         notas.append(d_exp)
+    accept = ""
+    if proto == "ngram":
+        accept = _accept_de_log(ruta_log)
+        if not accept:
+            notas.append("acceptance no visible en log (revisar a mano)")
+        else:
+            notas.append("acceptance %s" % accept)
+    def _pf(v):
+        return ("%.2f" % v) if isinstance(v, (int, float)) else ""
     fila = {
         "id": cfg["id"], "nombre": cfg["nombre"],
         "familia": cfg.get("familia", ""),
-        "flags": " ".join(flags),
+        "flags": " ".join(flags), "proto": proto,
         "tps": ("%.2f" % tps) if tps else "",
         "tps_r1": ("%.2f" % tps_runs[0]) if tps_runs[0] else "",
         "tps_r2": ("%.2f" % tps_runs[1]) if len(tps_runs) > 1 and tps_runs[1] else "",
         "tps_r3": ("%.2f" % tps_runs[2]) if len(tps_runs) > 2 and tps_runs[2] else "",
         "tps_r4": ("%.2f" % tps_runs[3]) if len(tps_runs) > 3 and tps_runs[3] else "",
-        "prefill_tps": prefill, "n_gen": n_gen, "vram_mib": vram,
+        "prefill_tps": _pf(pf1),
+        "pf_r1": _pf(pf_runs[0]) if len(pf_runs) > 0 else "",
+        "pf_r2": _pf(pf_runs[1]) if len(pf_runs) > 1 else "",
+        "pf_r3": _pf(pf_runs[2]) if len(pf_runs) > 2 else "",
+        "pf_r4": _pf(pf_runs[3]) if len(pf_runs) > 3 else "",
+        "n_gen": n_gen, "prompt_n": prompt_n, "accept": accept,
+        "vram_mib": vram,
         "load_s": ("%.0f" % load_s) if load_s else "",
         "hparams": hp, "notas": "; ".join(notas), "fecha": _ts(),
     }
@@ -547,7 +752,7 @@ def _ranking(filas):
                 if f.get("tps") not in (None, "")]
     con_dato.sort(key=lambda par: par[0], reverse=True)   # fix v1.1 del 25: solo el numero
     print("\n" + "=" * 74)
-    print("RANKING FINAL (t/s promedio, pasadas 2-%d, ignore_eos on)" % RUNS)
+    print("RANKING DECODE (t/s promedio, pasadas 2-%d, ignore_eos on)" % RUNS)
     print("=" * 74)
     for i, (tps, f) in enumerate(con_dato, 1):
         nota = ("  [%s]" % f["notas"]) if f.get("notas") else ""
@@ -579,6 +784,53 @@ def _ranking(filas):
         if f.get("notas") and "fit-abortado" in f["notas"]:
             print("\n  OJO: %s mide con fit-abortado (desborde VRAM): dato invalido"
                   % f["nombre"])
+    if any("spec-type" in t for t in flags_g):
+        print("\n  AVISO NGRAM: el ganador usa speculative ngram. Su t/s depende del")
+        print("  CONTENIDO (aqui se midio con 4 prompts distintos). Antes de adoptar:")
+        print("  mirar la columna accept del CSV y repetir con prompts de trabajo real.")
+
+    # ---- RANKING PREFILL (v1.1): el frente que nunca se midio ----
+    con_pf = [(float(f["prefill_tps"]), f) for f in filas.values()
+              if f.get("prefill_tps") not in (None, "")]
+    con_pf.sort(key=lambda par: par[0], reverse=True)
+    print("\n" + "=" * 74)
+    print("RANKING PREFILL (prompt eval, tokens/s de la pasada 1 FRIA: con")
+    print("cache_prompt las pasadas 2-4 reutilizan la KV y no son prefill real)")
+    print("=" * 74)
+    if con_pf:
+        for i, (pf, f) in enumerate(con_pf[:12], 1):
+            print("  %2d. %9.2f tok/s  %02d-%s  (decode %s t/s)"
+                  % (i, pf, int(f["id"]), f["nombre"], f.get("tps") or "?"))
+    else:
+        print("  (sin datos)")
+
+    # ---- RANKING CARGA (v1.1): aqui se ven --no-warmup y la exclusion Defender ----
+    con_cg = [(float(f["load_s"]), f) for f in filas.values()
+              if f.get("load_s") not in (None, "")]
+    con_cg.sort(key=lambda par: par[0])
+    print("\n" + "=" * 74)
+    print("RANKING CARGA (segundos hasta /health; MENOS es mejor; --no-warmup")
+    print("y la exclusion de Defender se comparan con las ANCLAS antes/despues)")
+    print("=" * 74)
+    if con_cg:
+        for i, (ls, f) in enumerate(con_cg[:10], 1):
+            print("  %2d. %5.0f s     %02d-%s" % (i, ls, int(f["id"]), f["nombre"]))
+    else:
+        print("  (sin datos)")
+
+    # ---- NGRAM: acceptance y validez (v1.1) ----
+    ngrams = [f for f in filas.values() if f.get("proto") == "ngram"
+              and (f.get("tps") or "").strip()]
+    if ngrams:
+        print("\n" + "-" * 74)
+        print("NGRAM (borrador gratis): lea el acceptance ANTES de creer el t/s")
+        for f in ngrams:
+            print("  %02d-%s: %s t/s  acceptance=%s  [%s]"
+                  % (int(f["id"]), f["nombre"], f.get("tps") or "?",
+                     f.get("accept") or "N/D", f.get("notas") or "-"))
+        print("  Acceptance < ~20%% = el ngram no sirve para este tipo de contenido.")
+        print("  El t/s de estos 2 configs NO es comparable 1:1 con el ranking DECODE")
+        print("  (usaron 4 prompts distintos; el ancla usa el prompt fijo del 25).")
 
     print("\nPega esto en abrir-qwen-apex.py (v2.0), linea FLAGS_GANADORAS:\n")
     print("FLAGS_GANADORAS = %s" % repr(flags_g))
@@ -590,14 +842,20 @@ def _ranking(filas):
 
 # ============================== VALIDACION DE ARRANQUE ==============================
 def _validar_configs():
-    """Fail-fast: 30 configs, ids unicos 1..30, y TODA config estatica con
-    colocacion de expertos explicita (-cmoe o -ncmoe)."""
+    """Fail-fast: 37 configs, ids unicos 1..37, TODA config estatica con
+    colocacion de expertos explicita (-cmoe o -ncmoe), prohibiciones de
+    aprendido.md y reglas del protocolo ngram (4 prompts distintos)."""
     errores = []
-    if len(CONFIGS) != 30:
-        errores.append("hay %d configs, deben ser 30" % len(CONFIGS))
+    if len(CONFIGS) != 37:
+        errores.append("hay %d configs, deben ser 37" % len(CONFIGS))
     ids = sorted(c["id"] for c in CONFIGS)
-    if ids != list(range(1, 31)):
-        errores.append("ids no son 1..30 unicos: %s" % ids)
+    if ids != list(range(1, 38)):
+        errores.append("ids no son 1..37 unicos: %s" % ids)
+    if len(PROMPTS_NGRAM) < RUNS:
+        errores.append("PROMPTS_NGRAM tiene %d, se necesitan >= %d (uno por pasada)"
+                       % (len(PROMPTS_NGRAM), RUNS))
+    if len(set(PROMPTS_NGRAM)) != len(PROMPTS_NGRAM):
+        errores.append("PROMPTS_NGRAM repetidos entre si (inflaria el spec)")
     for c in CONFIGS:
         if c["flags"] is None:
             continue
@@ -607,13 +865,19 @@ def _validar_configs():
         if "-lm" in c["flags"] and "mlock" in c["flags"]:
             errores.append("%02d-%s usa mlock (PROHIBIDO, aprendido.md §7)"
                            % (c["id"], c["nombre"]))
+        if "-ub" in c["flags"] and c["flags"][c["flags"].index("-ub") + 1] == "512":
+            errores.append("%02d-%s usa -ub 512 (ya medido en el 25: UB512 = 20.77)"
+                           % (c["id"], c["nombre"]))
+        if "--spec-type" in c["flags"] and c.get("proto") != "ngram":
+            errores.append("%02d-%s usa --spec-type sin proto=ngram (protocolo "
+                           "obligatorio: 4 prompts distintos)" % (c["id"], c["nombre"]))
     return errores
 
 
 # ============================== MAIN ==============================
 def main():
     print("=" * 74)
-    print("BARRIDO-QWEN-30 v1.0 - %d configuraciones NUEVAS, ~1 h (resume por CSV)"
+    print("BARRIDO-QWEN-30 v1.1 - %d configuraciones NUEVAS, ~1 h 15 (resume por CSV)"
           % len(CONFIGS))
     print("Campeon a superar: 21.50 t/s (-lm none, barrido-25 del 2026-10-25)")
     print("=" * 74)
@@ -637,6 +901,7 @@ def main():
         print("        el server si las rutas existen (modo prueba).")
     os.makedirs(DIR_LOGS, exist_ok=True)
 
+    _migrar_csv()
     filas = _leer_csv()
     pendientes = [c for c in CONFIGS
                   if not (filas.get(c["id"], {}).get("tps") or "").strip()]
@@ -644,6 +909,9 @@ def main():
     print("[i] Ya medidas: %d | Pendientes: %d" % (ya, len(pendientes)))
     print("[i] Familias: 2 anclas + 5 EXP (expertos activos) + 3 FIT + 4 NCMOE")
     print("    + 5 afinidad + 4 prio/poll + 4 cierres + 3 combos dinamicos")
+    print("    + 7 ORO (auditoria b11856: prefill x2, ngram x2, carga, RAM, retome)")
+    print("[i] Metricas por config: decode t/s (pasadas 2-4) + prefill tok/s")
+    print("    (pasada 1 fria) + load_s + VRAM + hparams + acceptance si ngram")
     print("[i] Checklist: Firefox/Wallpaper Engine/Copilot CERRADOS, PC sin usar,")
     print("    ventilacion libre. Cada tick del mouse es ruido de medicion.")
     try:

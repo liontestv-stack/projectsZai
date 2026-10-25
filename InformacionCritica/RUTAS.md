@@ -663,21 +663,37 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
   ~23-25 si los módulos lo permiten. **30 t/s exige otro hardware** (más
   VRAM para expertos o RAM más rápida). Veredicto completo: informe §11.
 
-**BARRIDO-QWEN-30 — preparado y verificado (2026-10-25), pendiente de correr:**
+**BARRIDO-QWEN-30 v1.1 — preparado y verificado (2026-10-25), pendiente de correr:**
 
-- 30 configs NUEVAS que no repiten ninguna de las 25, con anclas de
-  reproducibilidad y protocolo idéntico + 3 mejoras (ignore_eos, load_s,
-  hparams del log). Doble click: `BARRIDO-QWEN-30.bat` (~1 h, resumible).
+- **37 configs NUEVAS** que no repiten ninguna de las 25 (los ids 1-30 son
+  los del v1.0 + 7 ORO ids 31-37 de la auditoría), con anclas de
+  reproducibilidad y protocolo idéntico + mejoras (ignore_eos, load_s,
+  hparams del log). Doble click: `BARRIDO-QWEN-30.bat` (~1 h 15, resumible).
+- **Las 7 ORO de la auditoría b11856** (`auditoria-flags-oro.md` §6):
+  31 ORO-TB8 `-tb 8` y 32 ORO-UB1K `-ub 1024 -b 4096` (frente PREFILL, el
+  grupo de hilos/batch separado que nunca se tocó; -ub 512 NO se re-prueba:
+  UB512 ya midió 20.77 en el 25), 33/34 ORO-NGRAMS/-NGRAMM `--spec-type
+  ngram-simple/ngram-mod` (borrador gratis; protocolo especial de 4 prompts
+  DISTINTOS + acceptance del log), 35 ORO-NOWARM `--no-warmup` (carga),
+  36 ORO-CRAM512 `-cram 512` (RAM) y 37 ORO-SHIFT `--context-shift
+  --cache-reuse 256` (retome en chats >16k). G3 (eagle3) = fase 3 con GGUF
+  del draft; G6 (Defender) = exclusión manual medida con load_s de ANCLAS.
+- **Log final con todas las métricas**: CSV de 23 columnas (proto,
+  pf_r1..pf_r4, prompt_n, accept) y 3 rankings en pantalla: DECODE (t/s),
+  PREFILL (tokens/s pasada 1 fría) y CARGA (s hasta /health, menos es
+  mejor), + bloque NGRAM con acceptance.
 - **La familia EXP responde la pregunta del Director**: bajar expertos
   activos SÍ se puede en runtime — `--override-kv
   qwen3moe.expert_used_count=int:N` (verbatim en el dump L162-165). Con
   control EXP10 (debe medir MENOS si el mecanismo aplica), sanity EXP8 y
   escalera 6/5/4. Esperanza honesta: EXP6 ~25-27, EXP4 ~28-33 (hipótesis,
   calidad por validar chateando ANTES de adoptar).
-- Estudio completo: [`ideas-velocidad-30.md`](ideas-velocidad-30.md).
-  Verificación: 47/47 checks (auditoría de flags verbatim en el dump,
-  prohibiciones de aprendido.md, no-repetición de las 25, ranking sin
-  TypeError). Aviso launcher: si gana un `-ncmoe`/`-ngl auto`, quitar
+- Estudios: [`ideas-velocidad-30.md`](ideas-velocidad-30.md) +
+  [`auditoria-flags-oro.md`](auditoria-flags-oro.md).
+  Verificación: 80/80 checks (flags verbatim en el dump incluidas las 7
+  ORO, prohibiciones de aprendido.md, no-repetición de las 25, -ub 512
+  bloqueado, protocolo ngram, 3 rankings, migración de CSV idempotente).
+  Aviso launcher: si gana un `-ncmoe`/`-ngl auto`, quitar
   `-cmoe`/`-ngl 99` de BASE_FLAGS a mano (el ranking lo imprime).
 - Resultado: (placeholder — pegar aquí el GANADOR del BARRIDO-QWEN-30.bat
   con su t/s; el CSV va en sweep-resultados-30.csv)
