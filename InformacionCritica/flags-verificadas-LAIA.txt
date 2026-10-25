@@ -12,9 +12,35 @@ JERARQUIA DE VERDAD:
   2. este archivo     -> destilado verificado + mapa de lo que falta
   3. docs oficiales   -> lo que existira cuando actualices el build
 
-RUTAS REALES DEL DIRECTOR (de RutasArchivos.md):
+===============================================================================
+RE-AUDITORIA 2026-10-25 — DUMP NUEVO b11856 (llama-flags-nuevo.txt, 122,440 B)
+===============================================================================
+El Director regenero el dump con el build nuevo y lo subio al repo. Verificado
+con diff automatico (98->97 flags) + grep verbatim contra el dump:
+  - draft-mtp CONFIRMADO en --spec-type:
+    none|draft-simple|draft-eagle3|draft-mtp|draft-dflash|draft-dspark|ngram-*
+    (antes solo none|ngram-*; NUEVOS ademas: draft-simple/eagle3/dflash/dspark)
+  - -ncmoe/--n-cpu-moe N y -cmoe/--cpu-moe PRESENTES (verbatim: "keep the
+    Mixture of Experts (MoE) weights of the first N layers in the CPU")
+  - --moe-cache-mib N PRESENTE (verbatim: "GPU cache size in MiB for the MoE
+    experts kept in the CPU"; default 0 = disabled) — YA AUDITADA, utilizable
+  - -lm/--load-mode (auto|none|mmap|mlock|mmap+mlock; default auto) SUSTITUYE
+    y ELIMINA --mlock/--no-mmap/--direct-io (flags MUERTAS en b11856)
+  - --jinja ENABLED POR DEFECTO (verbatim "default: enabled") — ya no hace falta
+  - -fa ahora [on|off|auto] default auto -> fijar "-fa on" explicito
+  - --port default 9931 (verbatim) — airi/pi: pasar --port 8080 si lo esperan
+  - --spec-draft-n-max default 3 (antes 16); nuevas --spec-draft-n-min/-n-ubatch
+  - NUEVO -lzm/--lazy-mode (lectura on-demand de tensores; default auto)
+  - Otros nuevos: -ag/--agent, -cms/--checkpoint-min-step, --connect, --no-log-*
+  - Muertos: --license, --log-prefix, --tts-use-guide-tokens, -mv, -hfv, -dio
+  VEREDICTO: V1/V2 de abajo siguen validos con 3 cambios: ruta del server
+  (D:\llama.cpp\llama-server.exe), puerto (9931) y --jinja (omitir). Metodo
+  recomendado = lanzador automatico InformacionCritica/abrir-qwen-apex.py
+===============================================================================
+
+RUTAS REALES DEL DIRECTOR (de RutasArchivos.md, act. 2026-10-25):
   Modelo      : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
-  llama-server: D:\llama.cpp\build\bin\llama-server.exe
+  llama-server: D:\llama.cpp\llama-server.exe   (b11856, ruta nueva operativa; rollback: D:\llama.cpp\build\bin)
 
 DATOS VERIFICADOS VIA API HUGGINGFACE (2026-10-24):
   APEX-I-MINI.gguf = 14.27 GB (el "12.2 GB" de la model card es tamano de perfil)
@@ -125,18 +151,19 @@ turbo2/turbo3/turbo4 en -ctk/-ctv   (solo forks; tu build NO las lista)
 --draft-max / -draft / --draft-min   (nombres muertos; usar --spec-draft-n-max)
 
 ===============================================================================
-COMANDO V1 — BUILD ACTUAL (sin MTP; base para el sweep; expectativa honesta con el
-archivo real de 14.27 GB: ~14-24 t/s segun pageouts — el sweep y el pagefile deciden)
+COMANDO V1 — BUILD NUEVO b11856 (sin MTP; base para el sweep; expectativa honesta
+con el archivo real de 14.27 GB: ~14-24 t/s segun pageouts — el sweep decide)
+METODO RECOMENDADO:  py abrir-qwen-apex.py --sweep   (mide t/s solo, stdlib)
+Comando equivalente a mano (ruta/puerto actualizados al build nuevo):
 ===============================================================================
-D:\llama.cpp\build\bin\llama-server.exe ^
+D:\llama.cpp\llama-server.exe ^
   -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
   -a apex35b ^
   -ngl 99 -cmoe ^
   -c 16384 -b 2048 -ub 256 ^
   -fa on -ctk q8_0 -ctv q8_0 ^
   -t 4 --prio 2 ^
-  --jinja ^
-  --host 127.0.0.1 --port 8080
+  --host 127.0.0.1 --port 9931
 
 Luego del sweep (RUTAS.md): sustituir -cmoe por -ncmoe N (ganador).
 
@@ -150,10 +177,12 @@ Especulativa INTERINA (sin actualizar build), dos opciones validas HOY:
      familia/tokenizer (0.8B/2B de Qwen3.x) a D:\ZLia\models\ primero.
 
 ===============================================================================
-COMANDO V2 — BUILD ACTUALIZADO (con MTP; objetivo ~28-36 t/s; el PR #22673 — verificado,
+COMANDO V2 — BUILD NUEVO b11856 (con MTP; objetivo ~28-36 t/s; el PR #22673 — verificado,
 fusionado 2026-05-16 — declara "more than 2x speed-up with ~75% acceptance")
+METODO RECOMENDADO:  py abrir-qwen-apex.py --mtp --ncmoe N_GANADOR
+Comando equivalente a mano (ruta/puerto actualizados al build nuevo):
 ===============================================================================
-D:\llama.cpp\build\bin\llama-server.exe ^
+D:\llama.cpp\llama-server.exe ^
   -m D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf ^
   -a apex35b ^
   -ngl 99 -ncmoe N_GANADOR ^
@@ -161,6 +190,5 @@ D:\llama.cpp\build\bin\llama-server.exe ^
   -fa on -ctk q8_0 -ctv q8_0 ^
   -t 4 --prio 2 ^
   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75 ^
-  --jinja ^
-  --host 127.0.0.1 --port 8080
+  --host 127.0.0.1 --port 9931
 ===============================================================================

@@ -329,6 +329,44 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
   & D:\llama.cpp\llama-server.exe --help 2>&1 | Out-File D:\ZLia\llama-flags-nuevo.txt -Encoding unicode
   ```
 
+**REGISTRO DE RE-AUDITORÍA DEL DUMP NUEVO (2026-10-25, subido por el Director):**
+- `llama-flags-nuevo.txt` recibido (122,440 B byte-exacto), movido a
+  `InformacionCritica/` y auditado con diff automático (98 → 97 flags) + grep
+  verbatim. Detalle completo en `flags-verificadas-LAIA.txt` (bloque RE-AUDITORÍA).
+- Confirmado en SU dump: `draft-mtp` en `--spec-type` (+ nuevos draft-eagle3/
+  dflash/dspark), `-ncmoe/-cmoe`, `--moe-cache-mib` (default 0), `-lm` sustituye
+  a `--mlock/--no-mmap/-dio` (muertas), `--jinja` default ON, `-fa on|off|auto`,
+  **puerto default 9931**, `--spec-draft-n-max` default 3.
+- Consecuencia operativa: V1/V2 siguen válidos cambiando ruta del server (raíz),
+  puerto (9931) y sin `--jinja`.
+
+### 3-A.4. LANZADOR AUTOMÁTICO del modelo (nuevo, 2026-10-25)
+
+`InformacionCritica/abrir-qwen-apex.py` — Python 3.8+ solo stdlib, especifico del
+modelo Qwen APEX-I-MINI (14,273,277,376 B verificado) y del build b11856. Usa
+SOLO flags auditadas contra el dump nuevo. Fases:
+
+- **Pre-flight**: 7 DLLs críticas junto al exe · `--version` combinando
+  stdout+stderr (lección 3-k) con pin build 11856 · modelo byte-exacto
+  (`--force` si difiere) · recordatorio de cerrar Firefox/Wallpaper/Copilot.
+- **V1** (default, `-cmoe` boot garantizado) / **`--ncmoe N`** / **`--mtp`**
+  (V2: `--spec-type draft-mtp --spec-draft-n-max 2`, mitigación #23577;
+  `--spec-p-min 0.75` para replicar el V2 documentado).
+- **`--sweep`**: barrido automático `-ncmoe` (cmoe,40,32,24,16 por defecto):
+  lanza el server, espera `/health`, request de warmup (descarta JIT PTX),
+  request de medición vía `/completion` (timings del propio server), cierra,
+  siguiente; tabla final ordenada + ganador + log en `D:\ZLia\sweep-logs\`.
+- **`--dry-run`**: imprime el comando exacto sin lanzar nada.
+- NUNCA usa `--mlock` (prohibido por RAM), nunca `-nkvo`, nunca flags muertas.
+- Puerto default 9931 (`--port 8080` si airi/pi lo espera).
+
+```bat
+py abrir-qwen-apex.py --dry-run          (ver el comando)
+py abrir-qwen-apex.py                    (V1, abrir y chatear)
+py abrir-qwen-apex.py --sweep            (barrido -ncmoe con medición t/s)
+py abrir-qwen-apex.py --mtp --ncmoe N_GANADOR   (V2, objetivo ~28-36 t/s)
+```
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El
