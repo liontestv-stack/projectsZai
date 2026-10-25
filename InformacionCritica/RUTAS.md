@@ -663,6 +663,25 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
   ~23-25 si los módulos lo permiten. **30 t/s exige otro hardware** (más
   VRAM para expertos o RAM más rápida). Veredicto completo: informe §11.
 
+**BARRIDO-QWEN-30 — preparado y verificado (2026-10-25), pendiente de correr:**
+
+- 30 configs NUEVAS que no repiten ninguna de las 25, con anclas de
+  reproducibilidad y protocolo idéntico + 3 mejoras (ignore_eos, load_s,
+  hparams del log). Doble click: `BARRIDO-QWEN-30.bat` (~1 h, resumible).
+- **La familia EXP responde la pregunta del Director**: bajar expertos
+  activos SÍ se puede en runtime — `--override-kv
+  qwen3moe.expert_used_count=int:N` (verbatim en el dump L162-165). Con
+  control EXP10 (debe medir MENOS si el mecanismo aplica), sanity EXP8 y
+  escalera 6/5/4. Esperanza honesta: EXP6 ~25-27, EXP4 ~28-33 (hipótesis,
+  calidad por validar chateando ANTES de adoptar).
+- Estudio completo: [`ideas-velocidad-30.md`](ideas-velocidad-30.md).
+  Verificación: 47/47 checks (auditoría de flags verbatim en el dump,
+  prohibiciones de aprendido.md, no-repetición de las 25, ranking sin
+  TypeError). Aviso launcher: si gana un `-ncmoe`/`-ngl auto`, quitar
+  `-cmoe`/`-ngl 99` de BASE_FLAGS a mano (el ranking lo imprime).
+- Resultado: (placeholder — pegar aquí el GANADOR del BARRIDO-QWEN-30.bat
+  con su t/s; el CSV va en sweep-resultados-30.csv)
+
 ## 12. Guardarraíles
 
 1. **Fuente de verdad #1 = `llama-flags.txt`** (tu build). #2 = `flags-verificadas-LAIA.txt`. Si una flag no está en ninguno: **no existe**.

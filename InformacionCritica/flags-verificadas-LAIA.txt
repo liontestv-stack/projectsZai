@@ -236,3 +236,38 @@ degradacion + repeticiones; temp 0 solo en las mediciones del sweep).
 por template/API, no por texto en el prompt. (3) El sampling NO afecta al
 barrido -ncmoe (requests con temperature 0.0 explicito).
 ===============================================================================
+
+===============================================================================
+SECCION E — FLAGS NUEVAS VERIFICADAS PARA EL BARRIDO-30 (LAIA, 2026-10-25)
+===============================================================================
+Todas verbatim en el dump b11856 (llama-flags-nuevo.txt). Linea del dump:
+  --override-kv KEY=TYPE:VALUE,...   override de metadatos del modelo (L162);
+      tipos int/float/bool/str; multiples overrides separados por coma.
+      USO CLAVE: --override-kv qwen3moe.expert_used_count=int:N cambia el
+      numero de expertos activos EN RUNTIME (tecnica documentada en la
+      comunidad para Qwen3-MoE, default 8). Sin flag dedicada: issue #19528
+      cerrada como not-planned; esta es la via soportada.
+  -fitt, --fit-target MiB0,...       margen por device para --fit (default
+      1024) (L155); -fitc, --fit-ctx N = ctx minima que fit puede fijar
+      (default 4096) (L159). OJO issue #27501: --fit NO ajusta -ncmoe.
+  -ngl auto|all|N                    'auto' y 'all' son valores validos (L135)
+  -C, --cpu-mask M / -Cr, --cpu-range lo-hi   afinidad CPU (L11-13)
+  --cpu-strict <0|1>                 colocacion estricta (L14)
+  -Cb/-Crb/--cpu-strict-batch/--poll-batch   variantes para batch (prefill)
+  --no-host                          bypass del host buffer (L73)
+  --repack, -nr, --no-repack         repack de pesos, default enabled (L71)
+  -kvo/--kv-offload, -nkvo           offload del KV, default enabled (L68)
+  -kvu/--kv-unified                  KV unificada (default on si np auto) (L450)
+  -lzm, --lazy-mode                  lectura on-demand (auto/on/off) (L99)
+  -cram, --cache-ram N               tope de cache en MiB (L446) — semantica
+      NO verificable con fuentes publicas => REGLA: no se usa sin entender
+  -ctk/-ctv valores: f32,f16,bf16,q8_0,q4_0,q4_1,iq4_nl,q5_0,q5_1 (L75-78)
+      — SIN tipos turbo en este build (verificado: cero ocurrencias)
+  -lm modos: auto|none|mmap|mlock|mmap+mlock|dio (L87-96) — mlock PROHIBIDO
+      en este rig (aprendido §7)
+DESCARTADAS CON MOTIVO PARA EL BARRIDO-30: -nkvo (KV en RAM = atencion en
+CPU: techo ~16 t/s por aritmetica), -lzm on (disco por token), -cram (no
+entendida), NUMA (single-socket), -b/-ub (no afectan a la generacion).
+Test que cierra la auditoria: scripts/test_barrido30.py (47/47 VERDE) —
+25 tokens de flag distintos de las 30 configs, todos verbatim en el dump.
+===============================================================================
