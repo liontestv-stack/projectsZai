@@ -219,6 +219,62 @@ usa), OpenSSL (punto 3), Python/HF-CLI (el modelo ya está en D:), driver NVIDIA
 Firefox/Wallpaper Engine/Copilot antes de medir (~963 MiB VRAM), `-t 4`, plan de
 energía Alto rendimiento, pagefile en D: (RUTA 5).
 
+### 3-A.3 RUTA DIRECTA — todo en un solo pegado (2026-10-25, mismo resultado que 3-A.1)
+
+Racional: los pasos manuales (navegador, certutil a mano, dir, extracción con
+Explorador) son overhead. La ruta directa encadena TODO en un paste de PowerShell con
+verificación automática VERDE/ROJO. No se recorta seguridad: hash automático, check
+draft-mtp intacto, dump intacto. El `dir *.dll` desaparece porque con hash VERDE +
+extracción completa las DLLs están garantizadas por construcción (y `--version` no
+detectaría falta de CUDA: `ggml-cuda.dll` se carga dinámicamente en runtime).
+
+**OPCIÓN A (recomendada — 633 MB, cero decisiones).** Abrir **Windows PowerShell**
+(powershell.exe, el azul — así el dump queda UTF-16 como el original) y pegar:
+
+```powershell
+$ErrorActionPreference="Stop"
+function Parar($que){ if($LASTEXITCODE -ne 0){ throw "FALLO en: $que" } }
+$u="https://github.com/ggml-org/llama.cpp/releases/download/b11856"
+$d="$env:USERPROFILE\Downloads"; $n="D:\llama.cpp\bin-new"
+curl.exe -L -o "$d\llama-b11856-bin-win-cuda-12.4-x64.zip" "$u/llama-b11856-bin-win-cuda-12.4-x64.zip"; Parar "descarga bin"
+curl.exe -L -o "$d\cudart-llama-bin-win-cuda-12.4-x64.zip" "$u/cudart-llama-bin-win-cuda-12.4-x64.zip"; Parar "descarga cudart"
+$ok1=(Get-FileHash "$d\llama-b11856-bin-win-cuda-12.4-x64.zip" -Algorithm SHA256).Hash -eq "71d4ff57c9b59ce960ca5e9c28d0e26d8e631075c4d13af0c34f7f3a4fa1f094"
+$ok2=(Get-FileHash "$d\cudart-llama-bin-win-cuda-12.4-x64.zip" -Algorithm SHA256).Hash -eq "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"
+"zip bin    : $(if($ok1){'VERDE'}else{'ROJO — NO USAR'})"
+"zip cudart : $(if($ok2){'VERDE'}else{'ROJO — NO USAR'})"
+if(-not ($ok1 -and $ok2)){ throw "Hash distinto: borrar zip y repetir el paste" }
+New-Item -ItemType Directory -Force -Path $n | Out-Null
+tar -xf "$d\llama-b11856-bin-win-cuda-12.4-x64.zip" -C $n; Parar "extraccion bin"
+tar -xf "$d\cudart-llama-bin-win-cuda-12.4-x64.zip" -C $n; Parar "extraccion cudart"
+& "$n\llama-server.exe" --version
+& "$n\llama-server.exe" --help | Select-String "draft-mtp"
+& "$n\llama-server.exe" --help > D:\ZLia\llama-flags-nuevo.txt
+"LISTO — pegar TODA la salida de consola en el chat"
+```
+
+**OPCIÓN B (más ligera — descarga solo 260 MB, reutiliza tus 3 DLLs CUDA).** Tus
+DLLs de `build\bin` son la MISMA serie 12.4 (27/02/2024); el zip cudart solo trae 3
+archivos, así que si tus tamaños byte coinciden, son el mismo contenido:
+
+```powershell
+Get-ChildItem D:\llama.cpp\build\bin\cudart64_12.dll, D:\llama.cpp\build\bin\cublas64_12.dll, D:\llama.cpp\build\bin\cublasLt64_12.dll | Select-Object Name, Length
+```
+Esperado EXACTO: 553,984 / 100,033,536 / 473,551,360 bytes. Si coinciden los 3 →
+mismo paste de la Opción A pero SIN las líneas de descarga ni hash ni extracción del
+cudart, y en su lugar:
+```powershell
+copy D:\llama.cpp\build\bin\cudart64_12.dll, D:\llama.cpp\build\bin\cublas64_12.dll, D:\llama.cpp\build\bin\cublasLt64_12.dll $n\
+```
+Si algún tamaño difiere → no improvisar, usar la Opción A. (El `copy` toca COPIAS en
+bin-new: tu build viejo no se modifica — rollback intacto.)
+
+**Lo que NO se recorta en la ruta directa (y por qué):**
+- Check `draft-mtp`: es el propósito de la actualización (PR #22673). Sin él,
+  volaríamos a ciegas otra vez.
+- Hash SHA-256: única garantía de que llegó EXACTAMENTE el build b11856 verificado
+  (download truncado/proxy = zip roto que tar a veces extrae igual).
+- Dump UTF-16: sin él no hay re-auditoría de flags antes de V2 (guardarrail 2).
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El
