@@ -375,6 +375,25 @@ del -ncmoe con medición · **[3]** MTP x2 (pide el ganador del barrido; Enter =
 mantiene abierta al cerrar el server (pause del bat). El doble click directo
 al `.py` también funciona si Windows asocia .py al lanzador de Python.
 
+**v2.0-MINIMAL (2026-10-25, sustituye al menú):** el Director pidió abrir y
+ya. `abrir-qwen-apex.py` es ahora ~95 líneas sin menú ni preguntas: doble
+click → espera /health → banner "MODELO LISTO" → la ventana mantiene vivo el
+modelo (Ctrl+C o cerrar ventana lo apaga). Preset think OFICIAL fijo en
+BASE_FLAGS; línea `FLAGS_GANADORAS = []` arriba para pegar el ganador del
+barrido (van al final → last-wins en argparse). La versión completa con menú
+quedó como `abrir-qwen-apex-v13-avanzado.py`. Test E2E 6/6
+(scripts/test_abrir_mock.py).
+
+**BARRIDO DE 25 CONFIGS (2026-10-25):** `BARRIDO-QWEN.bat` →
+`barrido-qwen-25.py`. Prueba una a una las 25 configs del
+`informe-velocidad-sweep.md` (§7): server up → 4 pasadas × 256 tokens vía
+`/completion` + timings JSON (descarta la 1ª) → CSV append con resume → kill
+→ siguiente; pausas térmicas 60 s cada 8; ABORTA si ya hay un server vivo;
+configs 23-25 son COMBOS construidos al vuelo con los ganadores medidos;
+ranking final + línea `FLAGS_GANADORAS` lista para pegar. Test E2E 22/22
+(scripts/test_barrido_mock.py). Las 100 configuraciones y el porqué de cada
+una: informe-velocidad-sweep.md §6.
+
 ### 3-A.5. SAMPLING profesional del modelo (nuevo, 2026-10-25)
 
 Doc completo: **`config-sampling-qwen36.md`** (mismo directorio). Resumen:
@@ -610,8 +629,16 @@ RAM/VRAM: activarlo solo después de tener el comando ganador estable.
 
 ## 11. Registro del comando ganador (lo escribe el Director tras medir)
 
+**Sweep manual del Director (2026-10-25 07:08, logs en sweep-logs.7z):**
+ganador `-cmoe` = **9.33 t/s** (prefill 21.08). `-ncmoe 16/24/32/40` =
+7.33/5.90/5.86/5.58 — mover expertos a GPU con `-ngl 99` fijo EMPEORA (el
+auto-fit de VRAM aborta y el driver desborda a RAM compartida; ver
+informe-velocidad-sweep.md §2). Medición del 25-oct no comparable entre
+configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
+
 ```text
-(placeholder — pegar aquí el comando vencedor con su t/s base y t/s MTP)
+(placeholder — pegar aquí el GANADOR del BARRIDO-QWEN.bat con su t/s:
+ el barrido imprime al final la línea FLAGS_GANADORAS = [...] y el comando)
 ```
 
 ## 12. Guardarraíles
