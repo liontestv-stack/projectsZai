@@ -286,6 +286,21 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
   (download truncado/proxy = zip roto que tar a veces extrae igual).
 - Dump UTF-16: sin él no hay re-auditoría de flags antes de V2 (guardarrail 2).
 
+**REGISTRO DE EJECUCIÓN REAL (2026-10-25, máquina del Director, script v1.0):**
+- 15 checks ejecutados: descargas byte-exactas + **SHA-256 VERDE ×2** · extracción
+  53+3 archivos · DLLs CUDA byte-exactas · `nvcuda.dll` y `msvcp140.dll` presentes ·
+  **`draft-mtp` PRESENTE** · dump UTF-16 regenerado (122,440 B; el build nuevo trae
+  más flags que el viejo: 101,962 B).
+- **Versión del binario nuevo: `0.7.0-dev (build 11856, commit 3642238cc)`, built
+  with Clang 20.1.8** — el CI oficial compila Windows con Clang (no MSVC como tu
+  build viejo). b11856 confirmado = el nightly fijado.
+- **Falso ROJO corregido (script v1.1)**: la versión sale por **stderr** (llama.cpp
+  loggea ahí) y el script v1.0 solo miraba stdout → marcó FALLO indebidamente. Fix:
+  aceptar stdout+stderr (probado con la salida real del Director). El binario real:
+  TODO VERDE.
+- **PIN NUEVO: build 11856 / commit 3642238cc** — sustituye al pin viejo
+  `version: 1 (2496f9c)` (fuente 2026-05-06, sin draft-mtp).
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El

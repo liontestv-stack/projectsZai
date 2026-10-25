@@ -228,8 +228,10 @@ def main():
     else:
         try:
             rc, out, err = run_capture(str(exe), ["--version"])
-            first = (out.strip().splitlines() or [""])[0]
-            if rc == 0 and out.strip():
+            # v1.1: llama.cpp imprime la version por STDERR (logging), no stdout.
+            combined = (out.strip() + "\n" + err.strip()).strip()
+            first = combined.splitlines()[0] if combined else ""
+            if rc == 0 and combined:
                 ok(True, "llama-server.exe --version", first)
                 print("        (pega esta linea en el chat: anota el b-number nuevo)")
             else:

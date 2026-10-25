@@ -9,3 +9,11 @@ Zips oficiales descargados y analizados por LAIA (análisis PE: imports normales
 - Faltantes del zip binario cubiertas por: zip cudart + nvcuda.dll (driver NVIDIA ya instalado) + MSVCP140/VCRUNTIME140 (runtime VC++, VS2022 ya presente)
 - OpenSSL NO exigido por el build oficial (usa CRYPT32 de Windows) — issue #19236 no aplica a los zips
 - VEREDICTO: no falta NADA más que descargar; extras condicionales documentados en RUTAS.md §3-A.2
+
+## Registro 3-k — Veredicto del binario nuevo (LAIA, 2026-10-25)
+Ejecución real del script en la máquina del Director (D:\llama.cpp\bin-new):
+- SHA-256 VERDE ×2 (zips byte-idénticos a los verificados por LAIA) · extracción 53+3 · DLLs CUDA byte-exactas · nvcuda + msvcp140 OK · draft-mtp PRESENTE · dump UTF-16 (122,440 B)
+- Pin NUEVO del binario: version: 0.7.0-dev (build 11856, commit 3642238cc), built with Clang 20.1.8
+- Pin VIEJO reemplazado: version: 1 (2496f9c), MSVC 19.44, fuente 2026-05-06
+- Falso ROJO del script v1.0 (versión por stderr, bug de LAIA) corregido en v1.1 — veredicto real: VERDE
+- Pendiente: Director sube D:\ZLia\llama-flags-nuevo.txt a InformacionCritica/ → LAIA re-audita flags → V1 + sweep -ncmoe → V2 (draft-mtp)
