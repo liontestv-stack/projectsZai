@@ -131,6 +131,9 @@ D:\llama.cpp\bin-new\llama-server.exe --help | findstr draft-mtp
    `llama-server.exe` → **NO improvisar**: un blog tercero afirma que los binarios se
    consolidaron en `llama.exe serve`, pero el README oficial del server no lo menciona
    (claim NO verificado) — anotar qué .exe trae el zip y avisar antes de seguir.
+   Nota: la PRIMERA ejecución puede tardar más de lo normal — el driver JIT-compila el
+   PTX para sm_75 (así cubre Turing el zip oficial, verbatim en §3-C.1); es normal y
+   queda cacheado.
 4. Si `findstr draft-mtp` responde: regenerar el dump (igual que el actual, generado
    desde PowerShell → queda UTF-16 como el original):
 
@@ -243,6 +246,40 @@ Vulkan (aceptación estable ~0.89). CUDA rinde más; Vulkan solo si CUDA fallara
 
 **Regla de pin:** el build que gane las mediciones queda ANCLADO en §11; NO actualizar
 a mitad de las mediciones del sweep/MTP.
+
+### 3-C.1 Segunda verificación GPU + modelo (2026-10-25)
+
+**GPU (GTX 1650, sm_75) vs zip b11856 CUDA 12.4 — VEREDICTO: COMPATIBLE.**
+1. VERBATIM de `ggml/src/ggml-cuda/CMakeLists.txt` (master, descargado y verificado
+   2026-10-25): `list(APPEND CMAKE_CUDA_ARCHITECTURES 75-virtual 80-virtual 86-real)` —
+   **75 (Turing) va SIEMPRE en la lista por defecto**; con CUDA 12.4 se añaden además
+   50/61/70-virtual. `75-virtual` = PTX embebido → el driver JIT-compila en la PRIMERA
+   ejecución (primer arranque más lento; luego queda cacheado y el rendimiento es
+   idéntico al de un binario nativo sm_75).
+2. Sin reportes de fallos Turing/GTX-16xx en builds recientes (búsqueda 2026-10-25).
+3. Tu máquina ya validó la cadena CUDA completa: driver UMD 13.3 ≥ 12.4, cc 7.5
+   funcionando con tu build actual.
+4. El gate de runtime (paso 3 de §3-A) detecta cualquier fallo en segundos, sin daño;
+   fallbacks documentados (b11669, vulkan). Pendiente formal: no se pudo localizar el
+   build.yml del CI (movido) para confirmar que no pisa la lista por defecto — ninguna
+   evidencia en contra encontrada; el gate de runtime lo zanja en 1 minuto.
+
+**Modelo (repo SC117 APEX) vs docs del proyecto — VEREDICTO: TODO COINCIDE.**
+
+| Dato | API HF (bytes reales, 2026-10-25) | Nuestros docs | ✓ |
+|---|---|---|---|
+| I-MINI | 14,273,277,376 = 14.27 GB | 14.27 GB | ✓ |
+| I-Compact / I-Quality / I-Balanced | 17.02 / 23.51 / 25.96 GB | ídem | ✓ |
+| mmproj-F16 | 899,283,072 = 0.90 GB | 0.90 GB | ✓ |
+| Descargas / última mod | 59,517 / 2026-10-03 | 59.5k | ✓ |
+| Total repo | 81.67 GB | — | — |
+
+Comando del AUTOR en la model card (confirma la estructura de nuestro V2):
+`./llama-server -m ...APEX-I-Compact.gguf -ngl 99 -ncmoe 16 -c 131072 --spec-type draft-mtp --spec-draft-n-max 2`
+→ el autor usa `-ncmoe` JUNTO con draft-mtp (indica que la flag sigue viva en builds con
+MTP; igualmente se re-audita contra el dump nuevo — regla de oro). "20-50% speed boost"
+re-confirmado. La card NO exige versión mínima de llama.cpp ni CC concreta → el gate de
+runtime (paso 3) es el verificador definitivo.
 
 ## 4. RUTA 1 — Arranque garantizado (línea base, HOY, ~10 min)
 
