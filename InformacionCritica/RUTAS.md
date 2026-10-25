@@ -384,13 +384,17 @@ Doc completo: **`config-sampling-qwen36.md`** (mismo directorio). Resumen:
   (temp 0.7, top_p 0.80, top_k 20) — fuentes: card oficial +
   `generation_config.json` de `Qwen/Qwen3.6-35B-A3B` (fetch textual).
 - Los defaults del server b11856 (temp 0.80, top-k 40, min-p 0.05) NO
-  coinciden → **el lanzador v1.2 los fija siempre** con `--preset
+  coinciden → **el lanzador v1.3 los fija siempre** con `--preset
   think|coding|fast` (default think) y añade `--no-mmproj` (text-only,
   ahorra ~0.9 GB VRAM).
 - No-thinking: `--chat-template-kwargs '{"enable_thinking":false}'` o
   `-rea off` o `--reasoning-budget 0` (todas en el dump). Thinking de
-  turnos históricos: `--reasoning-preserve`. Tope de thinking con ctx 16K:
-  `--reasoning-budget 4096`.
+  turnos históricos: `--reasoning-preserve` (ya ON en el build, no se pasa).
+  Tope de thinking con ctx 16K: `--reasoning-budget 4096`.
+- El lanzador v1.3 integra el no-thinking (`--no-thinking`, método oficial
+  del template), el budget, `--cache-reuse` (opt-in, probar tras el sweep)
+  y `--spec-draft-ncmoe` (solo MTP); menú [5] CHAT RÁPIDO = fast + thinking
+  OFF. Verificado en dry-run y menú simulado.
 - El sampling NO afecta al barrido `-ncmoe` (requests con temp 0.0).
 
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)

@@ -63,7 +63,7 @@ Flags verificadas en el dump b11856 con sus defaults de fábrica del server:
 
 ### §3.1 Por CLI — defaults del server (recomendado; el lanzador ya lo hace)
 
-El `abrir-qwen-apex.py` (v1.1+) añade un `--preset {think,coding,fast}` (default `think`) que inyecta al comando del server:
+El `abrir-qwen-apex.py` (v1.3) añade un `--preset {think,coding,fast}` (default `think`) que inyecta al comando del server:
 
 ```text
 think  →  --temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
@@ -76,6 +76,8 @@ Ejemplo completo (V1 + preset coding):
 ```text
 D:\llama.cpp\llama-server.exe -m D:\ZLia\models\...APEX-I-MINI.gguf -a apex35b -ngl 99 -cmoe -c 16384 -b 2048 -ub 256 -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0 --host 127.0.0.1 --port 9931
 ```
+
+Integración v1.3 del lanzador (todo lo aprendido, flags auditadas en el dump): `--no-thinking` inyecta el kwargs de arriba vía template (§3.3); `--reasoning-budget N` se pasa tal cual; `--cache-reuse` (§6) y `--spec-draft-ncmoe` (solo `--mtp`, MoE del draft en CPU) quedan como opt-in con default OFF hasta medir en el rig. `--reasoning-preserve` NO se pasa (ya viene ON en b11856). Menú: [5] CHAT RÁPIDO = V1 + `--preset fast --no-thinking`.
 
 ### §3.2 Por request — cambiar sin relanzar (WebUI o API)
 

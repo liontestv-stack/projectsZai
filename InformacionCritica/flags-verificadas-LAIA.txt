@@ -198,7 +198,7 @@ SECCION D — SAMPLING OFICIAL QWEN3.6 (anadida 2026-10-25, doc completo:
 config-sampling-qwen36.md). Fuentes: card oficial Qwen/Qwen3.6-35B-A3B +
 generation_config.json (fetch textual) — NO Ollama (no forma parte del stack).
 El default del server b11856 (temp 0.80 / top-k 40 / min-p 0.05 / presence 0)
-NO es el optimo de este modelo -> el lanzador v1.2 fija preset siempre.
+NO es el optimo de este modelo -> el lanzador v1.3 fija preset siempre.
 ===============================================================================
 PRESETS (inyectados por abrir-qwen-apex.py --preset; default think):
   think  (thinking general, default del modelo):
@@ -207,6 +207,15 @@ PRESETS (inyectados por abrir-qwen-apex.py --preset; default think):
          --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
   fast   (instruct / non-thinking):
          --temp 0.7 --top-k 20 --top-p 0.80 --min-p 0.0 --presence-penalty 1.5
+
+INTEGRADO AL LANZADOR v1.3 (todo lo aprendido; flags verbatim en dump):
+  --no-thinking          -> anade --chat-template-kwargs '{"enable_thinking":false}'
+  --reasoning-budget N   -> 0 inmediato; 4096 con -c 16384 si el thinking corta
+  --cache-reuse N        -> opt-in, default OFF (doc §6: probar tras el sweep)
+  --spec-draft-ncmoe N   -> solo --mtp; MoE del DRAFT en CPU (alias dump -ncmoed)
+  --reasoning-preserve   -> ya viene ON en b11856 (dump) => NO se pasa
+  menu doble-click: [5] CHAT RAPIDO = V1 + fast + thinking OFF;
+                    preset se pregunta en [1] y [3] (Enter = think)
 
 NOTA presence "think": la card lista 1.5 para thinking general, pero el
 generation_config de fabrica NO incluye presence (=> 0.0) — preset usa 0.0;

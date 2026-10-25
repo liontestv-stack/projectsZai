@@ -12,6 +12,14 @@ FLAGS: solo usa flags auditadas contra el dump real del build nuevo
        2026-10-25). Nada inventado. --mlock/--no-mmap NO EXISTEN en este build
        (sustituidas por -lm; default auto = mmap, que es lo que este rig quiere).
 
+VERSION v1.3 — todo lo aprendido de optimizacion, integrado:
+  · v1.0  V1/V2/sweep con medicion t/s real (pre-flight DLLs+modelo)
+  · v1.1  doble click + menu interactivo (ABRIR-QWEN.bat)
+  · v1.2  sampling oficial Qwen3.6 (--preset think|coding|fast) + --no-mmproj
+  · v1.3  razonamiento controlable (--no-thinking / --reasoning-budget) +
+          extras auditados (--cache-reuse / --spec-draft-ncmoe) + menu [5]
+          CHAT RAPIDO + pregunta de preset en el menu
+
 MODOS:
   (default)      V1 base: -cmoe (todos los expertos en CPU, boot garantizado)
   --ncmoe N      V1 con -ncmoe N (expertos de las primeras N capas en CPU)
@@ -24,13 +32,35 @@ USO:
   py abrir-qwen-apex.py --ncmoe 16
   py abrir-qwen-apex.py --sweep
   py abrir-qwen-apex.py --mtp --ncmoe 16
-  py abrir-qwen-apex.py --dry-run --mtp
   py abrir-qwen-apex.py --preset coding   (sampling oficial Qwen3.6)
+  py abrir-qwen-apex.py --preset fast --no-thinking   (chat cotidiano)
+  py abrir-qwen-apex.py --dry-run --mtp
 
 SAMPLING (v1.2): --preset think|coding|fast inyecta los parametros de
 sampling OFICIALES de Qwen3.6 (card + generation_config, verificado
 2026-10-25; doc: config-sampling-qwen36.md). Default: think.
+
+RAZONAMIENTO (v1.3, flags auditadas verbatim en el dump):
+  --no-thinking         enable_thinking:false via --chat-template-kwargs
+                        (metodo oficial del template, doc config-sampling
+                        §3). Max velocidad percibida en chat: cero tokens
+                        de thinking antes de la respuesta.
+  --reasoning-budget N  0 = fin inmediato, N>0 = presupuesto de tokens.
+                        Con -c 16384: 4096 evita que un thinking largo se
+                        coma el espacio de la respuesta (doc §3 nota).
+  --reasoning-preserve  YA VIENE ON en b11856 (dump verbatim) -> NO se pasa.
 VISION: sin --mmproj se pasa --no-mmproj (text-only, ahorra ~0.9 GB VRAM).
+
+EXTRAS v1.3 (auditados en el dump, default OFF hasta medir en el rig):
+  --cache-reuse N       reuso de KV entre turnos via KV-shift (requiere
+                        prompt cache; doc §6: probar DESPUES del sweep).
+  --spec-draft-ncmoe N  solo --mtp: expertos del DRAFT en CPU (si la VRAM
+                        no da con MTP activo; dump: alias -ncmoed).
+  --moe-cache-mib N     cache GPU para expertos en CPU (default 0=off).
+
+MENU (doble click, sin argumentos): [1] abrir V1 (pregunta preset) ·
+[2] barrido · [3] MTP (pregunta -ncmoe ganador + preset) · [4] ver comando ·
+[5] CHAT RAPIDO sin thinking (V1 + fast + enable_thinking:false) · [0] salir.
 
 REQUISITOS: Python 3.8+ (solo stdlib), Windows 10/11.
 Rutas y puerto sobreescribibles: env LLAMA_SERVER / LLAMA_MODEL o CLI.
@@ -65,6 +95,10 @@ DLLS_CRITICAS = [   # el exe es un launcher fino (9,216 B) — analisis PE 3-A.2
 
 BUILD_PIN = "11856"     # b11856 / commit 3642238cc (auditado 2026-10-25)
 PORT_DEFAULT = 9931     # dump nuevo: "--port PORT  port to listen (default: 9931)"
+
+NO_THINKING_KWARGS = '{"enable_thinking":false}'   # metodo oficial del
+# template Qwen (doc config-sampling-qwen36.md §3, dump línea 609). En modo
+# lista subprocess lo escapa bien; a mano en PowerShell usar comillas dobles.
 
 # Presets de sampling OFICIALES de Qwen3.6-35B-A3B (card oficial +
 # generation_config.json, fetch 2026-10-25; doc: config-sampling-qwen36.md).
@@ -189,10 +223,18 @@ def construir_comando(args, ncmoe=None, cmoe=False, mtp=None):
               "--spec-draft-n-max", str(mtp)]   # 2 = mitigacion issue #23577
         if args.spec_p_min is not None:
             c += ["--spec-draft-p-min", str(args.spec_p_min)]
+        if args.spec_draft_ncmoe is not None:   # v1.3: MoE del draft en CPU
+            c += ["--spec-draft-ncmoe", str(args.spec_draft_ncmoe)]
     if args.moe_cache_mib is not None:
         c += ["--moe-cache-mib", str(args.moe_cache_mib)]
     # --jinja NO se pasa: en b11856 va enabled por defecto (dump verbatim)
     c += PRESETS[args.preset]                  # sampling oficial Qwen3.6 (v1.2)
+    if args.no_thinking:                       # v1.3: metodo oficial template
+        c += ["--chat-template-kwargs", NO_THINKING_KWARGS]
+    if args.reasoning_budget is not None:      # v1.3: 4096 con -c 16384
+        c += ["--reasoning-budget", str(args.reasoning_budget)]
+    if args.cache_reuse is not None:           # v1.3: probar DESPUES del sweep
+        c += ["--cache-reuse", str(args.cache_reuse)]
     if args.mmproj:
         c += ["--mmproj", args.mmproj]         # vision: mmproj junto al modelo
     else:
@@ -320,8 +362,18 @@ def modo_sweep(args):
 
 
 # ------------------------------------------------------------------ menu
+def preguntar_preset(args):
+    """Pregunta el preset de sampling (Enter = think). Muta args."""
+    v = input("  preset sampling (Enter = think) [think|coding|fast]: ").strip().lower()
+    if v in PRESETS:
+        args.preset = v
+    elif v:
+        print("  [AVISO] '{}' no es un preset valido; se usa 'think'.".format(v))
+        args.preset = "think"
+
+
 def menu_interactivo(args):
-    """Doble-click (sin argumentos): menu de 4 opciones. Muta args y devuelve."""
+    """Doble-click (sin argumentos): menu de 5 opciones. Muta args y devuelve."""
     print("=" * 70)
     print("   QWEN APEX-I-MINI  (35B)  -  build b11856 con draft-mtp")
     print("=" * 70)
@@ -330,6 +382,7 @@ def menu_interactivo(args):
     print("  [2] BARRIDO -ncmoe con medicion t/s  (1a vez: ~15-30 min)")
     print("  [3] ABRIR con MTP x2                 (V2, tras el barrido)")
     print("  [4] Solo VER el comando, sin abrir   (dry-run)")
+    print("  [5] CHAT RAPIDO sin thinking         (V1 + fast + thinking OFF)")
     print("  [0] Salir")
     print()
     op = input("  Elige una opcion [1]: ").strip() or "1"
@@ -343,6 +396,11 @@ def menu_interactivo(args):
         args.mtp = True
         v = input("  valor -ncmoe del barrido (Enter = -cmoe, seguro): ").strip()
         args.ncmoe = int(v) if v.isdigit() else None
+        preguntar_preset(args)
+        return None
+    if op == "5":
+        args.preset = "fast"          # 0.7/0.80/20 + presence 1.5 (card)
+        args.no_thinking = True       # enable_thinking:false (template oficial)
         return None
     if op == "4":
         cmd = construir_comando(args, ncmoe=args.ncmoe,
@@ -351,7 +409,8 @@ def menu_interactivo(args):
         print("  COMANDO EXACTO:\n    " + comando_a_string(cmd))
         input("\n  (Enter para cerrar)... ")
         return 0
-    return None          # opcion 1 (default): V1 tal cual
+    preguntar_preset(args)          # opcion 1 (default): V1 tal cual
+    return None
 
 
 # ------------------------------------------------------------------ main
@@ -378,6 +437,21 @@ def main():
                     help="solo --mtp: tokens a draftear (2 = mitigacion #23577)")
     ap.add_argument("--spec-p-min", type=float, default=None,
                     help="solo --mtp: umbral p-min (p.ej. 0.75 como V2 documentado)")
+    ap.add_argument("--spec-draft-ncmoe", type=int, default=None,
+                    dest="spec_draft_ncmoe",
+                    help="solo --mtp: expertos del DRAFT en CPU (alias dump: "
+                         "-ncmoed; si la VRAM no da con MTP)")
+    ap.add_argument("--no-thinking", action="store_true",
+                    help="thinking OFF via --chat-template-kwargs "
+                         "'{\"enable_thinking\":false}' (metodo oficial; "
+                         "doc config-sampling §3)")
+    ap.add_argument("--reasoning-budget", type=int, default=None,
+                    dest="reasoning_budget",
+                    help="presupuesto thinking: 0 fin inmediato, N>0 tokens "
+                         "(p.ej. 4096 con -c 16384); default server -1")
+    ap.add_argument("--cache-reuse", type=int, default=None, dest="cache_reuse",
+                    help="reuso KV entre turnos via KV-shift (default server "
+                         "0=off; doc §6: probar DESPUES del sweep)")
     ap.add_argument("--moe-cache-mib", type=int, default=None, dest="moe_cache_mib",
                     help="cache GPU MiB para expertos en CPU (auditado: default 0=off)")
     ap.add_argument("--preset", default="think", choices=sorted(PRESETS),
@@ -431,7 +505,14 @@ def main():
     cmd = construir_comando(args, ncmoe=args.ncmoe,
                             cmoe=(args.ncmoe is None),
                             mtp=(args.spec_n_max if args.mtp else None))
-    print("\nMODO: " + modo + "  |  sampling preset: " + args.preset)
+    extras = ""
+    if args.no_thinking:
+        extras += " | thinking: OFF"
+    if args.reasoning_budget is not None:
+        extras += " | reasoning-budget {}".format(args.reasoning_budget)
+    if args.cache_reuse is not None:
+        extras += " | cache-reuse {}".format(args.cache_reuse)
+    print("\nMODO: " + modo + "  |  sampling preset: " + args.preset + extras)
     print("COMANDO:\n  " + comando_a_string(cmd) + "\n")
     print("WebUI/API: http://127.0.0.1:{}   (Ctrl+C para parar)".format(args.port))
     if args.mtp and args.port != 8080:
