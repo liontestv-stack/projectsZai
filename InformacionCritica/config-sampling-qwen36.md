@@ -83,6 +83,8 @@ Integración v1.3 del lanzador (todo lo aprendido, flags auditadas en el dump): 
 
 Cada request a `/v1/chat/completions` (o el WebUI de `http://127.0.0.1:9931`) puede sobreescribir sampling al vuelo: `temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`. Útil para probar la variante "card literal" de §1.1 sin tocar el server.
 
+El cliente `chatear-qwen.py` integra este mecanismo: `/preset think|coding|fast` y `/temp N` cambian el sampling POR REQUEST sin relanzar el server, y rechaza `/temp 0` por la regla NO greedy de la card (§1).
+
 ### §3.3 Modo non-thinking y preserve-thinking (specific Qwen3.6)
 
 | Qué | Cómo (fuente verbatim) | Detalle |

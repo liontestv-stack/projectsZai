@@ -395,6 +395,12 @@ Doc completo: **`config-sampling-qwen36.md`** (mismo directorio). Resumen:
   del template), el budget, `--cache-reuse` (opt-in, probar tras el sweep)
   y `--spec-draft-ncmoe` (solo MTP); menú [5] CHAT RÁPIDO = fast + thinking
   OFF. Verificado en dry-run y menú simulado.
+- Para CHATEAR con métricas: `CHATEAR-QWEN.bat` (o `py chatear-qwen.py`) en
+  OTRA ventana con el server abierto — streaming token a token (thinking en
+  gris, ambos formatos), t/s · TTFT · prefill · ctx real por turno, /stats,
+  /reset, /guardar y sampling por request (/preset, /temp; NO greedy).
+  Cliente solo stdlib, verificado con test E2E mock 18/18; la aceptación
+  del draft MTP se ve en el LOG del server, no en el cliente.
 - El sampling NO afecta al barrido `-ncmoe` (requests con temp 0.0).
 
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
