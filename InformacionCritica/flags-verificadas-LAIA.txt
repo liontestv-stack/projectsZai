@@ -192,3 +192,38 @@ D:\llama.cpp\llama-server.exe ^
   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75 ^
   --host 127.0.0.1 --port 9931
 ===============================================================================
+
+===============================================================================
+SECCION D — SAMPLING OFICIAL QWEN3.6 (anadida 2026-10-25, doc completo:
+config-sampling-qwen36.md). Fuentes: card oficial Qwen/Qwen3.6-35B-A3B +
+generation_config.json (fetch textual) — NO Ollama (no forma parte del stack).
+El default del server b11856 (temp 0.80 / top-k 40 / min-p 0.05 / presence 0)
+NO es el optimo de este modelo -> el lanzador v1.2 fija preset siempre.
+===============================================================================
+PRESETS (inyectados por abrir-qwen-apex.py --preset; default think):
+  think  (thinking general, default del modelo):
+         --temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
+  coding (thinking, codigo preciso / tool calls):
+         --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
+  fast   (instruct / non-thinking):
+         --temp 0.7 --top-k 20 --top-p 0.80 --min-p 0.0 --presence-penalty 1.5
+
+NOTA presence "think": la card lista 1.5 para thinking general, pero el
+generation_config de fabrica NO incluye presence (=> 0.0) — preset usa 0.0;
+si se detecta mezcla de idiomas, probar 1.5 POR REQUEST (sin relanzar).
+
+FLAGS QWEN3.6-SPECIFIC VERIFICADAS EN EL DUMP b11856 (verbatim):
+  --chat-template-kwargs STRING   p.ej. '{"enable_thinking":false}' (no-thinking)
+  -rea, --reasoning [on|off|auto] default auto (detecta del template)
+  --reasoning-budget N            -1 libre (default), 0 = fin inmediato, N>0 tope
+  --reasoning-preserve            preserva thinking de turnos historicos
+                                  (equivalente preserve_thinking de la card)
+  --no-mmproj                     text-only (ahorra ~0.9 GB VRAM) — lo pasa el
+                                  lanzador; vision futura: --mmproj <mmproj-F16.gguf>
+
+REGLAS: (1) NADA de greedy/temperature 0 en chat (doc familia Qwen:
+degradacion + repeticiones; temp 0 solo en las mediciones del sweep).
+(2) Qwen3.6 NO soporta /think ni /nothink (card textual) — el modo se controla
+por template/API, no por texto en el prompt. (3) El sampling NO afecta al
+barrido -ncmoe (requests con temperature 0.0 explicito).
+===============================================================================

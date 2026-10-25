@@ -375,6 +375,24 @@ del -ncmoe con medición · **[3]** MTP x2 (pide el ganador del barrido; Enter =
 mantiene abierta al cerrar el server (pause del bat). El doble click directo
 al `.py` también funciona si Windows asocia .py al lanzador de Python.
 
+### 3-A.5. SAMPLING profesional del modelo (nuevo, 2026-10-25)
+
+Doc completo: **`config-sampling-qwen36.md`** (mismo directorio). Resumen:
+
+- Qwen3.6 recomienda oficialmente 3 presets: **think** (temp 1.0, top_p 0.95,
+  top_k 20, min_p 0), **coding** (temp 0.6, resto igual) y **fast**
+  (temp 0.7, top_p 0.80, top_k 20) — fuentes: card oficial +
+  `generation_config.json` de `Qwen/Qwen3.6-35B-A3B` (fetch textual).
+- Los defaults del server b11856 (temp 0.80, top-k 40, min-p 0.05) NO
+  coinciden → **el lanzador v1.2 los fija siempre** con `--preset
+  think|coding|fast` (default think) y añade `--no-mmproj` (text-only,
+  ahorra ~0.9 GB VRAM).
+- No-thinking: `--chat-template-kwargs '{"enable_thinking":false}'` o
+  `-rea off` o `--reasoning-budget 0` (todas en el dump). Thinking de
+  turnos históricos: `--reasoning-preserve`. Tope de thinking con ctx 16K:
+  `--reasoning-budget 4096`.
+- El sampling NO afecta al barrido `-ncmoe` (requests con temp 0.0).
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El

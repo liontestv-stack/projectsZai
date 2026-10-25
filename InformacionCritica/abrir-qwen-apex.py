@@ -25,6 +25,12 @@ USO:
   py abrir-qwen-apex.py --sweep
   py abrir-qwen-apex.py --mtp --ncmoe 16
   py abrir-qwen-apex.py --dry-run --mtp
+  py abrir-qwen-apex.py --preset coding   (sampling oficial Qwen3.6)
+
+SAMPLING (v1.2): --preset think|coding|fast inyecta los parametros de
+sampling OFICIALES de Qwen3.6 (card + generation_config, verificado
+2026-10-25; doc: config-sampling-qwen36.md). Default: think.
+VISION: sin --mmproj se pasa --no-mmproj (text-only, ahorra ~0.9 GB VRAM).
 
 REQUISITOS: Python 3.8+ (solo stdlib), Windows 10/11.
 Rutas y puerto sobreescribibles: env LLAMA_SERVER / LLAMA_MODEL o CLI.
@@ -59,6 +65,19 @@ DLLS_CRITICAS = [   # el exe es un launcher fino (9,216 B) — analisis PE 3-A.2
 
 BUILD_PIN = "11856"     # b11856 / commit 3642238cc (auditado 2026-10-25)
 PORT_DEFAULT = 9931     # dump nuevo: "--port PORT  port to listen (default: 9931)"
+
+# Presets de sampling OFICIALES de Qwen3.6-35B-A3B (card oficial +
+# generation_config.json, fetch 2026-10-25; doc: config-sampling-qwen36.md).
+# Flags verbatim del dump b11856. El default del server (temp 0.80, top-k 40,
+# min-p 0.05) NO es el optimo de este modelo -> siempre fijar preset.
+PRESETS = {
+    "think":  ["--temp", "1.0", "--top-k", "20", "--top-p", "0.95",
+               "--min-p", "0.0", "--presence-penalty", "0.0"],
+    "coding": ["--temp", "0.6", "--top-k", "20", "--top-p", "0.95",
+               "--min-p", "0.0", "--presence-penalty", "0.0"],
+    "fast":   ["--temp", "0.7", "--top-k", "20", "--top-p", "0.80",
+               "--min-p", "0.0", "--presence-penalty", "1.5"],
+}
 
 PROBLEMAS = []
 
@@ -173,6 +192,11 @@ def construir_comando(args, ncmoe=None, cmoe=False, mtp=None):
     if args.moe_cache_mib is not None:
         c += ["--moe-cache-mib", str(args.moe_cache_mib)]
     # --jinja NO se pasa: en b11856 va enabled por defecto (dump verbatim)
+    c += PRESETS[args.preset]                  # sampling oficial Qwen3.6 (v1.2)
+    if args.mmproj:
+        c += ["--mmproj", args.mmproj]         # vision: mmproj junto al modelo
+    else:
+        c.append("--no-mmproj")                # text-only: ahorra ~0.9 GB VRAM
     c += ["--host", args.host, "--port", str(args.port)]
     return c
 
@@ -356,6 +380,11 @@ def main():
                     help="solo --mtp: umbral p-min (p.ej. 0.75 como V2 documentado)")
     ap.add_argument("--moe-cache-mib", type=int, default=None, dest="moe_cache_mib",
                     help="cache GPU MiB para expertos en CPU (auditado: default 0=off)")
+    ap.add_argument("--preset", default="think", choices=sorted(PRESETS),
+                    help="sampling oficial Qwen3.6: think|coding|fast "
+                         "(config-sampling-qwen36.md); NO afecta al sweep")
+    ap.add_argument("--mmproj", default=None,
+                    help="mmproj-F16.gguf para vision; sin el se pasa --no-mmproj")
     ap.add_argument("--log-dir", default=r"D:\ZLia\sweep-logs")
     ap.add_argument("--dry-run", action="store_true",
                     help="imprime el comando exacto y sale (sin pre-flight ni lanzar)")
@@ -402,7 +431,7 @@ def main():
     cmd = construir_comando(args, ncmoe=args.ncmoe,
                             cmoe=(args.ncmoe is None),
                             mtp=(args.spec_n_max if args.mtp else None))
-    print("\nMODO: " + modo)
+    print("\nMODO: " + modo + "  |  sampling preset: " + args.preset)
     print("COMANDO:\n  " + comando_a_string(cmd) + "\n")
     print("WebUI/API: http://127.0.0.1:{}   (Ctrl+C para parar)".format(args.port))
     if args.mtp and args.port != 8080:
