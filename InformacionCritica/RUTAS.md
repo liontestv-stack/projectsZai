@@ -154,6 +154,71 @@ D:\llama.cpp\bin-new\llama-server.exe --help > D:\ZLia\llama-flags-nuevo.txt
 - Las flags de MoE (`-cmoe/-ncmoe`) pueden haber cambiado de nombre/forma — por eso el
   paso 4 regenera el dump ANTES de ejecutar V2.
 
+### 3-A.2 ¿Hay que descargar algo más? — cierre de dependencias VERIFICADO (2026-10-25)
+
+Pregunta del Director: *"¿hay algo más aparte de llama.cpp que debamos descargar para
+acelerar estabilidad, eficiencia o velocidad?"*. Respuesta corta: **NO — los DOS zips
+de §3-A.1 ya lo son todo**. Esta vez la verificación no fue por documentación sino
+**directa**: LAIA descargó los zips reales de b11856 y analizó su contenido binario.
+
+**1) Contenido real del zip binario** (53 archivos, integridad OK):
+- Trae TODOS los .exe (incl. `llama-server.exe` — el claim "llama.exe serve" queda
+  definitivamente FALSO para b11856) y TODAS sus DLLs internas: `llama.dll`,
+  `llama-server-impl.dll`, `llama-common.dll`, `mtmd.dll`, `ggml.dll`, `ggml-base.dll`,
+  `ggml-cuda.dll`, `ggml-rpc.dll`, 15 variantes `ggml-cpu-*` (CPU dispatch automático),
+  `libomp.dll` (OpenMP), etc.
+- **No trae** `cudart64_12.dll` ni `cublas64_12.dll`/`cublasLt64_12.dll` → por eso el
+  segundo zip. `ggml-cuda.dll` exige además `nvcuda.dll` = DLL del **driver NVIDIA**
+  (ya instalado: nvidia-smi funciona).
+
+**2) Análisis PE (imports normales + retardados) de los 53 binarios** — cierre de
+dependencias completo. Lo único que el zip NO trae y se exige en Windows:
+| DLL exigida | Quién la importa | De dónde sale | ¿Descarga extra? |
+|---|---|---|---|
+| `cudart64_12.dll`, `cublas64_12.dll` | `ggml-cuda.dll` | zip cudart (§3-A.1) | NO — ya en el plan |
+| `nvcuda.dll` | `ggml-cuda.dll` | driver NVIDIA instalado | NO |
+| `MSVCP140.dll` + `VCRUNTIME140(.1).dll` | casi todos | runtime VC++ 2015–2022 x64 | SOLO si fallara (VS2022 ya lo pone) |
+
+**3) OpenSSL NO hace falta** (hallazgo importante): el issue
+[#19236](https://github.com/ggml-org/llama.cpp/issues/19236) reporta `0xC0000135`
+(DLL faltante) en Windows por DLLs de OpenSSL desde b7736 ("remove libcurl, use
+OpenSSL when available"), cerrado **"not planned" (2026-03-26)**. PERO el análisis PE
+muestra que el build OFICIAL importa `CRYPT32.dll` (crypto nativa de Windows) y **ni
+una sola referencia** a `libssl-3-x64`/`libcrypto-3-x64` en imports normales ni
+retardados → el issue aplica solo a builds locales con `-DLLAMA_OPENSSL=ON`, no a los
+zips oficiales. **No descargar OpenSSL.**
+
+**4) Contenido real del zip cudart** (integridad OK — exactamente 3 archivos):
+`cublas64_12.dll` (100,033,536 B) · `cublasLt64_12.dll` (473,551,360 B) ·
+`cudart64_12.dll` (553,984 B). Serie 12.4, mismos tamaños que las DLLs que ya tienes
+en `build\bin` (27/02/2024) — encaja de serie con tu driver 610.88 / UMD 13.3.
+
+**5) Pines de integridad** (SHA-256 calculados por LAIA sobre los zips descargados de
+la URL oficial; el Director puede comparar SU descarga con `certutil -hashfile
+<archivo> SHA256` — si difieren, avisar antes de usar):
+```
+llama-b11856-bin-win-cuda-12.4-x64.zip  = 71d4ff57c9b59ce960ca5e9c28d0e26d8e631075c4d13af0c34f7f3a4fa1f094  (272,434,110 B)
+cudart-llama-bin-win-cuda-12.4-x64.zip  = 8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6  (391,443,627 B)
+```
+
+**6) Extras CONDICIONALES (solo si se dan las condiciones — nada obligatorio hoy):**
+- **VC++ Redistributable 2015–2022 x64** (descarga gratis de Microsoft, ~25 MB): solo si
+  al lanzar el exe sale `0xC0000135`. Tu VS2022 ya instala ese runtime; comprobar sin
+  descargar nada: `dir "C:\Windows\System32\msvcp140.dll"` (debe existir).
+- **mmproj-F16.gguf** (0.90 GB, ya verificado en el repo SC117): SOLO si quieres
+  entrada de imágenes (visión). Para chat de texto NO se descarga.
+- **CUDA Toolkit**: SOLO si eliges RUTA 0-B (recompilar). Para el zip (0-A) no sirve.
+- **Modelo draft aparte**: NO existe para draft-mtp — usa las cabezas MTP del propio
+  I-MINI (docs/speculative.md verificado verbatim en §3-C). Ruta interina ngram no
+  descarga nada tampoco.
+
+**7) NO descargar (afirmaciones falsas comunes, descartadas):** cuDNN (llama.cpp no lo
+usa), OpenSSL (punto 3), Python/HF-CLI (el modelo ya está en D:), driver NVIDIA nuevo
+(610.88 verificado suficiente en §3-A.0), Vulkan runtime (solo plan de rescate).
+**Palancas de velocidad que NO son descargas** (ya documentadas): cerrar
+Firefox/Wallpaper Engine/Copilot antes de medir (~963 MiB VRAM), `-t 4`, plan de
+energía Alto rendimiento, pagefile en D: (RUTA 5).
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El
