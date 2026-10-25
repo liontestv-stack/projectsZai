@@ -367,6 +367,14 @@ py abrir-qwen-apex.py --sweep            (barrido -ncmoe con medición t/s)
 py abrir-qwen-apex.py --mtp --ncmoe N_GANADOR   (V2, objetivo ~28-36 t/s)
 ```
 
+**DOBLE-CLICK (más simple, 2026-10-25):** bajar `ABRIR-QWEN.bat` y
+`abrir-qwen-apex.py` a la MISMA carpeta → doble click en `ABRIR-QWEN.bat` →
+menú en la ventana: **[1]** abrir y chatear (V1, solo Enter) · **[2]** barrido
+del -ncmoe con medición · **[3]** MTP x2 (pide el ganador del barrido; Enter =
+-cmoe seguro) · **[4]** solo ver el comando · **[0]** salir. La ventana se
+mantiene abierta al cerrar el server (pause del bat). El doble click directo
+al `.py` también funciona si Windows asocia .py al lanzador de Python.
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El

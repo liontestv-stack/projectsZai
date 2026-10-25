@@ -295,6 +295,41 @@ def modo_sweep(args):
     return 0
 
 
+# ------------------------------------------------------------------ menu
+def menu_interactivo(args):
+    """Doble-click (sin argumentos): menu de 4 opciones. Muta args y devuelve."""
+    print("=" * 70)
+    print("   QWEN APEX-I-MINI  (35B)  -  build b11856 con draft-mtp")
+    print("=" * 70)
+    print()
+    print("  [1] ABRIR el modelo y chatear        (V1 seguro, Enter)")
+    print("  [2] BARRIDO -ncmoe con medicion t/s  (1a vez: ~15-30 min)")
+    print("  [3] ABRIR con MTP x2                 (V2, tras el barrido)")
+    print("  [4] Solo VER el comando, sin abrir   (dry-run)")
+    print("  [0] Salir")
+    print()
+    op = input("  Elige una opcion [1]: ").strip() or "1"
+    print()
+    if op == "0":
+        return 0
+    if op == "2":
+        args.sweep = True
+        return None
+    if op == "3":
+        args.mtp = True
+        v = input("  valor -ncmoe del barrido (Enter = -cmoe, seguro): ").strip()
+        args.ncmoe = int(v) if v.isdigit() else None
+        return None
+    if op == "4":
+        cmd = construir_comando(args, ncmoe=args.ncmoe,
+                                cmoe=(args.ncmoe is None),
+                                mtp=(args.spec_n_max if args.mtp else None))
+        print("  COMANDO EXACTO:\n    " + comando_a_string(cmd))
+        input("\n  (Enter para cerrar)... ")
+        return 0
+    return None          # opcion 1 (default): V1 tal cual
+
+
 # ------------------------------------------------------------------ main
 def main():
     ap = argparse.ArgumentParser(
@@ -329,6 +364,12 @@ def main():
     ap.add_argument("--strict", action="store_true",
                     help="abortar si el build no es b" + BUILD_PIN)
     args = ap.parse_args()
+
+    # DOBLE-CLICK: sin argumentos -> menu de 4 opciones en la misma ventana
+    if len(sys.argv) == 1:
+        m = menu_interactivo(args)
+        if m is not None:
+            return m
 
     if args.dry_run:
         cmd = construir_comando(args, ncmoe=args.ncmoe,
