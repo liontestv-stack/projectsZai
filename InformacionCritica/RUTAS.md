@@ -268,6 +268,17 @@ copy D:\llama.cpp\build\bin\cudart64_12.dll, D:\llama.cpp\build\bin\cublas64_12.
 Si algún tamaño difiere → no improvisar, usar la Opción A. (El `copy` toca COPIAS en
 bin-new: tu build viejo no se modifica — rollback intacto.)
 
+**VARIANTE .PY (100% automática, con veredicto de seguridad final):**
+`InformacionCritica/actualizar-llama-b11856.py` — Python 3.8+, solo librería estándar,
+cero pip installs. Hace el ciclo completo: descarga (con auto re-descarga si el tamaño
+no cuadra) → SHA-256 fail-fast VERDE/ROJO → extracción anti zip-slip → archivos
+críticos + tamaños byte-exactos de las 3 DLLs CUDA → sistema (nvcuda.dll, msvcp140.dll)
+→ `--version` → `draft-mtp` → dump UTF-16 en D:\ZLia → RESUMEN con VEREDICTO GLOBAL.
+Solo ejecuta `--version` y `--help`: NUNCA carga el modelo ni toca `build\bin`.
+Probada por LAIA en los 3 caminos: limpio (VERDE, exit 0), zip truncado (re-descarga
+automática), zip alterado con tamaño exacto (ROJO, exit 1, no extrae nada).
+Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
+
 **Lo que NO se recorta en la ruta directa (y por qué):**
 - Check `draft-mtp`: es el propósito de la actualización (PR #22673). Sin él,
   volaríamos a ciegas otra vez.
