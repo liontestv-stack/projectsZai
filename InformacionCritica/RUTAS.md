@@ -43,6 +43,7 @@ la palanca del x2 no existe.**
 | 1 | **MTP nativo** (20 capas preservadas en el GGUF) | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` | ❌ requiere RUTA 0 | **+20–50%** (dato del autor) y más con `p-min` |
 | 2 | **Barrido `-ncmoe`** | `-ngl 99` + `-ncmoe N` | ✅ disponible HOY | base 20–28 t/s (vs 16) |
 | 3 | **VRAM liberada** | `-fa on -ctk q8_0 -ctv q8_0` | ✅ disponible HOY | habilita la palanca 2 |
+| 4 | **Cache MoE en VRAM (LRU)** | `--moe-cache-mib N` | ❌ requiere RUTA 0 + re-auditoría | a probar (dato 5070 Ti: hasta x2; §3-C) |
 
 ## 2. Evidencia (nada inventado; todo citado)
 
@@ -194,6 +195,54 @@ VEREDICTO verificación 2026-10-24: VERDE para los zips CUDA 12.4 de b11856.
   - D: SSD con 222 GB libres (espacio de sobra para los zips).
 Build actualizado:        b-XXXX (pegar aquí) — fecha: __/__/____
 ```
+
+### 3-C. ¿Qué versión exacta usar? — decisión respaldada (2026-10-25)
+
+**RECOMENDADA: nightly b11856 (2026-10-24), zips CUDA 12.4 de §3-A.1.** Razones
+verificadas:
+1. `draft-mtp` vivo en master: el docs/speculative.md OFICIAL lo lista — verbatim:
+   `| draft-mtp | Use Multi Token Prediction (MTP) heads from the main model |`
+   (verificado 2026-10-25).
+2. Incluye fixes POSTERIORES a v0.7.0 del cache MoE en host — p. ej. el gate que
+   bloqueaba el cache en batches de verificación del draft (sin ese fix, MTP + cache
+   puede salir perdiendo; reportado corregido con límite opt-in).
+3. Tu driver (UMD 13.3) soporta el zip 12.4 — verificado EN TU MÁQUINA (§3 registro).
+
+**FALLBACK: b11669 = v0.7.0** (verificado verbatim: nightly-tag.txt de v0.7.0 contiene
+`b11669`; publicado 2026-10-15). Mismo feature set (draft-mtp + `--moe-cache-mib`),
+9 días más conservador. Zips: `llama-b11669-bin-win-cuda-12.4-x64.zip` +
+`cudart-llama-bin-win-cuda-12.4-x64.zip`. Úsalo si b11856 diera cualquier anomalía.
+
+**RESCATE (último recurso): Vulkan** — `llama-b11856-bin-win-vulkan-x64.zip`. Dato
+relevante: en #23577 un usuario con el bug CUDA de draft-mtp lo resolvió pasando a
+Vulkan (aceptación estable ~0.89). CUDA rinde más; Vulkan solo si CUDA fallara.
+
+**Riesgos conocidos documentados (no bloquean, se vigilan):**
+- [#23577](https://github.com/ggml-org/llama.cpp/issues/23577) (may 2026): Qwen3.6 +
+  draft-mtp en CUDA, bucle "////" tras sesiones MUY largas (aceptación → 0). Afectados:
+  ctx 262k y CUDA 13.2 ("notorio por corrupción"). Estado NO verificado (la página no
+  cargó en 2 intentos — no inventar cierre). Mitigación en este rig: ctx 16k, `n-max 2`,
+  vigilar `draft acceptance rate`; si cae a 0.00 con ////, reiniciar server y avisar.
+- [#23011](https://github.com/ggml-org/llama.cpp/issues/23011) (may 2026): self-MTP más
+  lento en Metal (Apple) — NO aplica (tu backend es CUDA).
+- [#30552](https://github.com/ggml-org/llama.cpp/issues/30552) (14 oct 2026): "crawl"
+  reportado en ROCm/Vulkan con splits — NO aplica a CUDA single-GPU; se cita porque
+  justifica tener el fallback b11669 a mano.
+- [RFC #24528](https://github.com/ggml-org/llama.cpp/discussions/24528) (≈19 oct): se
+  discute si el cache MoE debe quedar ON por defecto ("--moe-cache defaults to auto,
+  which is ON"). Consecuencia práctica: en el build nuevo las reglas del sweep pueden
+  cambiar → OBLIGATORIO regenerar dump y re-auditar ANTES de tocar `-ncmoe` (paso 4).
+
+**Expectativa de comunidad con este modelo (calibrar, no promesas):**
+| Fuente | Hardware | Resultado |
+|--------|----------|-----------|
+| r/LocalLLaMA ("80 tok/s") | 12 GB VRAM | >80 t/s con >80% aceptación (build reciente) |
+| [Discusión #28584](https://github.com/ggml-org/llama.cpp/discussions/28584) | 16 GB VRAM | 24.9–25.9 t/s con contexto 400k+ |
+| Matriz 5070 Ti (note.com, Qwen3.6-35B-A3B-MTP UD-Q4_K_XL) | 16 GB | cache MoE duplica: 90.78 → 181.29 t/s |
+| Tu rig | 4 GB | absoluto menor, pero los RATIOS de MTP aplican igual |
+
+**Regla de pin:** el build que gane las mediciones queda ANCLADO en §11; NO actualizar
+a mitad de las mediciones del sweep/MTP.
 
 ## 4. RUTA 1 — Arranque garantizado (línea base, HOY, ~10 min)
 
