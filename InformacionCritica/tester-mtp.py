@@ -1,8 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-tester-mtp.py v1.0 — testeo profesional del MTP (draft-mtp) en el rig
+tester-mtp.py v1.1 — testeo profesional del MTP (draft-mtp) en el rig
 =====================================================================
+
+v1.1 (auditoria pre-entrega, bugs corregidos):
+  - E2/prot: completion_probabilities ahora se ACUMULAN de todos los chunks
+    del stream (el server real las manda por chunk; leer solo el chunk final
+    daba 0 tokens y E2 salia OMITIDO en el rig).
+  - coste_turno_ms estaba en SEGUNDOS pese al nombre (se mostraba "0.0 s");
+    ahora es milisegundos de verdad, consistente en tabla, CSV, compare y
+    veredicto.
+  - --out ya no pisa el prefijo del informe (informe-mtp-adjunto / informe-mtp-T2).
+  - guardarrail en modo adjunto: si no hay server en el puerto, mensaje
+    claro y salida (antes: 19 secciones de ERROR en rojo).
+  - protocolo --si: tras matar el server espera a que el puerto quede libre
+    (evita que todas las configs fallen por bind).
+  - comparador protocolo: un 0 legitimo ya no se muestra como "N/D".
+
 Instrumento de medida del protocolo T2 (investigacion-mtp-100). Todo lo que
 reporta es MEDIDO en vivo [M]; si un dato no aparece, pone N/D y no se
 inventa nada (regla de oro de aprendido.md).
@@ -262,6 +277,7 @@ class Cliente:
         self._oler(tim)
         return {"text": obj.get("content", "") or "", "ttft_ms": None,
                 "tpot_list": [], "wall_ms": ms, "timings": tim, "final": obj,
+                "probs": obj.get("completion_probabilities") or [],
                 "tokens_evaluated": obj.get("tokens_evaluated"),
                 "tokens_predicted": obj.get("tokens_predicted")}
 
@@ -276,6 +292,7 @@ class Cliente:
         tlast = t0
         tpots = []
         piezas = []
+        probs = []          # completion_probabilities de TODOS los chunks
         final = {}
         tim = {}
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -295,6 +312,8 @@ class Cliente:
                 if obj.get("timings"):
                     tim = obj["timings"]
                     self._oler(tim)
+                if obj.get("completion_probabilities"):
+                    probs += obj["completion_probabilities"]
                 contenido = obj.get("content")
                 if contenido:
                     ahora = time.perf_counter()
@@ -308,6 +327,7 @@ class Cliente:
         wall = (time.perf_counter() - t0) * 1000.0
         return {"text": "".join(piezas), "ttft_ms": ttft, "tpot_list": tpots,
                 "wall_ms": wall, "timings": tim, "final": final,
+                "probs": probs,
                 "tokens_evaluated": final.get("tokens_evaluated"),
                 "tokens_predicted": final.get("tokens_predicted")}
 
@@ -971,7 +991,10 @@ class Suite:
                                      "seed": 1, "n_probs": 5}, stream=True,
                                     timeout=self.args.timeout)
             self.textos.append(r["text"])
-            for tok in (r["final"].get("completion_probabilities") or []):
+            # v1.1: probs acumuladas del stream (el server real las manda por
+            # chunk; el campo del chunk final puede venir vacio o a 1 token)
+            for tok in (r.get("probs") or
+                        (r["final"].get("completion_probabilities") or [])):
                 lp = tok.get("probs") or []
                 if lp:
                     probs.append(max(float(x.get("prob", 0.0)) for x in lp))
@@ -1161,7 +1184,8 @@ class Suite:
         dec = f256.get("decode_ts_media") if f256 else None
         coste = None
         if pf_ts and dec:
-            coste = round(300.0 / pf_ts + 300.0 / dec, 2)
+            # v1.1: en MILISEGUNDOS (antes iba en segundos pese al nombre)
+            coste = round((300.0 / pf_ts + 300.0 / dec) * 1000.0, 1)
         return {
             "modo": "adjunto",
             "decode_ts_256": f256.get("decode_ts_media") if f256 else None,
@@ -1209,10 +1233,22 @@ class Suite:
 
 
 def run_adjunto(args):
+    # guardarrail v1.1: este modo mide un server que YA corre; si no hay,
+    # salir con mensaje claro en vez de 19 secciones de ERROR en rojo
+    url = "http://%s:%d" % (args.host, args.port)
+    est, det, _ = salud(url + "/health", timeout=3)
+    if est != "ok":
+        print(red("[ABORTO] no hay server vivo en %s (estado: %s)" % (url, est)))
+        print("  Este modo mide el server que YA esta corriendo (suite A-F).")
+        print("  1) Si esta cargando, espera y reintenta (estado: %s)." % det[:60])
+        print("  2) Si no esta arrancado:  python abrir-qwen-apex.py")
+        print("  3) O lanza el protocolo T2 (el server lo abre el solo):")
+        print("       python tester-mtp.py --protocolo --si")
+        return 2
     s = Suite(args)
     s.t0_suite = time.time()
     print(bold("=" * 76))
-    print(bold("  MTP-TESTER v1.0 - modo ADJUNTO - Qwen3.6-35B-A3B APEX-I-MINI"))
+    print(bold("  MTP-TESTER v1.1 - modo ADJUNTO - Qwen3.6-35B-A3B APEX-I-MINI"))
     print(bold("  instrumento [M]: todo lo que imprime es medido en vivo"))
     print(bold("=" * 76))
     kv("objetivo", "http://%s:%d" % (args.host, args.port))
@@ -1256,7 +1292,8 @@ def run_adjunto(args):
     kv("acceptance draft", ("%.1f%%" % (resumen["acceptance"] * 100))
        if resumen.get("acceptance") is not None else "N/D")
     kv("confianza top-1", resumen.get("top1_conf"))
-    kv("coste por turno [D]", resumen.get("coste_turno_ms"))
+    kv("coste por turno [D]", ("%s ms" % resumen.get("coste_turno_ms"))
+       if resumen.get("coste_turno_ms") else "N/D")
     print("")
     for ln in veredicto:
         print("  * " + ln)
@@ -1331,7 +1368,7 @@ def render_md(doc):
 
 def guardar_informes(args, doc, prefijo):
     ts = time.strftime("%Y%m%d-%H%M%S")
-    pref = args.out or prefijo
+    pref = args.out or prefijo  # v1.1: --out default None -> el prefijo aplica
     d = os.path.dirname(os.path.abspath(pref))
     if d and d != os.path.abspath("."):
         os.makedirs(d, exist_ok=True)
@@ -1449,7 +1486,8 @@ def _medida_compacta(args, cfg):
         rc = cli.completion({"prompt": p, "n_predict": 24, "temperature": 0,
                              "seed": 1, "n_probs": 5}, stream=True,
                             timeout=args.timeout)
-        for tok in (rc["final"].get("completion_probabilities") or []):
+        for tok in (rc.get("probs") or
+                    (rc["final"].get("completion_probabilities") or [])):
             lp = tok.get("probs") or []
             if lp:
                 probs.append(max(float(x.get("prob", 0.0)) for x in lp))
@@ -1466,9 +1504,10 @@ def _medida_compacta(args, cfg):
     out["vram_mib"] = vram_mib()
     ram = ram_proceso(nombre="llama")
     out["ram_mib"] = round(ram) if ram else None
-    # 7) coste por turno [D]: prefill 300 tok frio + 300 tok decode
+    # 7) coste por turno [D]: prefill 300 tok frio + 300 tok decode (ms)
     if pf and out["decode_ts_256"]:
-        out["coste_turno_ms"] = round(300.0 / pf + 300.0 / out["decode_ts_256"], 2)
+        out["coste_turno_ms"] = round(
+            (300.0 / pf + 300.0 / out["decode_ts_256"]) * 1000.0, 1)
     return out
 
 
@@ -1567,6 +1606,17 @@ def run_protocolo(args):
             return 2
         print(yellow("[i] server vivo detectado y --si: lo cierro primero..."))
         matar_server()
+        # v1.1: esperar a que el puerto quede Libre; si no, TODAS las configs
+        # fallarian al hacer bind y la corrida entera seria basura
+        for _ in range(10):
+            est2, _d2, _m2 = salud(url, timeout=2)
+            if est2 != "ok":
+                break
+            time.sleep(2)
+        else:
+            print(red("[ABORTO] el puerto %d sigue ocupado tras matar el server "
+                      "(revisalo a mano y reintenta)" % args.port))
+            return 2
     dir_logs = args.log_dir or "mtp-logs"
     os.makedirs(dir_logs, exist_ok=True)
     ids = [x.strip().upper() for x in args.configs.split(",")] if args.configs else []
@@ -1579,7 +1629,7 @@ def run_protocolo(args):
         print(red("ninguna config valida tras los filtros (revisa --configs)"))
         return 2
     print(bold("=" * 76))
-    print(bold("  MTP-TESTER v1.0 - PROTOCOLO T2 - Qwen3.6-35B-A3B APEX-I-MINI"))
+    print(bold("  MTP-TESTER v1.1 - PROTOCOLO T2 - Qwen3.6-35B-A3B APEX-I-MINI"))
     print(bold("  ancla launcher v2.1 + una variable spec por config"))
     print(bold("=" * 76))
     kv("server", args.server)
@@ -1771,7 +1821,9 @@ def _compare_protocolo(A, B):
         a, b = ma.get(i) or {}, mb.get(i) or {}
         def s(d, k):
             v = d.get(k)
-            return round(v, 2) if isinstance(v, (int, float)) else (v if v else "N/D")
+            if isinstance(v, (int, float)):
+                return round(v, 2)
+            return v if v is not None else "N/D"  # v1.1: 0 legitimo no es N/D
         filas.append([i, s(a, "decode_ts_256"), s(b, "decode_ts_256"),
                       s(a, "acceptance"), s(b, "acceptance"),
                       s(a, "coste_turno_ms"), s(b, "coste_turno_ms"),
@@ -1821,7 +1873,7 @@ EJEMPLOS = """ejemplos:
 def main():
     global USE_COLOR
     ap = argparse.ArgumentParser(
-        description="tester-mtp v1.0 - testeo profesional MTP/draft-mtp para "
+        description="tester-mtp v1.1 - testeo profesional MTP/draft-mtp para "
                     "llama.cpp (rig Qwen APEX-I-MINI, protocolo T2)",
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=EJEMPLOS)
     ap.add_argument("--host", default=HOST_DEF)
@@ -1833,8 +1885,9 @@ def main():
                     help="timeout de carga del server en modo protocolo (s)")
     ap.add_argument("--quick", action="store_true",
                     help="suite reducida (~3-4 min)")
-    ap.add_argument("--out", default="informe-mtp",
-                    help="prefijo de los informes .json/.md")
+    ap.add_argument("--out", default=None,
+                    help="prefijo de los informes .json/.md (default: "
+                         "informe-mtp-adjunto / informe-mtp-T2)")
     ap.add_argument("--no-color", action="store_true")
     ap.add_argument("--log-file", default=None,
                     help="log del server (stdout+stderr) para leer acceptance")
