@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-abrir-qwen-apex.py v2.0-minimal — abrir el modelo, nada mas
+abrir-qwen-apex.py v2.1-minimal — abrir el modelo, nada mas
 ============================================================
 Doble click (o ABRIR-QWEN.bat) -> el modelo queda corriendo en
 http://127.0.0.1:9931 y esta ventana lo mantiene vivo.
 
   - Para HABLAR: abre CHATEAR-QWEN.bat (otra ventana, token a token)
   - Para CERRAR el modelo: cierra esta ventana (o Ctrl+C)
-  - Para MEDIR y mejorar t/s: BARRIDO-QWEN.bat (barrido de 25 configs)
+  - Para MEDIR y mejorar t/s: BARRIDO-QWEN.bat (barrido de 37 configs)
 
 Sampling: preset oficial "think" de Qwen3.6 FIJO aqui abajo (card +
 generation_config; los defaults del server NO son optimos). Para cambiarlo
@@ -17,6 +17,14 @@ al vuelo usa /preset en chatear-qwen.py.
 MEJORA DE VELOCIDAD: corre BARRIDO-QWEN.bat; al terminar imprime una linea
 FLAGS_GANADORAS = [...] -> pegala aqui abajo y listo. Si queda vacia, abre
 con la base verificada.
+
+v2.1 (26-oct-2026): entra el ORO-UB1K del barrido-30 (config 32), el mas
+INSTANTANEO del barrido por coste total: prefill 57.56 tok/s (+26.5% vs
+ancla 45.50, pasada fria de 293 tok) con decode intacto 21.55 (~21.53).
+FIT-A/NCM37C4 (22.40/22.49 decode) NO se aplican todavia: son ganadores de
+COLOCACION que quedaron sin medir combinados con UB1K (los combos 28-30
+mostraron que las colocaciones se pelean entre si). Mini-sweep pendiente:
+FIT-A + UB1K antes de tocar -ngl/-ncmoe aqui.
 
 Historia: la version completa con menu (V1/V2/sweep/MTP/presets) quedo
 conservada como abrir-qwen-apex-v13-avanzado.py.
@@ -34,11 +42,15 @@ RUTA_MODELO = (r"D:\ZLia\models"
 HOST = "127.0.0.1"
 PORT = 9931
 
-# Ganador del barrido 25/25 (2026-10-25): LMNONE = 21.50 t/s vs BASE 20.85
-# (+3.1%). 2o POLL100 21.42; la combinacion de ambos NO sumo mas (21.33,
-# dentro del ruido). Para cambiarlo: borra esta lista y pega la linea
-# FLAGS_GANADORAS que imprime BARRIDO-QWEN.bat al terminar.
-FLAGS_GANADORAS = ["-lm", "none"]
+# Ganador barrido-25: LMNONE = 21.50 t/s vs BASE 20.85 (+3.1%).
+# + Ganador barrido-30 (26-oct-2026): ORO-UB1K (config 32) = -ub 1024 -b 4096
+#   sobre esta MISMA base (con -lm none): prefill 57.56 tok/s (+26.5% vs
+#   45.50) con decode 21.55 intacto. Es el que empieza a hablar antes:
+#   300 tok nuevos en ~5.2 s vs ~6.6 s de la base; a 8k+ tok gana ~19 s.
+#   Medido con 4 pasadas x 256 sin errores; el -ub/-b de BASE_FLAGS queda
+#   overrides por estos (mismo mecanismo que en el barrido: van despues).
+#   Revertir: borra esta lista y vuelve la base sola.
+FLAGS_GANADORAS = ["-lm", "none", "-ub", "1024", "-b", "4096"]
 
 # Base verificada (V1 del build b11856, preset think oficial fijo):
 BASE_FLAGS = [
