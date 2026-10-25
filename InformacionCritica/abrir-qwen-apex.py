@@ -34,8 +34,11 @@ RUTA_MODELO = (r"D:\ZLia\models"
 HOST = "127.0.0.1"
 PORT = 9931
 
-# Pega aqui el ganador del BARRIDO-QWEN.bat (empieza vacio):
-FLAGS_GANADORAS = []
+# Ganador del barrido 25/25 (2026-10-25): LMNONE = 21.50 t/s vs BASE 20.85
+# (+3.1%). 2o POLL100 21.42; la combinacion de ambos NO sumo mas (21.33,
+# dentro del ruido). Para cambiarlo: borra esta lista y pega la linea
+# FLAGS_GANADORAS que imprime BARRIDO-QWEN.bat al terminar.
+FLAGS_GANADORAS = ["-lm", "none"]
 
 # Base verificada (V1 del build b11856, preset think oficial fijo):
 BASE_FLAGS = [

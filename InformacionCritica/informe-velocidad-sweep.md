@@ -4,6 +4,12 @@
 > corrido 2026-10-25 07:08) + dump `llama-flags-nuevo.txt` (b11856) + PR #22673 + release v0.7.0.
 > Regla de oro aplicada: cada afirmación de flag lleva línea del dump; cada número de t/s sale
 > de los logs reales del rig. Cero inventos.
+>
+> **⚠ CORRECCIÓN POST-BARRIDO (mismo día, corrida completa 25/25 del BARRIDO-QWEN.bat):**
+> la base real es **20.85 t/s**, no 9.33 (§1 era medición defectuosa); draft-MTP mide
+> **NEGATIVO** en este rig (H1 refutada); `--moe-cache-mib` es veneno. Veredicto y
+> ranking completo en **§11**. Las secciones 0-4 y el presupuesto de §4 quedan
+> sustituidos por el §11 donde choquen.
 
 ---
 
@@ -358,7 +364,87 @@ fase A/B) para encontrar los gradientes, y luego **escalada de combos** con los 
 (fase C, que el .py construye solo). Con 25 configs bien elegidas se cubre el 80% del valor de
 las 100; las otras 75 quedan documentadas en §6 para profundizar donde el ganador indique.
 
-## 11. Fuentes
+## 11. Veredicto del barrido real (2026-10-25, corrida completa 25/25)
+
+Fuente: salida completa del BARRIDO-QWEN.bat corrido por el Director (25/25
+configs, 4 pasadas × 256 tok, descarta la 1ª, promedia 2-4, CSV en
+`sweep-resultados.csv`). Este §11 es el único dato comparable del rig.
+
+### 11.1 Ranking (t/s generación, pasadas 2-4)
+
+| # | Config | t/s | Δ vs BASE |
+|---|---|---|---|
+| 1 | LMNONE (`-lm none`) | **21.50** | +0.65 (+3.1%) |
+| 2 | POLL100 (`--poll 100`) | 21.42 | +0.57 |
+| 3 | POLL0 (`--poll 0`) | 21.33 | +0.48 |
+| 4 | COMBO-A (np1+poll100+lmnone) | 21.33 | +0.48 |
+| 5 | NP1 (`-np 1`) | 20.92 | +0.07 |
+| 6 | BASE | 20.85 | — |
+| 7 | UB512 | 20.77 | -0.08 |
+| 8 | NOOPOFF | 20.48 | -0.37 |
+| 9 | C8192 | 20.38 | -0.47 |
+| 10 | KVQ4 | 20.21 | -0.64 |
+| 11 | COMBO-MTP-PLUS | 18.89 | -1.96 |
+| 12 | COMBO-MTP | 18.86 | -1.99 |
+| 13 | T5 | 18.75 | -2.10 |
+| 14 | MTPTD2 | 18.53 | -2.32 |
+| 15 | MTPPSPLIT05 | 18.51 | -2.34 |
+| 16 | MTPNP1 | 18.32 | -2.53 |
+| 17 | T3 | 18.29 | -2.56 |
+| 18 | MTPPMIN10 | 18.28 | -2.57 |
+| 19 | MTPCMOED | 18.17 | -2.68 |
+| 20 | MTPSTD | 18.13 | -2.72 |
+| 21 | MTPPROB | 17.86 | -2.99 |
+| 22 | MTPNMAX1 | 17.70 | -3.15 |
+| 23 | MOECACHE512 | 17.22 | -3.63 |
+| 24 | MTPNMAX3 | 16.62 | -4.23 |
+| 25 | MOECACHE256 | 13.51 | -7.34 |
+
+Ruido inter-pasadas observado: ~±0.3-0.5 t/s. Diferencias <0.5 NO son
+discriminables con este protocolo; las de >1.0 sí (coherentes en las 3
+pasadas medidas de cada config).
+
+### 11.2 Las 5 conclusiones
+
+1. **La base real siempre fue ~21 t/s, no 9.33.** El §1 (sweep manual)
+   medía 69 tokens, con calentamiento incluido y 1 pasada: artefacto. El
+   techo DDR4 de §2.4 (~17-23) era correcto y el rig ya estaba cerca.
+2. **draft-MTP es NEGATIVO en este rig (H1 refutada).** Las 10 configs MTP
+   miden 16.6-18.9, TODAS por debajo de la base. El ×2.4 del PR #22673 se
+   midió en otro hardware; aquí el draft (blk.40/nextn) corre sobre el
+   mismo cuello DDR4 y cuesta más de lo que ahorra. El 23 recordado era
+   la familia BASE con el PC en otro estado (LMNONE/POLL100 hoy dan
+   21.4-21.5) o prefill confundido (pasada 1 marca 38-49 t/s).
+3. **`--moe-cache-mib` es veneno con 4 GB de VRAM**: 256 → -7.3 t/s,
+   512 → -3.6. La caché de expertos roba VRAM a los pesos densos y el
+   driver desborda. Descartado para siempre.
+4. **`-t 4` es el óptimo**: T3 (-2.56) y T5 (-2.10) pierden. El HT del
+   i3-10100F no ayuda en inferencia bandwidth-bound.
+5. **Las palancas no suman**: LMNONE solo (21.50) ≥ cualquier combo
+   (21.33). Ganancia única real y reproducible: **+3.1% con `-lm none`**,
+   que además es lo que el propio loader pedía en su warning (§2.2).
+
+### 11.3 Presupuesto honesto hacia 30 t/s (sustituye a §4)
+
+```
+techo sin MTP, flags agotadas          21.5-22 t/s   (MEDIDO hoy)
++ XMP DDR4-3200 en BIOS ($0, HW)       ~23-25 t/s    (hipótesis, +10-20%)
+30 t/s con este modelo en este rig     NO ALCANZABLE a $0
+```
+
+30 t/s exige que los ~1.8-2.0 GB/token de expertos activos se lean más
+rápido de lo que DDR4 dual-channel puede: o más VRAM que los sostenga
+(GPU ≥8-12 GB), o RAM más rápida/plena (XMP es el único margen $0), o un
+modelo con menos parámetros activos. Flags: agotadas — el barrido lo cierra.
+
+### 11.4 Cómo reproducir el ranking sin re-medir
+
+Re-lanzar el script (v1.1) junto al `sweep-resultados.csv` completo: detecta
+25/25 "ya medida, salto" y imprime el ranking en segundos. (La corrida v1.0
+crash-eó al final por un sort de tuplas con empate POLL0=COMBO-A=21.33: el
+CSV nunca corrió riesgo; fix en v1.1.)
+
+## 12. Fuentes
 
 - Logs del sweep del Director (sweep-logs.7z, 2026-10-25 07:08): todas las cifras de §1-§3.
 - Dump `llama-flags-nuevo.txt` (b11856): L7-31 (threads/batch), L15-24 (prio/poll), L83-105

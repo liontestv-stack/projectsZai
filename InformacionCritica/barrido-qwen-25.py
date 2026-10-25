@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BARRIDO-QWEN-25 v1.0 (2026-10-25) - barrido automatico de 25 configuraciones
+BARRIDO-QWEN-25 v1.1 (2026-10-25) - barrido automatico de 25 configuraciones
 ==============================================================================
 Que hace: prueba UNA A UNA en bucle las 25 configuraciones seleccionadas del
 informe-velocidad-sweep.md (secciones 6-7), mide t/s de generacion con
@@ -30,6 +30,13 @@ Antes de correr:
 
 Doble click: BARRIDO-QWEN.bat  |  Duracion total ~2 h (resume por CSV)
 Salidas: sweep-resultados.csv + sweep-logs\\ + ranking en pantalla
+
+v1.1 (post-corrida real 25/25): FIX del ranking final. Al empate de t/s
+  (POLL0 = COMBO-A = 21.33) el sort de tuplas (t/s, dict) intentaba comparar
+  los dicts y reventaba con TypeError AL FINAL, sin perder el CSV. Ahora el
+  sort usa key= solo sobre el numero. Re-lanzar el script con el CSV ya
+  completo regenera el ranking en SEGUNDOS sin re-medir (todo sale como
+  "ya medida, salto").
 """
 import csv
 import json
@@ -367,7 +374,7 @@ def _medir_config(cfg):
 def _ranking(filas):
     con_dato = [(float(f["tps"]), f) for f in filas.values()
                 if f.get("tps") not in (None, "")]
-    con_dato.sort(reverse=True)
+    con_dato.sort(key=lambda par: par[0], reverse=True)
     print("\n" + "=" * 74)
     print("RANKING FINAL (t/s promedio, pasadas 2-%d)" % RUNS)
     print("=" * 74)
@@ -392,7 +399,7 @@ def _ranking(filas):
 # ============================== MAIN ==============================
 def main():
     print("=" * 74)
-    print("BARRIDO-QWEN-25 v1.0 - %d configuraciones, ~2 h (resume por CSV)" % len(CONFIGS))
+    print("BARRIDO-QWEN-25 v1.1 - %d configuraciones, ~2 h (resume por CSV)" % len(CONFIGS))
     print("=" * 74)
     if not os.path.exists(RUTA_SERVER):
         print("[ERROR] No existe el server: %s" % RUTA_SERVER)

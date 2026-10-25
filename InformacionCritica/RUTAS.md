@@ -641,6 +641,28 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
  el barrido imprime al final la línea FLAGS_GANADORAS = [...] y el comando)
 ```
 
+**BARRIDO-QWEN-25 — corrida completa 25/25 (2026-10-25, protocolo fijo:
+4 pasadas × 256 tok, descarta la 1ª, promedia 2-4):**
+
+- **BASE real = 20.85 t/s.** El 9.33 del sweep manual era artefacto de
+  medición (69 tokens, calentamiento incluido, 1 sola pasada). El techo
+  DDR4 estimado en el informe (~17-23) era correcto: ya estábamos cerca.
+- **GANADOR: `LMNONE` (`-lm none`) = 21.50 t/s** (+0.65, +3.1%). 2º
+  POLL100 21.42 · 3º POLL0 y COMBO-A 21.33 (empate exacto). El combo
+  np1+poll100+lmnone NO suma más que el ganador solo (ruido ~±0.3).
+- **draft-MTP mide NEGATIVO en este rig**: las 10 configs MTP quedan en
+  16.6-18.9 (mejor 18.89 vs 20.85 base = -9%). La hipótesis H1 del informe
+  (el 23 t/s fue MTP) queda REFUTADA. La ruta a 30 vía MTP: CERRADA aquí.
+- **`--moe-cache-mib` es veneno en esta GPU**: 256 → 13.51, 512 → 17.22
+  (roba VRAM a pesos densos). Descartado para siempre.
+- Hilos: `-t 4` correcto (T3 = 18.29, T5 = 18.75; HT no ayuda).
+- Comando ganador: `-m <modelo> -ngl 99 -cmoe -c 16384 -b 2048 -ub 256
+  -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj -lm none
+  --host 127.0.0.1 --port 9931` (ya pegado en abrir-qwen-apex.py).
+- Techo realista a $0: **~21.5-22 t/s**. Con XMP DDR4-3200 en BIOS:
+  ~23-25 si los módulos lo permiten. **30 t/s exige otro hardware** (más
+  VRAM para expertos o RAM más rápida). Veredicto completo: informe §11.
+
 ## 12. Guardarraíles
 
 1. **Fuente de verdad #1 = `llama-flags.txt`** (tu build). #2 = `flags-verificadas-LAIA.txt`. Si una flag no está en ninguno: **no existe**.
