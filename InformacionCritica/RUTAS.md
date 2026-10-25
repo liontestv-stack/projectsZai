@@ -301,6 +301,34 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
 - **PIN NUEVO: build 11856 / commit 3642238cc** — sustituye al pin viejo
   `version: 1 (2496f9c)` (fuente 2026-05-06, sin draft-mtp).
 
+**REGISTRO DE RUTA OPERATIVA NUEVA (2026-10-25, informada por el Director):**
+- El binario nuevo ahora vive en **`D:\llama.cpp\llama-server.exe`** (raíz, movido
+  desde `bin-new\`). `bin-new\` queda como origen verificado por el script.
+- ADVERTENCIA técnica (análisis PE 3-A.2): `llama-server.exe` es un launcher fino
+  de 9,216 B — la lógica vive en `llama-server-impl.dll`, `llama.dll`,
+  `ggml-cuda.dll`, `libomp.dll`, las 15 `ggml-cpu-*.dll` y las 3 DLLs CUDA. TODAS
+  deben quedar en la MISMA carpeta que el exe. Si solo se movió el .exe → error
+  0xC0000135 al arrancar.
+- Verificación de 10 s (PowerShell, pegar y reportar):
+  ```powershell
+  & D:\llama.cpp\llama-server.exe --version 2>&1
+  # esperado: version: 0.7.0-dev (build 11856, commit 3642238cc)   (2>&1 OBLIGATORIO: la versión sale por stderr)
+  & D:\llama.cpp\llama-server.exe -m D:\no-existe.gguf 2>&1 | Select-Object -First 10
+  # esperado: lineas ggml_cuda_init: found 1 CUDA device ... + error failed to load model
+  # = la pila CUDA completa (ggml-cuda.dll + cublas) carga bien en la carpeta nueva.
+  # OJO: --version NO detecta falta de ggml-cuda.dll (se carga dinamicamente) — por eso el smoke test.
+  ```
+- Si `--version` falla con 0xC0000135 → solo se movió el exe. Arreglo: mover TODO
+  el contenido de bin-new: `Move-Item D:\llama.cpp\bin-new\* D:\llama.cpp\ -Force`
+- Dump del build nuevo: **`D:\ZLia\llama-flags-nuevo.txt`** (122,440 B, UTF-16LE) —
+  generado por el script desde `bin-new` (mismo binario b11856, así que sigue
+  siendo válido aunque el exe se haya movido). Es el archivo a subir a
+  `InformacionCritica/` para la re-auditoría de flags antes de V2. Si el Director
+  quiere regenerarlo desde la ruta nueva (idéntico resultado):
+  ```powershell
+  & D:\llama.cpp\llama-server.exe --help 2>&1 | Out-File D:\ZLia\llama-flags-nuevo.txt -Encoding unicode
+  ```
+
 ### 3-B. Recompilar tu build local (alternativa, mismo resultado)
 
 Requisitos (docs/build.md): Visual Studio 2022 + CUDA Toolkit (nvcc en PATH). El
