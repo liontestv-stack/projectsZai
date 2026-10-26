@@ -6,6 +6,16 @@ Etiquetas usadas en todos los archivos: **[F]** = verificado en fuente externa �
 
 Cada nivel tiene anexos por rondas de investigación (ronda 1 = cuerpo principal, ronda 2-10 = ANEXOS al final del archivo). Estado de la ronda 10 (2026-10-26, foco Director: auditoría de respaldo riguroso de los 5 niveles): 0 puntos refutados, ~50 re-verificados contra fuente primaria (40+ búsquedas frescas), dump b11856 respaldado 1:1 por la manpage Debian (segunda fuente), 5 matices anotados.
 
+Estado de la ronda 11 (2026-10-26, orden Director: "para cada archivo crees otro que sea la misma información punto a punto pero más simplificada"): **cada nivel tiene ahora un RESUMEN SIMPLE punto a punto** (`*-resumen.md`, misma numeración de § que el completo, en términos llanos). Los resúmenes no añaden ni cambian nada: son lectura rápida; la fuente de verdad sigue siendo el archivo completo.
+
+| # | Resumen simple | Archivo completo (fuente de verdad) |
+|---|---------|------------------------------|
+| 1 | [`nivel-1-recorte-expertos-resumen.md`](nivel-1-recorte-expertos-resumen.md) | [`nivel-1-recorte-expertos.md`](nivel-1-recorte-expertos.md) |
+| 2 | [`nivel-2-cuant-ligero-resumen.md`](nivel-2-cuant-ligero-resumen.md) | [`nivel-2-cuant-ligero.md`](nivel-2-cuant-ligero.md) |
+| 3 | [`nivel-3-eficiencia-simple-resumen.md`](nivel-3-eficiencia-simple-resumen.md) | [`nivel-3-eficiencia-simple.md`](nivel-3-eficiencia-simple.md) |
+| 4 | [`nivel-4-memoria-vram-ram-resumen.md`](nivel-4-memoria-vram-ram-resumen.md) | [`nivel-4-memoria-vram-ram.md`](nivel-4-memoria-vram-ram.md) |
+| 5 | [`nivel-5-draft-externo-gpu-resumen.md`](nivel-5-draft-externo-gpu-resumen.md) | [`nivel-5-draft-externo-gpu.md`](nivel-5-draft-externo-gpu.md) |
+
 | # | Archivo | Tema | Respaldo riguroso de la ronda 10 (auditoría) |
 |---|---------|------|------------------------------|
 | 1 | [`nivel-1-recorte-expertos.md`](nivel-1-recorte-expertos.md) | Recorte de expertos en runtime (fase D EXP) | **AUDITORÍA §19**: MoE-Spec (95% @2.0×) y REAP (97.6/96.7, en el 480B-Coder) confirmados verbatim; #5114, #20757, #29887+#30112, v0.7.0 (~2.2x), ik #1699, #30426, Doctor-Shotgun y llmkube verbatim; `qwen4exp` como arch real de #30155; dosis fase D intacta |
@@ -16,7 +26,7 @@ Cada nivel tiene anexos por rondas de investigación (ronda 1 = cuerpo principal
 
 ## Orden de lectura operativa
 
-1. Empezar por el **veredicto ejecutivo** (§0) de cada archivo.
+1. Empezar por el **veredicto ejecutivo** (§0) de cada archivo. Lectura rápida: los **resúmenes simples** (`*-resumen.md`, ronda 11) replican cada nivel punto a punto en términos llanos — sin reemplazar al completo, que sigue siendo la fuente de verdad.
 2. La línea de ejecución en el rig hoy: **RUTA 0 simplificada = descargar 2 zips de b11901** (binario CUDA 12.4 + cudart DLLs — sin compilar, N3 §16; sin el cudart la GPU queda dormida) → descargar UD-IQ3_XXS (14.07 GB, SHA256 `36f9ec0e…` cerrado, N2 §18) + DSpark Q4_K_M (307 MB, SHA256 `a3542c05…`, N5 §15) → fase E (MTP-n2) → fase S2 (DSpark n2/n3, conf-min como A/B) y S2b (DFlash-n2); paralelo sin RUTA 0: `-ctxcp 4` + `--moe-cache-mib 512` (con control D-MEC-0) sobre NCM37C4.
 3. Reglas de medición (N3 §13): mediana de 3 corridas, baseline matcheado por corrida, no perseguir deltas <5pp.
 4. Traducciones obligatorias de comandos de internet a b11856: `--no-mmap`→`-lm none`, `--mlock`→`-lm mmap+mlock`, `--draft-max`→`--spec-draft-n-max` (N3 §14, N5 §13); y fijar SIEMPRE `--spec-draft-n-max` + `--spec-draft-p-min` explícitos (defaults de b11856: 16 y 0.75 ≠ master 3 y 0.00 — N3 §15). Tras RUTA 0 (b11901) los alias `--no-mmap`/`--mlock` mueren en duro (PR #28334, 09-Sep-2026 — N3 §17): la traducción `-lm` pasa a obligatoria.
