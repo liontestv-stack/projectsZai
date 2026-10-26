@@ -137,6 +137,7 @@ def dump_sintetico(ruta, quitar=()):
                         - auto: mmap
                         - none: no special loading mode
                         - mmap: memory-map
+-lv, --log-verbosity N  Set the verbosity threshold
 --host HOST            host
 --port PORT            puerto
 """
@@ -152,6 +153,11 @@ PORT_FIJO = __PUERTO__
 IGNORAR = __IGNORAR__
 MODO = "__MODO__"
 MODELLINE = __MODELLINE__
+SINLOG = __SINLOG__
+PROPSMODE = __PROPSMODE__
+FITLINE = __FITLINE__
+THINKER = __THINKER__
+RUIDO = __RUIDO__
 K = 8
 args = sys.argv[1:]
 if "--version" in args:
@@ -173,10 +179,13 @@ if MODO == "muere":
     sys.exit(1)
 if MODELLINE:
     print("main: model  = " + MODEL, flush=True)
-print("llm_load_print_meta: general.architecture = qwen3_5_moe", flush=True)
-print("llm_load_print_meta: n_expert = 256", flush=True)
-print("llm_load_print_meta: n_expert_used = " + str(8 if IGNORAR else K), flush=True)
-print("CUDA0 compute buffer size : " + str(round(900.0 + 100.0 * K, 2)) + " MiB", flush=True)
+if not SINLOG:
+    print("llm_load_print_meta: general.architecture = qwen3_5_moe", flush=True)
+    print("llm_load_print_meta: n_expert = 256", flush=True)
+    print("llm_load_print_meta: n_expert_used = " + str(8 if IGNORAR else K), flush=True)
+    print("CUDA0 compute buffer size : " + str(round(900.0 + 100.0 * K, 2)) + " MiB", flush=True)
+if FITLINE:
+    print("W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to 99, abort", flush=True)
 print("main: server is listening on http://127.0.0.1:" + str(PORT) + " - starting the main loop", flush=True)
 POSTS = [0]
 class H(BaseHTTPRequestHandler):
@@ -185,6 +194,13 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/health":
             self.send_response(200); self.end_headers()
             self.wfile.write(b'{"status":"ok"}')
+        elif self.path == "/props" and PROPSMODE:
+            body = json.dumps({"model_meta": {"qwen3_5_moe.expert_used_count": (8 if IGNORAR else K)}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         else:
             self.send_response(404); self.end_headers()
     def do_POST(self):
@@ -203,28 +219,40 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(msg)
             return
         p = (body.get("prompt") or "").lower()
-        if "17 x 23" in p: c = "391"
+        if THINKER and ("17 x 23" in p or "don quijote" in p or "planeta rojo" in p):
+            c = "<think>\nrazonamiento largo que el probe corta sin cerrar"
+        elif "17 x 23" in p: c = "391"
         elif "don quijote" in p: c = "Cervantes"
         elif "planeta rojo" in p: c = "Marte"
         else: c = "Texto de medicion suficiente. " * 20
+        tps = round(21.53 * (8.0 / K) * 0.5 + 10.77, 2)
+        if RUIDO:
+            tps = round(tps * (1.18 if POSTS[0] % 2 else 1.0), 2)
         self.send_response(200)
         self.send_header("Content-Type", "application/json"); self.end_headers()
         self.wfile.write(json.dumps({"content": c, "timings": {
             "prompt_n": 32, "prompt_ms": 32.0, "prompt_per_second": 1000.0,
             "predicted_n": body.get("n_predict", 256),
             "predicted_ms": 1000.0,
-            "predicted_per_second": round(21.53 * (8.0 / K) * 0.5 + 10.77, 2),
+            "predicted_per_second": tps,
         }}).encode())
 HTTPServer(("127.0.0.1", PORT), H).serve_forever()
 '''
 
 
-def escribir_fake_server(ruta, puerto, ignorar=False, modo="ok", modeline=True):
+def escribir_fake_server(ruta, puerto, ignorar=False, modo="ok", modeline=True,
+                         sinlog=False, propsmode=False, fitline=False,
+                         thinker=False, ruido=False):
     open(ruta, "w").write(
         FAKE_SERVER_PLANTILLA.replace("__PUERTO__", str(puerto))
                              .replace("__IGNORAR__", str(ignorar))
                              .replace("__MODO__", modo)
-                             .replace("__MODELLINE__", str(modeline)))
+                             .replace("__MODELLINE__", str(modeline))
+                             .replace("__SINLOG__", str(sinlog))
+                             .replace("__PROPSMODE__", str(propsmode))
+                             .replace("__FITLINE__", str(fitline))
+                             .replace("__THINKER__", str(thinker))
+                             .replace("__RUIDO__", str(ruido)))
     os.chmod(ruta, 0o755)
 
 
@@ -264,7 +292,7 @@ def main():
     # T04 configs
     cfgs = mod.construir_configs("qwen3_5_moe")
     by_id = {c["id"]: c for c in cfgs}
-    check("T04a 15 configs construidas", len(cfgs) == 15, str(len(cfgs)))
+    check("T04a 18 configs construidas", len(cfgs) == 18, str(len(cfgs)))
     check("T04b clave override EXACTA desde el GGUF",
           by_id[2]["flags"][-1] == "qwen3_5_moe.expert_used_count=int:10",
           by_id[2]["flags"][-1])
@@ -283,7 +311,9 @@ def main():
     check("T04g filtrar --solo exp = 8 y --quick = 7",
           len(mod.filtrar_configs(cfgs, solo="exp")) == 8
           and len(mod.filtrar_configs(cfgs, quick=True)) == 7
-          and len(mod.filtrar_configs(cfgs, solo="ot")) == 1)
+          and len(mod.filtrar_configs(cfgs, solo="ot")) == 1
+          and len(mod.filtrar_configs(cfgs, solo="combo2")) == 2
+          and len(mod.filtrar_configs(cfgs, solo="anclafin")) == 1)
     check("T04h run cruzado -ot: UNA flag, sin -ncmoe, cache 0, igual KV",
           by_id[15]["familia"] == "OT"
           and by_id[15]["flags"].count("-ot") == 1
@@ -293,6 +323,15 @@ def main():
           and "-ctk" in by_id[15]["flags"]
           and by_id[15]["flags"][-2:] == ["--moe-cache-mib", "0"],
           str(by_id[15]["flags"]))
+    check("T04i v1.2.1: bookend id16 = CM solo y stacks combo2 = NCM+MEC+ov",
+          by_id[16]["familia"] == "ANCLA-FIN" and by_id[16]["flags"] == ["-cmoe"]
+          and by_id[17]["flags"] == ["-ncmoe", "37", "-c", "4096", "-ctk", "q4_0",
+                                     "-ctv", "q4_0", "--moe-cache-mib", "768",
+                                     "--override-kv",
+                                     "qwen3_5_moe.expert_used_count=int:4"]
+          and by_id[18]["flags"][9] == "1024"
+          and "-cmoe" not in by_id[17]["flags"],
+          str(by_id[17]["flags"]))
 
     # T05/T06/T07 auditoria
     dump = os.path.join(tmp, "dump.txt")
@@ -333,6 +372,10 @@ def main():
         f4 = [f for f in filas if f["id"] == "6"][0]
         check("T08e override_aplicado SI en EXP4",
               f4["override_aplicado"] == "SI" and f4["n_expert_used_log"] == "4")
+        check("T08h auth_via = LOG (via 1) en las filas de override",
+              f4["auth_via"] == "LOG"
+              and [f for f in filas if f["id"] == "1"][0]["auth_via"] == "",
+              f4["auth_via"])
         check("T08f buffer CUDA0 crece con k (autenticador 2)",
               float(f4["buffer_mib"]) < float(fctrl["buffer_mib"]))
         check("T08g sanity 3/3", all(f["sanity_ok_n"] == "3" for f in filas))
@@ -540,6 +583,162 @@ def main():
         check("T18 consola sin ANSI", False, traceback.format_exc(-5))
     finally:
         mod.USE_COLOR = False
+
+    # ---- bateria v1.2.1: telemetria de la corrida real reproducida ----
+    # T21 corrida COMPLETA (18 configs) + bookend D-ANCLA-FIN + 'vs k=8'
+    try:
+        logs9 = os.path.join(tmp, "logs9")
+        argv21 = ["--server", fake1, "--modelo", gguf, "--logs", logs9,
+                  "--puerto", "19931", "--sin-nvidia", "--sin-pausas",
+                  "--carga-timeout", "60"]
+        rc21 = mod.main(argv21)
+        import csv as _csv
+        with open(os.path.join(logs9, "faseD-N1-resultados.csv")) as f:
+            filas21 = list(_csv.DictReader(f))
+        check("T21a corrida completa = 18 filas", rc21 == 0 and len(filas21) == 18,
+              "rc=%s filas=%d" % (rc21, len(filas21)))
+        ffin = [f for f in filas21 if f["id"] == "16"][0]
+        check("T21b bookend id16 valido y con delta",
+              ffin["valido"] == "SI" and ffin["nombre"] == "D-ANCLA-FIN"
+              and ffin["delta_vs_ancla_pct"] != "")
+        informe21 = open(os.path.join(logs9, "faseD-N1-INFORME.md")).read()
+        check("T21c informe con BOOKEND, 'vs k=8' y leyenda override",
+              "BOOKEND" in informe21 and "vs k=8" in informe21
+              and "Leyenda override" in informe21)
+    except Exception:
+        check("T21 corrida completa + bookend", False,
+              traceback.format_exc(-5))
+
+    # T22 SIN hparams en el log (b11856 real) -> via COMP comportamental
+    try:
+        logs10 = os.path.join(tmp, "logs10")
+        fake10 = os.path.join(tmp, "fake_server10.py")
+        escribir_fake_server(fake10, 19937, ignorar=False, sinlog=True)
+        argv22 = ["--server", fake10, "--modelo", gguf, "--logs", logs10,
+                  "--puerto", "19937", "--solo", "exp", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        rc22 = mod.main(argv22)
+        import csv as _csv
+        with open(os.path.join(logs10, "faseD-N1-resultados.csv")) as f:
+            filas22 = list(_csv.DictReader(f))
+        f6 = [f for f in filas22 if f["id"] == "6"][0]
+        f2 = [f for f in filas22 if f["id"] == "2"][0]
+        f3 = [f for f in filas22 if f["id"] == "3"][0]
+        check("T22a sin log: EXP4 autenticado COMP y EXP10 freno COMP",
+              rc22 == 0 and f6["auth_via"] == "COMP"
+              and f6["valido"] == "SI" and f2["auth_via"] == "COMP"
+              and f2["valido"] == "SI",
+              "f6=%s/%s f2=%s/%s" % (f6["auth_via"], f6["valido"],
+                                     f2["auth_via"], f2["valido"]))
+        check("T22b EXP8 (k=8) = DEFAULT y ancla sin via",
+              f3["auth_via"] == "DEFAULT" and f3["valido"] == "SI"
+              and [f for f in filas22 if f["id"] == "1"][0]["auth_via"] == "")
+    except Exception:
+        check("T22 via COMP", False, traceback.format_exc(-5))
+
+    # T23 via PROPS: sin log pero /props expone el hparam tras override
+    try:
+        logs11 = os.path.join(tmp, "logs11")
+        fake11 = os.path.join(tmp, "fake_server11.py")
+        escribir_fake_server(fake11, 19938, ignorar=False, sinlog=True,
+                             propsmode=True)
+        argv23 = ["--server", fake11, "--modelo", gguf, "--logs", logs11,
+                  "--puerto", "19938", "--solo", "exp", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv23)
+        import csv as _csv
+        with open(os.path.join(logs11, "faseD-N1-resultados.csv")) as f:
+            filas23 = list(_csv.DictReader(f))
+        f6 = [f for f in filas23 if f["id"] == "6"][0]
+        check("T23 /props expone expert_used_count -> auth_via PROPS",
+              f6["auth_via"] == "PROPS" and f6["override_aplicado"] == "PROPS"
+              and f6["valido"] == "SI", f6["auth_via"])
+    except Exception:
+        check("T23 via PROPS", False, traceback.format_exc(-5))
+
+    # T24 sin log + override IGNORADO + curva plana -> NO RESPONDE (no-op)
+    try:
+        logs12 = os.path.join(tmp, "logs12")
+        fake12 = os.path.join(tmp, "fake_server12.py")
+        escribir_fake_server(fake12, 19939, ignorar=True, sinlog=True)
+        argv24 = ["--server", fake12, "--modelo", gguf, "--logs", logs12,
+                  "--puerto", "19939", "--solo", "exp", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv24)
+        import csv as _csv
+        with open(os.path.join(logs12, "faseD-N1-resultados.csv")) as f:
+            filas24 = list(_csv.DictReader(f))
+        invalidas = [f for f in filas24 if f["valido"] == "NO"]
+        check("T24a no-op silencioso: 6 invalidos por curva plana",
+              len(invalidas) == 6
+              and all("OVERRIDE NO RESPONDE" in f["nota"] for f in invalidas),
+              str([f["id"] for f in invalidas]))
+        f3 = [f for f in filas24 if f["id"] == "3"][0]
+        check("T24b EXP8 sigue valido (DEFAULT)", f3["valido"] == "SI")
+    except Exception:
+        check("T24 no-op comportamental", False, traceback.format_exc(-5))
+
+    # T25 fit benigno: 'already set by user' NO invalida (regresion v1.2)
+    try:
+        logs13 = os.path.join(tmp, "logs13")
+        fake13 = os.path.join(tmp, "fake_server13.py")
+        escribir_fake_server(fake13, 19940, fitline=True)
+        argv25 = ["--server", fake13, "--modelo", gguf, "--logs", logs13,
+                  "--puerto", "19940", "--solo", "ub1k", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv25)
+        import csv as _csv
+        with open(os.path.join(logs13, "faseD-N1-resultados.csv")) as f:
+            filas25 = list(_csv.DictReader(f))
+        f9 = filas25[0]
+        check("T25 fit-benigno: valido SI con nota informativa",
+              f9["valido"] == "SI" and "auto-fit declino" in f9["nota"],
+              "%s | %s" % (f9["valido"], f9["nota"][:80]))
+    except Exception:
+        check("T25 fit benigno", False, traceback.format_exc(-5))
+
+    # T26 sanity TRUNCADA (<think> sin cerrar) no es fallo de calidad
+    try:
+        logs14 = os.path.join(tmp, "logs14")
+        fake14 = os.path.join(tmp, "fake_server14.py")
+        escribir_fake_server(fake14, 19941, thinker=True)
+        argv26 = ["--server", fake14, "--modelo", gguf, "--logs", logs14,
+                  "--puerto", "19941", "--solo", "ub1k", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv26)
+        import csv as _csv
+        with open(os.path.join(logs14, "faseD-N1-resultados.csv")) as f:
+            filas26 = list(_csv.DictReader(f))
+        f9 = filas26[0]
+        check("T26 truncada: 0 OK + 3T, nota de probe, valido SI",
+              f9["sanity_ok_n"] == "0" and f9["sanity_trunc_n"] == "3"
+              and f9["valido"] == "SI"
+              and "truncadas" in f9["nota"]
+              and "fallos reales" not in f9["nota"],
+              "%s/%s/%s | %s" % (f9["sanity_ok_n"], f9["sanity_trunc_n"],
+                                 f9["valido"], f9["nota"][:80]))
+    except Exception:
+        check("T26 sanity truncada", False, traceback.format_exc(-5))
+
+    # T27 dispersion entre pasadas (outlier en dec 2-4) queda anotada
+    try:
+        logs15 = os.path.join(tmp, "logs15")
+        fake15 = os.path.join(tmp, "fake_server15.py")
+        escribir_fake_server(fake15, 19942, ruido=True)
+        argv27 = ["--server", fake15, "--modelo", gguf, "--logs", logs15,
+                  "--puerto", "19942", "--solo", "ub1k", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv27)
+        import csv as _csv
+        with open(os.path.join(logs15, "faseD-N1-resultados.csv")) as f:
+            filas27 = list(_csv.DictReader(f))
+        f9 = filas27[0]
+        check("T27 dispersion x1.18 anotada en CSV y nota",
+              f9["dispers_max_min"].startswith("1.1")
+              and "dispersion alta" in f9["nota"],
+              "%s | %s" % (f9["dispers_max_min"], f9["nota"][:80]))
+    except Exception:
+        check("T27 dispersion", False, traceback.format_exc(-5))
 
     print("=" * 70)
     if FALLOS:

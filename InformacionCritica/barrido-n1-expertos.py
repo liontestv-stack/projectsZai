@@ -57,10 +57,10 @@ Salidas (carpeta de logs, default D:\\ZLia\\faseD-logs):
   logs-config\\NN-NOMBRE.log <- stdout+stderr del server por config
 
 Uso:
-  py barrido-n1-expertos.py              -> 15 configs (~45-60 min)
+  py barrido-n1-expertos.py              -> 18 configs (~50-65 min)
   py barrido-n1-expertos.py --quick      -> 7 configs criticas (~25 min)
   py barrido-n1-expertos.py --solo exp   -> solo bloque EXP
-  py barrido-n1-expertos.py --solo exp,mec,combo,ot
+  py barrido-n1-expertos.py --solo exp,mec,combo,combo2,ot,anclafin
   py barrido-n1-expertos.py --extra-k 9,7 -> dosis k extra en el bloque EXP
   py barrido-n1-expertos.py --si         -> mata un server vivo y sigue
 
@@ -109,6 +109,47 @@ AUDITORIA DE COBERTURA v1.2 (2026-10-27, encargo Director: "analiza si ya
  14. La columna CSV delta_vs_ancla_pct existia pero jamas se llenaba (y
      las constantes historicas 21.53/22.49 estaban muertas): el delta se
      calcula al vuelo y el informe cita las referencias del barrido-30.
+
+AUDITORIA v1.2.1 (2026-10-27, analisis de la corrida real faseD-logs.7z:
+     15/15 configs medidas sin crash, pero TODAS las de override marcadas
+     INVALIDO en falso): tres bugs de autenticacion cazados con la
+     telemetria real y corregidos:
+ 15. CRITICO: el autenticador por log estaba MUERTO en b11856: ese build
+     NO imprime hparams (cero lineas llm_load_print_meta/print_info en
+     logs-config) -> n_expert_used_log=None SIEMPRE -> 10 runs de override
+     INVALIDOS en falso. LA ESCALERA MISMA (17.80 -> 35.12 monotona con k)
+     demuestra que el override SI aplico. Autenticacion ahora en 4 vias:
+     LOG (regex ampliada) -> PROPS (GET /props, solo CONFIRMA si el valor
+     coincide) -> COMP (comportamental: la dosis debe responder vs la ref
+     k=8 de sesion mas alla del ruido) -> DEFAULT (k=8 es no-op por
+     diseno). La via usada queda en la columna CSV auth_via.
+ 16. Falso positivo "fit abortado": la linea
+     `common_fit_params: failed to fit params ...: n_gpu_layers already
+     set by user to 99, abort` es el AUTO-FIT DECLINANDO ACTUAR (ngl ya
+     fijado por usuario; esperado en TODAS estas configs), no un fallo de
+     VRAM. Ahora es nota informativa y NO invalida; un fit por otra causa
+     o un failed to allocate siguen invalidando.
+ 17. Ancla deprimida por sesgo de arranque: D-EXP8 (k=8 = default, no-op
+     por diseno) midio +15.2% sobre el ancla; EXP10 freno -15.4% vs EXP8.
+     La 1a config de la sesion sale sistemticamente lenta (warmup OS/GPU
+     no curado por descartar solo la pasada 1). Contramedidas: -lv 4 en la
+     base (log verboso: el build puede imprimir hparams), NUEVA config 16
+     D-ANCLA-FIN (bookend: re-ancla al cierre, mide el drift de sesion) y
+     el informe emite deltas tambien "vs k=8" (EXP8 = referencia de sesion
+     sana). NUEVAS configs 17/18 (bloque combo2): el stack final objetivo
+     EXP4 x NCM37C4 x MEC-768/1024 (composicion de los dos GO).
+ 18. Sanity auto: n_predict 48 -> 128 y estado TRUNCADO: si la respuesta
+     quedo dentro de un <think> sin cerrar (razonamiento largo) no cuenta
+     como fallo de calidad (artefacto del probe), solo los fallos reales
+     (respuesta terminada sin la palabra esperada) alarman. k=5/6 de la
+     corrida real "fallaban" por esto; k=3 fallo de verdad (431 != 391).
+ 19. Dispersion entre pasadas: si max/min de dec 2-4 supera 1.08, nota en
+     el CSV (la MEC-512 real tenia un outlier 22.37 entre 18.2-18.9).
+ 20. Proto sube a faseD-N1-v3 (base ahora lleva -lv 4 y hay 18 configs):
+     al arrancar, si el CSV existente es de otro proto se ARCHIVA como
+     faseD-N1-resultados-<proto-viejo>.csv (nada se borra) y la corrida
+     es completa. Re-corrida completa recomendada: el auth limpio + bookend
+     + sanity 128 justifica los ~50 min.
 """
 import argparse
 import csv
@@ -124,8 +165,8 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n1-expertos v1.2 (2026-10-27)"
-PROTO = "faseD-N1-v2"
+VERSION = "barrido-n1-expertos v1.2.1 (2026-10-27)"
+PROTO = "faseD-N1-v3"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
 RUTA_MODELO_DEF = (r"D:\ZLia\models"
@@ -149,12 +190,16 @@ TECHO_RUIDO = 0.5     # aprendido SS8: +/-0.3-0.5 t/s -> zona muerta
 # la colocacion va POR CONFIG: -cmoe para EXP, -ncmoe 37 para MEC/NCM).
 # Mantiene -ngl 99 y -c 16384 para que los numeros sean comparables 1:1 con
 # el barrido-30 (ANCHOR-B 21.53, NCM37C4 22.49).
+# v1.2.1: -lv 4 (log verboso, verbatim en el dump): b11856 NO imprime
+# hparams a verbosidad 3 (la corrida real lo demuestra: cero lineas
+# n_expert_used en logs-config) y el autenticador por log las necesita.
 BASE_FLAGS_FIJAS = [
     "-ngl", "99",
     "-c", "16384", "-b", "2048", "-ub", "256",
     "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
     "-t", "4", "--prio", "2", "--no-mmproj",
     "-lm", "none",
+    "-lv", "4",
     "--host", HOST_DEF, "--port", str(PUERTO_DEF),
 ]
 CM = ["-cmoe"]
@@ -192,6 +237,7 @@ DUMP_REQUERIDOS = [
     "-ub,", "--ubatch-size", "-t,", "--threads", "--prio",
     "--no-mmproj", "--host", "--port", "q8_0", "q4_0",
     "on|off|auto",
+    "-lv,", "--log-verbosity",
 ]
 
 # ------------------------------- utilidades ---------------------------------
@@ -580,12 +626,36 @@ def construir_configs(arch, bloque="", extra_k=()):
             "D-NCM37C4-MEC0 (hist. 22.49 [M]); si se desvia, bug de "
             "comprension del knob ANTES de seguir barriendo")
 
+    if bloque in ("", "combo2"):
+        # v1.2.1: el stack final objetivo = composicion de los dos GO de la
+        # primera corrida real (override + MEC sobre NCM37C4). El arbol
+        # SS11.4 caso 1 pide apilar las dosis vivas; sin MEC en el stack
+        # nunca se habia medido el compuesto completo.
+        add(17, "COMBO2", "D-EXP4-NCM-MEC768",
+            list(NCM37C4) + ["--moe-cache-mib", "768"] + _ovexp(arch, 4)[0],
+            "stack final objetivo: EXP4 x NCM37C4 x MEC-768 (MEC gano +30.7% "
+            "vs control en la corrida real); el compuesto de los dos GO")
+        add(18, "COMBO2", "D-EXP4-NCM-MEC1024",
+            list(NCM37C4) + ["--moe-cache-mib", "1024"] + _ovexp(arch, 4)[0],
+            "stack final objetivo con MEC-1024 (+38.0% en la corrida real, "
+            "pero VRAM al borde del guardarrail 3700 MiB; con EXP4 los "
+            "intermedios MoE bajan y puede caber)")
+
+    if bloque in ("", "anclafin"):
+        # v1.2.1: bookend del sesgo de arranque. La corrida real mostro la
+        # 1a config de la sesion sistematicamente lenta (EXP8 k=default
+        # midio +15.2% sobre el ancla): re-medir el ancla AL CIERRE mide el
+        # drift de sesion y sanea la lectura de todos los deltas.
+        add(16, "ANCLA-FIN", "D-ANCLA-FIN", list(CM),
+            "bookend: re-ancla al cierre; |fin-inicio| > ruido = la sesion "
+            "derivo y los deltas vs ancla de inicio se leen con cuidado")
+
     return configs
 
 
 BLOQUES_DE = {"exp": [1, 2, 3, 4, 5, 6, 7, 8],
               "ub1k": [9], "mec": [10, 11, 12, 13], "combo": [14],
-              "ot": [15]}
+              "combo2": [17, 18], "ot": [15], "anclafin": [16]}
 QUICK_IDS = [1, 2, 3, 4, 6, 10, 11]
 
 
@@ -614,6 +684,54 @@ def health_ok(puerto, timeout=2):
         return False
     except Exception:
         return False
+
+
+def props_expert_used(puerto, timeout=8):
+    """v1.2.1 (2a via de autenticacion): GET /props y busca el hparam
+    expert_used_count / n_expert_used en el JSON. Devuelve int o None;
+    cualquier fallo (404, timeout, JSON raro) = None y NUNCA es fatal.
+    OJO: solo se usa para CONFIRMAR (valor == pedida): si /props reflejara
+    el GGUF crudo en vez del hparam tras override, un 'no coincide' NO
+    prueba un no-op (por eso un desacuerdo es INCONCLUSO, no invalido)."""
+    try:
+        req = urllib.request.Request(
+            "http://%s:%d/props" % (HOST_DEF, puerto))
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            txt = r.read().decode("utf-8", errors="replace")
+        m = re.search(r'"?([\w.]*\.?)?expert_used_count"?\s*:\s*(\d+)', txt)
+        if not m:
+            m = re.search(r'"n_expert_used"\s*:\s*(\d+)', txt)
+        return int(m.group(2) if m.lastindex and m.lastindex >= 2
+                   else m.group(1)) if m else None
+    except Exception:
+        return None
+
+
+def autenticar_comportamental(k, decode, prev):
+    """v1.2.1 (3a via): cuando el log y /props callan (b11856 no imprime
+    hparams a verbosidad 3), la CURVA de sesion es la firma del override:
+    la dosis debe responder mas alla del ruido declarado (SS8: +/-0.3-0.5).
+    Referencia k=8 = max(ancla id1, EXP8 id3): conservador ante un ancla
+    deprimida por el sesgo de arranque (corrida real: EXP8 +15.2% sobre el
+    ancla). k=8 es vacuo (no-op por diseno). Devuelve True/False/None
+    (None = sin referencias para decidir)."""
+    if not decode or k == 8:
+        return None
+    refs = []
+    for cid in (1, 3):
+        r = (prev or {}).get(cid)
+        try:
+            v = float(r.get("decode_ts")) if r else None
+        except (TypeError, ValueError):
+            v = None
+        if v:
+            refs.append(v)
+    if not refs:
+        return None
+    ref = max(refs)
+    if k < 8:
+        return decode > ref + TECHO_RUIDO
+    return decode < ref - TECHO_RUIDO
 
 
 def version_server(ruta_server):
@@ -702,10 +820,19 @@ def leer_log_server(log_path, modelo_basename=None, puerto=None):
     if not m:
         m = re.search(r"arch\s*=\s*(qwen\w*)", txt)
     datos["arch_log"] = m.group(1) if m else None
+    # v1.2.1: variantes ampliadas. b11856 a verbosidad 3 NO imprime hparams
+    # (corrida real: cero lineas); con -lv 4 el build puede imprimirlos con
+    # cualquier prefijo (print_info, model meta, llama.context...). La forma
+    # "int:N" del eco del override NO matchea (es expert_used_count, otro
+    # nombre; y 'int:' impide (\d+) inmediato).
     m = re.search(r"(?:llm_load_print_meta|print_info):\s*n_expert\s*=\s*(\d+)", txt)
+    if not m:
+        m = re.search(r"\bn_expert\s*[:=]\s*(\d+)", txt)
     datos["n_expert_log"] = int(m.group(1)) if m else None
     m = re.search(r"(?:llm_load_print_meta|print_info):\s*n_expert_used\s*=\s*(\d+)",
                   txt)
+    if not m:
+        m = re.search(r"\bn_expert_used\s*[:=]\s*(\d+)", txt)
     datos["n_expert_used_log"] = int(m.group(1)) if m else None
     m = re.search(r"CUDA0 compute buffer size\s*:\s*([\d.]+)\s*([MKG])iB", txt)
     if m:
@@ -713,8 +840,24 @@ def leer_log_server(log_path, modelo_basename=None, puerto=None):
         datos["buffer_mib"] = round(float(m.group(1)) * factor, 1)
     else:
         datos["buffer_mib"] = None
-    datos["fit_abort"] = ("failed to fit params" in txt
-                          or "failed to allocate" in txt)
+    # v1.2.1: "failed to fit params" NO es siempre un fallo. La linea
+    # `common_fit_params: failed to fit params to free device memory:
+    # n_gpu_layers already set by user to 99, abort` es el AUTO-FIT
+    # DECLINANDO ACTUAR porque el usuario ya fijo -ngl: benigno y esperado
+    # en todas estas configs (la corrida real lo mostro en las 6 de la
+    # familia NCM/MEC/OT y la v1.2 las invalido en falso). Solo invalidan
+    # un fit por OTRA causa o un failed to allocate (VRAM de verdad).
+    datos["fit_abort"] = False
+    datos["fit_info"] = ""
+    mfit = re.search(r"failed to fit params[^\r\n]*", txt)
+    if mfit:
+        if "already set by user" in mfit.group(0):
+            datos["fit_info"] = ("auto-fit declino (ngl ya fijado por "
+                                 "usuario; esperado, benigno)")
+        else:
+            datos["fit_abort"] = True
+    if "failed to allocate" in txt:
+        datos["fit_abort"] = True
     datos["sysmem_warn"] = ("sysmem fallback" in txt.lower()
                             or "shared memory" in txt.lower())
     if datos.get("n_expert_used_log") is not None and "n_expert_used" in txt:
@@ -818,9 +961,16 @@ def pasadas_medicion(puerto, prompts, n_predict=256, seed=424242, timeout=600,
     return prefill, decs, detalle
 
 
-def sanity_chat(puerto, n_predict=48, seed=424242, timeout=120):
+def sanity_chat(puerto, n_predict=128, seed=424242, timeout=180):
+    """v1.2.1: n_predict 48 -> 128 y TRES estados por par: OK (palabra
+    esperada), TRUNCADO (la respuesta quedo dentro de un <think> sin
+    cerrar: artefacto del probe, NO es fallo de calidad; la corrida real
+    "robo" a k=5/6 por esto) y FALLO real (respuesta terminada sin la
+    palabra esperada: k=3 real fallo 431 != 391). Devuelve
+    (ok_n, trunc_n, total, detalle)."""
     url = "http://%s:%d/completion" % (HOST_DEF, puerto)
     ok_n = 0
+    trunc_n = 0
     detalle = []
     for pregunta, esperados in SANITY_PARES:
         cuerpo = {
@@ -829,16 +979,22 @@ def sanity_chat(puerto, n_predict=48, seed=424242, timeout=120):
         }
         try:
             d = _post_json(url, cuerpo, timeout=timeout, reintentos=0)
-            txt = (d.get("content") or "").lower()
+            txt = (d.get("content") or "")
         except MeasError as e:
             txt = "ERROR: %s" % e
-        hit = any(e.lower() in txt for e in esperados)
-        ok_n += 1 if hit else 0
+        low = txt.lower()
+        hit = any(e.lower() in low for e in esperados)
+        trunc = (not hit and "<think>" in low
+                 and "</think>" not in low and not low.startswith("error:"))
+        if hit:
+            ok_n += 1
+        elif trunc:
+            trunc_n += 1
         detalle.append({"pregunta": pregunta, "esperado": esperados,
-                        "ok": hit, "respuesta": txt[:160]})
+                        "ok": hit, "truncado": trunc, "respuesta": txt[:160]})
         if txt.startswith("ERROR:"):
             break  # server caido: las restantes fallaran igual (v1.1)
-    return ok_n, len(SANITY_PARES), detalle
+    return ok_n, trunc_n, len(SANITY_PARES), detalle
 
 
 # ------------------------------- CSV / resume -------------------------------
@@ -848,11 +1004,23 @@ COLUMNAS = ["proto", "id", "nombre", "familia", "fecha_hora", "flags",
             "override_pedida", "n_expert_used_log", "override_aplicado",
             "arch_gguf", "arch_log", "n_expert_log", "buffer_mib",
             "vram_usada_mib", "vram_total_mib",
-            "sanity_ok_n", "sanity_total", "delta_vs_ancla_pct"]
+            "sanity_ok_n", "sanity_total", "delta_vs_ancla_pct",
+            "auth_via", "sanity_trunc_n", "dispers_max_min"]
 
 
 def csv_ruta(dir_logs):
     return os.path.join(dir_logs, "faseD-N1-resultados.csv")
+
+
+def csv_proto_de(ruta_csv):
+    """Proto de la primera fila de datos de un CSV existente ('' si no hay)."""
+    try:
+        with open(ruta_csv, "r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                return row.get("proto") or ""
+    except Exception:
+        pass
+    return ""
 
 
 def csv_cargar_hechos(ruta_csv):
@@ -884,9 +1052,10 @@ def csv_append(ruta_csv, fila):
 
 
 # --------------------------- ejecucion de una config ------------------------
-def medir_config(cfg, contexto):
+def medir_config(cfg, contexto, resultados_prev=None):
     """Corre UNA config completa: server up -> 4 pasadas -> sanity -> down.
-    Devuelve dict fila CSV + datos completos."""
+    Devuelve dict fila CSV + datos completos. resultados_prev = filas ya
+    medidas de la sesion (para la autenticacion comportamental)."""
     dir_logs = contexto["dir_logs"]
     log_path = os.path.join(dir_logs, "logs-config",
                             "%02d-%s.log" % (cfg["id"], cfg["nombre"]))
@@ -954,10 +1123,36 @@ def medir_config(cfg, contexto):
                 if m:
                     override_pedida = int(m.group(1))
         fila["override_pedida"] = str(override_pedida) if override_pedida else ""
-        aplicado = None
+        # ---- v1.2.1: AUTENTICACION EN 4 VIAS (SS12.2) ----
+        # b11856 a verbosidad 3 NO imprime hparams: la v1.2 invalido en
+        # falso 10 runs de override (la escalera real demostro que el
+        # override SI aplico). Orden: LOG -> PROPS -> COMP -> DEFAULT.
+        aplicado = None            # True/False/None(=sin dato de via 1-2)
+        auth_via = ""
+        props_k = None
         if override_pedida is not None:
-            aplicado = (log_txt.get("n_expert_used_log") == override_pedida)
-            fila["override_aplicado"] = "SI" if aplicado else "NO"
+            nu_log = log_txt.get("n_expert_used_log")
+            if nu_log is not None:
+                aplicado = (nu_log == override_pedida)
+                auth_via = "LOG"
+            if aplicado is None:
+                props_k = props_expert_used(contexto.get("puerto", PUERTO_DEF))
+                if props_k == override_pedida:
+                    aplicado = True
+                    auth_via = "PROPS"
+                # (si props da OTRO valor, es INCONCLUSO: /props podria
+                # reflejar el GGUF crudo y no el hparam tras override;
+                # se cae a la via comportamental sin castigar)
+            if aplicado is None and override_pedida == 8:
+                # k=8 = default del GGUF: no-op por diseno, nada puede
+                # fallar; la medida SIEMPRE es un k=8 valido.
+                aplicado = True
+                auth_via = "DEFAULT"
+        fila["auth_via"] = auth_via
+        fila["override_aplicado"] = ({"LOG": "SI"}.get(auth_via, auth_via)
+                                     if auth_via else
+                                     ("NO" if override_pedida is not None
+                                      else ""))
         fila["n_expert_used_log"] = str(log_txt.get("n_expert_used_log") or "")
         fila["arch_gguf"] = contexto.get("arch_gguf") or ""
         fila["arch_log"] = log_txt.get("arch_log") or ""
@@ -972,14 +1167,12 @@ def medir_config(cfg, contexto):
 
         valido = True
         notas = []
-        if override_pedida is not None and not aplicado:
-            valido = False
-            notas.append("OVERRIDE NO APLICADO (log n_expert_used=%s != %d): "
-                         "run INVALIDO por regla SS12.2"
-                         % (log_txt.get("n_expert_used_log"), override_pedida))
+        if log_txt.get("fit_info"):
+            # v1.2.1: informativa, NO invalida (auto-fit declinando)
+            notas.append(log_txt.get("fit_info"))
         if log_txt.get("fit_abort"):
             valido = False
-            notas.append("fit abortado en el log")
+            notas.append("fit abortado en el log (causa real, no el auto-fit)")
         if log_txt.get("sysmem_warn"):
             notas.append("aviso sysmem/shared en el log (posible spill)")
 
@@ -1009,15 +1202,70 @@ def medir_config(cfg, contexto):
                              "decode_ts": dec, "pasadas": detalle,
                              "log_datos": log_txt, "vram": vram})
 
+            # ---- v1.2.1: veredicto override POST-medicion ----
+            # la via comportamental necesita el decode medido: la decision
+            # se completa AQUI, no antes de medir.
+            if override_pedida is not None and aplicado is None:
+                comp = autenticar_comportamental(override_pedida, dec,
+                                                 resultados_prev)
+                if comp is True:
+                    aplicado = True
+                    auth_via = "COMP"
+                    fila["auth_via"] = "COMP"
+                    fila["override_aplicado"] = "COMP"
+                elif comp is False:
+                    aplicado = False
+                    fila["override_aplicado"] = "NO"
+                # comp None: sin referencias k=8 en sesion -> no autenticado
+            if override_pedida is not None and aplicado is not True:
+                valido = False
+                if aplicado is False and "LOG" == (fila.get("auth_via") or ""):
+                    notas.append("OVERRIDE NO APLICADO (log n_expert_used=%s "
+                                 "!= %d): run INVALIDO por regla SS12.2"
+                                 % (log_txt.get("n_expert_used_log"),
+                                    override_pedida))
+                elif aplicado is False:
+                    notas.append("OVERRIDE NO RESPONDE (decode %.2f vs ref "
+                                 "k=8 de sesion): la curva no reacciona a la "
+                                 "dosis -> sospecha de no-op (SS4/SS12.2)"
+                                 % dec)
+                else:
+                    notas.append("OVERRIDE NO AUTENTICADO (log sin hparams, "
+                                 "/props sin dato y sin referencias k=8 en "
+                                 "la sesion): re-corrrir sesion completa o "
+                                 "subir -lv (SS12.2)")
+            # dispersion entre pasadas (v1.2.1): outlier visible (la MEC-512
+            # real tenia 22.37 entre 18.2-18.9)
+            if len(decs) >= 2 and min(decs) > 0:
+                disp = max(decs) / min(decs)
+                fila["dispers_max_min"] = "%.3f" % disp
+                if disp > 1.08:
+                    notas.append("dispersion alta en pasadas (max/min=%.2f): "
+                                 "confirmar con mediana de 3 (SS15)" % disp)
+            completo["auth_via"] = auth_via
+            completo["props_k"] = props_k
+
             if contexto["con_sanity"]:
-                ok_n, tot, sdet = sanity_chat(PUERTO_DEF)
-                fila["sanity_ok_n"], fila["sanity_total"] = str(ok_n), str(tot)
+                ok_n, trunc_n, tot, sdet = sanity_chat(PUERTO_DEF)
+                fila["sanity_ok_n"] = str(ok_n)
+                fila["sanity_trunc_n"] = str(trunc_n)
+                fila["sanity_total"] = str(tot)
                 completo["sanity"] = sdet
-                marca = green("%d/%d" % (ok_n, tot)) if ok_n == tot else \
-                    yellow("%d/%d" % (ok_n, tot))
+                if ok_n == tot:
+                    marca = green("%d/%d" % (ok_n, tot))
+                elif trunc_n and (ok_n + trunc_n == tot):
+                    marca = yellow("%d OK + %dT/%d" % (ok_n, trunc_n, tot))
+                else:
+                    marca = red("%d/%d (%dT)" % (ok_n, tot, trunc_n))
                 print("    sanity auto: %s" % marca)
                 if ok_n < tot:
-                    notas.append("sanity auto incompleta (%d/%d)" % (ok_n, tot))
+                    if trunc_n and (ok_n + trunc_n == tot):
+                        notas.append("sanity %d OK + %d truncadas (probe "
+                                     "corto dentro de <think>, no es fallo "
+                                     "de calidad)" % (ok_n, trunc_n))
+                    else:
+                        notas.append("sanity con fallos reales (%d/3 OK, "
+                                     "%d truncadas)" % (ok_n, trunc_n))
         else:
             completo.update({"log_datos": log_txt, "errores": list(notas)})
         fila["valido"] = "SI" if valido else "NO"
@@ -1067,24 +1315,51 @@ def protocolo_decision(resultados, ancla_dec):
     if not ancla or not ancla.get("decode_ts"):
         lineas.append("- ANCLA sin dato: no se puede evaluar el arbol (run invalido?)")
         return lineas
-    if exp10 and exp10.get("decode_ts") and ancla.get("decode_ts"):
-        if exp10["decode_ts"] >= ancla["decode_ts"] - TECHO_RUIDO:
-            lineas.append("- CONTROL EXP10 NO freno (%s >= ancla %s - ruido): "
-                          "override SOSPECHOSO aunque el log diga lo contrario "
-                          "-> tratar como sospecha de no-op (SS4)"
-                          % (fmt(exp10["decode_ts"]), fmt(ancla["decode_ts"])))
+    # ---- BOOKEND (v1.2.1): D-ANCLA-FIN al cierre mide el drift de sesion
+    anclafin = resultados.get(16)
+    if anclafin and anclafin.get("decode_ts"):
+        drift = anclafin["decode_ts"] / ancla["decode_ts"] - 1.0
+        if abs(drift) <= max(TECHO_RUIDO / ancla["decode_ts"], 0.02):
+            lineas.append("- BOOKEND ancla-cierre: %.2f vs inicio %.2f "
+                          "(drift %+.1f%%): sesion ESTABLE, los deltas "
+                          "relativos son fiables"
+                          % (anclafin["decode_ts"], ancla["decode_ts"],
+                             drift * 100))
         else:
-            lineas.append("- CONTROL EXP10 freno como debia (%s < %s): el "
-                          "mecanismo override RESPONDE [M]" % (
-                              fmt(exp10["decode_ts"]), fmt(ancla["decode_ts"])))
-    if exp8 and exp8.get("decode_ts") and ancla.get("decode_ts"):
-        d = abs(exp8["decode_ts"] - ancla["decode_ts"])
-        if d <= max(TECHO_RUIDO, 0.02 * ancla["decode_ts"]):
-            lineas.append("- EXP8 clava el ancla (|delta| = %.2f): medicion "
-                          "sana" % d)
+            lineas.append("- BOOKEND ancla-cierre: %.2f vs inicio %.2f "
+                          "(drift %+.1f%%): LA SESION DERIVO; leer los "
+                          "deltas con cuidado y preferir comparaciones "
+                          "dentro de la misma ventana"
+                          % (anclafin["decode_ts"], ancla["decode_ts"],
+                             drift * 100))
+    # ---- CONTROL EXP10: comparar PRIMERO contra EXP8 (k=8 de sesion);
+    # la corrida real mostro que el ancla de ARRANQUE sale deprimida
+    # (EXP8 k=default midio +15.2% sobre ella) y contra el ancla el
+    # control parecia "no frenar" siendo que freno -15.4% vs EXP8.
+    ref8 = None
+    if exp8 and exp8.get("decode_ts"):
+        ref8 = exp8["decode_ts"]
+    elif ancla.get("decode_ts"):
+        ref8 = ancla["decode_ts"]
+    if exp10 and exp10.get("decode_ts") and ref8:
+        if exp10["decode_ts"] < ref8 - TECHO_RUIDO:
+            lineas.append("- CONTROL EXP10 freno vs ref k=8 (%.2f < %.2f - "
+                          "ruido; %+.1f%%): el mecanismo override RESPONDE "
+                          "[M]" % (exp10["decode_ts"], ref8,
+                                   (exp10["decode_ts"] / ref8 - 1.0) * 100))
+            if exp8 and exp8.get("decode_ts") and ancla.get("decode_ts") \
+                    and abs(exp8["decode_ts"] - ancla["decode_ts"]) > TECHO_RUIDO:
+                lineas.append("- OJO sesgo de arranque: EXP8 (k=8=default) "
+                              "midio %+.1f%% sobre el ancla -> el ancla de "
+                              "inicio sale deprimida; usar EXP8 como ref de "
+                              "sesion y leer 'vs ancla' como inflados"
+                              % ((exp8["decode_ts"] / ancla["decode_ts"]
+                                  - 1.0) * 100))
         else:
-            lineas.append("- EXP8 se desvia del ancla (%.2f t/s): revisar "
-                          "estabilidad de la sesion" % d)
+            lineas.append("- CONTROL EXP10 NO freno (%.2f >= ref k=8 %.2f - "
+                          "ruido): override SOSPECHOSO -> tratar como "
+                          "sospecha de no-op (SS4)"
+                          % (exp10["decode_ts"], ref8))
     if exp4 and exp4.get("decode_ts") and ancla.get("decode_ts"):
         delta = exp4["decode_ts"] / ancla["decode_ts"] - 1.0
         if exp4.get("valido") != "SI":
@@ -1111,6 +1386,10 @@ def protocolo_decision(resultados, ancla_dec):
         b_ancla = float(ancla.get("buffer_mib")) if ancla else None
     except (TypeError, ValueError):
         b_ancla = None
+    if not b_ancla:
+        lineas.append("- buffer CUDA0 N/D (b11856 no imprime 'CUDA0 compute "
+                      "buffer size' en el log de esta sesion): la 2a via del "
+                      "buffer no esta disponible; quedan LOG/PROPS/COMP")
     if b_ancla:
         for cid, kk in ((6, 4), (7, 3), (8, 2)):
             r = resultados.get(cid)
@@ -1166,36 +1445,70 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
     md.append("")
     ancla = resultados.get(1) or {}
     ancla_dec = ancla.get("decode_ts")
+    exp8_ref = (resultados.get(3) or {}).get("decode_ts")
     md.append("Ancla de sesion (D-ANCLA): %s t/s (referencia barrido-30: 21.53)"
               % fmt(ancla_dec))
+    if exp8_ref and ancla_dec and abs(exp8_ref - ancla_dec) > TECHO_RUIDO \
+            and (resultados.get(3) or {}).get("auth_via") == "DEFAULT":
+        md.append("")
+        md.append("**OJO sesgo de arranque**: D-EXP8 (k=8 = default, no-op por "
+                  "diseno) midio %+.1f%% sobre el ancla -> el ancla de inicio "
+                  "sale deprimida; la columna 'vs k=8' usa EXP8 como referencia "
+                  "de sesion (los 'vs ancla' quedan inflados)."
+                  % ((exp8_ref / ancla_dec - 1.0) * 100))
     md.append("")
-    md.append("| id | config | flags | decode t/s | vs ancla | esperado | "
+    md.append("| id | config | flags | decode t/s | vs ancla | vs k=8 | esperado | "
               "prefill | override | buffer MiB | VRAM MiB | sanity | valido |")
-    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for cid in sorted(resultados):
         r = resultados[cid]
         d = r.get("decode_ts")
         delta = ("+%0.1f%%" % ((d / ancla_dec - 1) * 100)
                  if (d and ancla_dec) else "N/D")
+        if cid == 3 or not (d and exp8_ref):
+            delta8 = "-" if cid == 3 else "N/D"
+        else:
+            delta8 = "%+0.1f%%" % ((d / exp8_ref - 1) * 100)
         esperado = ""
         m = re.search(r"int:(\d+)", r.get("override_pedida") or "")
         if m and int(m.group(1)) in EXPECT_EXP:
             esperado = EXPECT_EXP[int(m.group(1))][0]
         elif r.get("familia") == "OT":
             esperado = "run cruzado SS18: ~control NCM37C4 (22.49 [M])"
+        elif r.get("familia") == "COMBO2":
+            esperado = "stack final: EXP4 x NCM37C4 x MEC (los dos GO apilados)"
+        elif r.get("familia") == "ANCLA-FIN":
+            esperado = "bookend: ~ancla de inicio dentro del ruido"
         flags_cortos = (r.get("flags") or "").replace(
             contexto.get("base_flags_str", ""), "").strip()
-        md.append("| %s | %s | `%s` | %s | %s | %s | %s | %s%s | %s | %s/%s | "
-                  "%s/%s | %s |"
+        okn = r.get("sanity_ok_n") or "-"
+        trn = r.get("sanity_trunc_n") or ""
+        san_txt = ("%s+%sT/%s" % (okn, trn, r.get("sanity_total") or "-")
+                   if trn not in ("", "0") else "%s/%s" % (okn, r.get("sanity_total") or "-"))
+        md.append("| %s | %s | `%s` | %s | %s | %s | %s | %s | %s%s | %s | %s/%s | "
+                  "%s | %s |"
                   % (cid, r.get("nombre"), flags_cortos or "BASE",
-                     fmt(d), delta, esperado, fmt(r.get("prefill_ts"), 0),
+                     fmt(d), delta, delta8, esperado, fmt(r.get("prefill_ts"), 0),
                      r.get("override_pedida") or "-",
                      ("-> " + str(r.get("override_aplicado") or "-")),
                      r.get("buffer_mib") or "N/D",
                      r.get("vram_usada_mib") or "N/D",
                      r.get("vram_total_mib") or "N/D",
-                     r.get("sanity_ok_n") or "-", r.get("sanity_total") or "-",
+                     san_txt,
                      r.get("valido") or ""))
+    vias = {}
+    for cid in sorted(resultados):
+        v = (resultados[cid].get("auth_via") or "").strip()
+        if v:
+            vias[v] = vias.get(v, 0) + 1
+    md.append("")
+    md.append("Leyenda override: SI = autenticado via LOG (hparams impresos) · "
+              "PROPS = via GET /props · COMP = comportamental (la curva de "
+              "sesion responde a la dosis mas alla del ruido; ref k=8 = "
+              "max(ancla, EXP8)) · DEFAULT = k=8 no-op por diseno · NO = no "
+              "aplicado/no autenticado. Vias usadas en esta sesion: %s."
+              % (", ".join("%s x%d" % (k, v) for k, v in sorted(vias.items()))
+                 or "ninguna (sin runs de override)"))
     md.append("")
     md.append("Referencias historicas del barrido-30 [M]: ancla/ORO-UB1K = "
               "%.2f t/s - NCM37C4 = %.2f t/s (+4.4%%); ruido declarado "
@@ -1230,9 +1543,23 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
             else:
                 veredicto = ("PIERDE vs control (%.2f): SE DESCARTA (regla "
                              "SS15, caso 600 MiB)" % dif)
-            md.append("- %s: %s t/s vs control %s -> %s"
+            # v1.2.1: dispersion entre pasadas visible en el veredicto (la
+            # MEC-512 real tenia un outlier 22.37 entre 18.2-18.9)
+            extra = ""
+            try:
+                pasadas = [float(r["dec_r%s" % i]) for i in (2, 3, 4)
+                           if r.get("dec_r%s" % i)]
+                if len(pasadas) >= 2 and min(pasadas) > 0:
+                    extra = " (pasadas %s, dispersion x%.2f%s)" % (
+                        "/".join("%.2f" % p for p in pasadas),
+                        max(pasadas) / min(pasadas),
+                        "; OUTLIER -> confirmar con mediana de 3"
+                        if max(pasadas) / min(pasadas) > 1.08 else "")
+            except (TypeError, ValueError):
+                pass
+            md.append("- %s: %s t/s vs control %s -> %s%s"
                       % (r["nombre"], fmt(r["decode_ts"]),
-                         fmt(mec_ctrl["decode_ts"]), veredicto))
+                         fmt(mec_ctrl["decode_ts"]), veredicto, extra))
         md.append("")
     md.append("## 4. Recuerdos de la casa aplicados")
     md.append("")
@@ -1274,7 +1601,8 @@ def main(argv=None):
     ap.add_argument("--quick", action="store_true",
                     help="solo 7 configs criticas (~25 min)")
     ap.add_argument("--solo", type=str, default="",
-                    help="bloques separados por coma: exp,ub1k,mec,combo")
+                    help="bloques separados por coma: "
+                         "exp,ub1k,mec,combo,combo2,ot,anclafin")
     ap.add_argument("--extra-k", type=str, default="",
                     help="dosis k extra para el bloque EXP, p.ej. 9,7")
     ap.add_argument("--server", type=str, default=RUTA_SERVER_DEF)
@@ -1393,6 +1721,20 @@ def main(argv=None):
     print(cyan("[1] CORRIDA: %d configs (pausa termica 60 s cada 8)"
                % len(configs)))
     ruta_csv = csv_ruta(args.logs)
+    # v1.2.1: si el CSV del directorio es de OTRO proto, se ARCHIVA (nada se
+    # borra) y la corrida arranca limpia: mezclar protos falsearia el resume.
+    proto_viejo = csv_proto_de(ruta_csv)
+    if proto_viejo and proto_viejo != PROTO:
+        destino = os.path.join(args.logs,
+                               "faseD-N1-resultados-%s.csv" % proto_viejo)
+        try:
+            os.replace(ruta_csv, destino)
+            print(yellow("  proto nuevo (%s): el CSV '%s' se ARCHIVA como %s "
+                         "(nada se borra); la corrida es completa"
+                         % (PROTO, proto_viejo, os.path.basename(destino))))
+        except Exception as e:
+            print(yellow("  AVISO: no pude archivar el CSV de %s (%r)"
+                         % (proto_viejo, e)))
     hechos = csv_cargar_hechos(ruta_csv)
     pendientes = [c for c in configs if c["id"] not in hechos]
     if len(pendientes) < len(configs):
@@ -1421,7 +1763,8 @@ def main(argv=None):
                 print(yellow("  pausa termica 60 s (protege la medicion)..."))
                 time.sleep(60)
             try:
-                fila, completo = medir_config(cfg, contexto)
+                fila, completo = medir_config(cfg, contexto,
+                                              resultados_prev=resultados)
             except KeyboardInterrupt:
                 raise
             except Exception as e:
