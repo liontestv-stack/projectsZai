@@ -321,3 +321,13 @@ Cambio de inventario que afecta DIRECTAMENTE al plan de descarga del proyecto: e
 - **Repo principal unsloth (sin -MTP) [F]:** única novedad visible es de tool-calling ("Developer Role Support" para Codex/OpenCode y parsing de objetos anidados mejorado); sin cuants nuevos. Irrelevante para el objetivo t/s, relevante solo si el Director usa el modelo como agente de código.
 
 *Referencias nuevas: huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main (snapshot 2026-10-26, verificación byte a byte de esta ronda); card unsloth/Qwen3.6-35B-A3B-GGUF (repo principal, notas de tool-calling).*
+
+
+## 18. ANEXO — Octava ronda: SHA256 de descarga AUTORITATIVO y cerrado (2026-10-26)
+
+- **SHA256 LFS oficial verificado HOY contra la API de HF [F]:** `UD-IQ3_XXS.gguf` = 14,069,266,720 B, **SHA256 = `36f9ec0e4c775f6efd3a61c1ea76f0875128469c3d012e3d9e2495a90e7a7150`** — coincide con el 36f9ec0e… de las rondas 6-7. La descarga del hito queda con autenticador completo y cerrado. Protocolo de verificación en el rig: `certutil -hashfile D:\ZLia\models\Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf SHA256` y comparar contra la cadena completa.
+- **Artefacto de la API documentado (para no repetir la confusión) [M]:** el endpoint `/revision/main?blobs=true` devuelve `blobId` de 40 hex = SHA-1 de git (del puntero LFS), NO el sha256 del contenido; el sha256 real vive en `lfs.oid` del endpoint `/tree/main`. Regla: autenticar SIEMPRE con `lfs.oid`.
+- **mmproj-F16.gguf archivado con autenticador [F]:** 899,283,584 B, SHA256 `71f3cbc1f7cc0f30d09d41cfa924c0060827ebc33bf15ace7e86661e856f0160` — por si la visión vuelve al plan; hoy sigue fuera del disco de trabajo.
+- **Sin más cambios de inventario:** escalera al byte de la ronda 7 se mantiene; GSQ-RCO sigue sin 3.6-35B-A3B.
+
+*Referencias nuevas: huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main (lfs.oid de UD-IQ3_XXS y mmproj-F16, snapshot 2026-10-26).*

@@ -178,3 +178,12 @@ D:\llama.cpp\llama-server.exe -m D:\ZLia\models\APEX-I-MINI.gguf -ngl 99 -cmoe -
 - **Sin cambios en el veredicto del nivel:** el orden de dosis v5 de §13 y el control D-MEC-0 de §14 se mantienen íntegros; esta ronda añade la dimensión "presupuesto del draft" (ctx/ubatch/KV propios) que se activa solo con RUTA 0.
 
 *Referencias nuevas: github issues #23472 (fit vs VRAM del MTP, draft ctx default al n_ctx nativo) y #26038 (sobre-reserva ~800 MiB del draft context en ROCm, Qwen3.6-27B IQ4_XS) y #26432 (GTT fallback silencioso con ctx+MTP); mauriziofonte.it (+1,296 MiB @131k); docs/speculative.md master (--spec-draft-n-ubatch, -ctkd/-ctvd); reddit r/LocalLLaMA 1u8i79d (--no-mmproj-offload, KV q4 con atención rotada); dump b11856 del Director (-ctkd/-ctvd y -cd presentes) [M].*
+
+
+## 16. ANEXO — Octava ronda: referencia de producción de la pila completa y estado del dato 4GB (2026-10-26)
+
+- **Referencia de producción de la pila completa [F]:** la guía de setup con nuestra familia exacta corre UD-Q4_K_S + ctx 64,000 + KV q4_0/q4_0 + draft-mtp n-max 4 como pila estable — confirma que los cuatro ahorradores de memoria de este nivel (KV cuantizada, ctx acotado, draft con budget propio, MoE parcial en CPU) coexisten sin conflicto en un rig real. La VRAM de esa GPU ajena no se especifica en la fuente [N/D] → el número para 4GB sigue siendo dato propio [M] del barrido post-RUTA-0; lo que esta referencia aporta es la prueba de viabilidad de la combinación, no la dosis.
+- **Plan de medición 1650 reforzado con lo de esta ronda:** con b11901 (binario precompilado, N3 §16) el barrido podrá medir en la 1650: (1) presupuesto del nextn con `-cd` chico + KV del draft `-ctkd/-ctvd q8_0` (ronda 7); (2) MEC 512/1024 con control D-MEC-0 (ronda 6); (3) el guard de sysmem fallback: aceptación normal pero t/s desplomado = fallback del driver, no culpa del draft (ronda 7, #26432).
+- **Sin cambios en el veredicto del nivel:** orden de dosis v5 (§13) + control D-MEC-0 (§14) + presupuesto del draft (§15) se mantienen íntegros.
+
+*Referencias nuevas: lautenbacher.io (config producción UD-Q4_K_S + draft-mtp + KV q4_0, 8-Jul-2026); releases.atom b11901 (vía N3 §16).*

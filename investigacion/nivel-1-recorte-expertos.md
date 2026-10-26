@@ -343,3 +343,11 @@ La sexta ronda trae la primera batería de números de PRODUCCIÓN del `--moe-ca
 - **Enumeración real de spec-types en b11856 [M dump]:** la entrada `--spec-type` del dump lista SOLO tipos sin draft — `[none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod]` — con la nota "type of speculative decoding to use when no draft model is provided"; cero ocurrencias de eagle3/dflash/dspark/mtp en el dump completo. Con `-md` el build va por el camino clásico (draft-simple implícito). Implicación presupuestaria para este nivel: HOY el spec no compite por los 1.2-1.7 GB libres de VRAM con nada; tras RUTA 0 el draft (nextn o sidecar) entra al mismo presupuesto → orden de operaciones: fijar dosis E/S primero, reordenar dosis D después, no al revés.
 
 *Referencias nuevas: release v0.7.0 de llama.cpp (15-Oct-2026, notas oficiales con #29887, #30112, #30506); jetson-ai-lab.com/tutorials/speculative-decoding (guía MTP/DFlash/DSpark con la advertencia MoE); dump b11856 del Director (enumeración --spec-type, re-verificación [M] de esta ronda).*
+
+
+## 17. ANEXO — Octava ronda: punto de datos de producción de terceros para ncmoe en nuestra familia exacta (2026-10-26)
+
+- **`--n-cpu-moe 31` de terceros [F]:** una guía de setup en producción con NUESTRA familia de modelo exacta (Qwen3.6-35B-A3B, cuant UD-Q4_K_S) usa `-ngl 99` + `--n-cpu-moe 31` — 31 capas de expertos en CPU, resto en GPU — junto a draft-mtp n-max 4, ctx 64,000 y KV q4_0/q4_0. Para las dosis ncmoe de este nivel: la escalera propia 26/99 (ronda 6) ahora tiene un punto de referencia externo intermedio (31); la GPU de esa guía NO es una 1650 4GB (su VRAM no se especifica en la fuente [N/D]) así que el número NO es transferible directo — es señal de que el knob `--n-cpu-moe` convive en producción con draft-mtp + KV cuantizada sin conflicto, que era la pieza que faltaba validar.
+- **Sin novedad adicional de MEC esta ronda:** lo de la ronda 7 (oficialización en v0.7.0, multi-GPU) se mantiene como última palabra; el control D-MEC-0 sigue siendo el paso obligatorio del barrido.
+
+*Referencias nuevas: lautenbacher.io/en/general/setting-up-llama-cpp-on-windows-with-cuda-13 (setup 8-Jul-2026 con Qwen3.6-35B-A3B UD-Q4_K_S, tabla completa de parámetros).*

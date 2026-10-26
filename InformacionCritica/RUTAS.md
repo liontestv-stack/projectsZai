@@ -721,3 +721,23 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
 - Foro NVIDIA (Qwen3.6-27B MTP): https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298
 - Flags explicadas 2026 (cambio -lm/--load-mode): https://openclawdc.com/blog/llama-cpp-flags-explained
 - Dossier completo: [`investigacion-35b-apex/`](../investigacion-35b-apex/README.md)
+
+
+---
+
+## ANEXO RUTA 0 (2026-10-26, ronda 8) — Actualización SIN COMPILAR y blanco concreto
+
+**RUTA 0 simplificada: no requiere git pull ni compilar.** Los releases publican binarios Windows precompilados listos:
+
+1. **Blanco:** release etiquetado **b11901** (último a 26-Oct-2026; nuestro build actual b11856 → 45 builds, incluye todo v0.7.0: `draft-dspark`, `draft-dflash`+LiliCorr, `--moe-cache-mib` multi-GPU, restore nuevo de prompt-cache, puerto default 9931).
+2. **Descargar DOS zips** (el gotcha #17812: sin el segundo, el server no ve la GPU):
+   - `llama-b11901-bin-win-cuda-12.4-x64.zip` (elección conservadora para la 1650 Turing; la variante CUDA 13.4 existe pero el estado de low-bit en 13.4 es N/D, el aviso roto era de 13.2)
+   - `cudart-llama-bin-win-cuda-12.4-x64.zip` (DLLs — extraer en la MISMA carpeta del exe)
+3. **Después de instalar:** re-auditar defaults del build nuevo (los 25 del dump b11856 pueden cambiar; master ya difiere: n-max 3 vs 16, p-min 0.00 vs 0.75 — ver N3 §15) y generar dump nuevo de `--help` como FUENTE DE VERDAD paralela (no borrar `llama-flags.txt` actual).
+4. **Descargas del hito con autenticador cerrado** (validar con `certutil -hashfile ... SHA256`):
+   - Modelo: `Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf` — 14,069,266,720 B — SHA256 `36f9ec0e4c775f6efd3a61c1ea76f0875128469c3d012e3d9e2495a90e7a7150` (repo unsloth/Qwen3.6-35B-A3B-MTP-GGUF)
+   - Sidecar S2: `Qwen3.6-35B-A3B-DSPARK-Q4_K_M.gguf` — 307,213,088 B — SHA256 `a3542c05bc21dba50acb47a60b81da0f1a240864bafd15a426e0fd6158be8cab` (repo williamliao/Qwen3.6-35B-A3B-DSPARK-GGUF)
+   - Sidecar S2b (opcional): `DFlash Q8_0` 421 MB (repo de ronda 4)
+5. Anexos de detalle: `investigacion/nivel-3-eficiencia-simple.md` §16 (procedimiento) · §15/§18/§15 de N2/N3/N5 (autenticadores y defaults).
+
+Fuentes: github.com/ggml-org/llama.cpp/releases + releases.atom · discussion #17812 · lautenbacher.io (8-Jul) · API HF (lfs.oid, 26-Oct).
