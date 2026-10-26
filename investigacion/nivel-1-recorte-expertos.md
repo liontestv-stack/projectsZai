@@ -434,3 +434,24 @@ Veredictos usados abajo: **✔ VERBATIM** = re-encontrado hoy con las mismas cif
 - **Dosis fase D: SIN CAMBIOS** — NCM37C4 + D-MEC-0/512/1024 + escalera EXP6→4→3 + run autenticador cruzado `-ot` se mantienen íntegras.
 
 *Referencias de esta auditoría: arXiv 2602.16052v1; blog Cerebras REAP y repo CerebrasResearch/reap; discusiones #5114, #30155, #20757, #28248, #24528, #30426; issue #19528 e ik_llama.cpp #1699; reddit PR #29887 (con #30112 MERGED), 1v4gzc4, dual-5060Ti, 4060-8GB; freenode dual-6950XT; notas oficiales v0.7.0; manpages.debian.org llama-server.1; Doctor-Shotgun HF blog; openclawdc flags-2026; llmkube deltanet; mdda.net GTX-1080; DJLougen card; note.com high_u y aisatoshi.*
+
+## 20. ANEXO — Ronda 13: instrumento dedicado de la fase D, creado y validado (2026-10-27)
+
+La ronda 12 fijó el orden de campaña N1→N3→N2→N4 y el Director encargó ejecutar **nivel por nivel**: "analiza todo el documento no resumido y crea todas las pruebas que necesites... verifica mis flags nuevas permitidas... crea un archivo .py que haga todas las pruebas y genere un log". Este anexo registra el instrumento creado (NADA cambia en las dosis ni en las conclusiones de §0-§19; el instrumento LAS EJECUTA).
+
+### 20.1 `InformacionCritica/barrido-n1-expertos.py` v1.0 (+ `BARRIDO-N1.bat`)
+
+- **14 configs en 4 bloques**, todas traducidas de ESTE documento: bloque EXP sobre la base campeona del barrido-30 (`-cmoe` + `-ngl 99` + `-lm none`, comparable 1:1 con 21.53 [M]): D-ANCLA, D-EXP10-CTRL, D-EXP8, D-EXP6, D-EXP5, D-EXP4, D-EXP3, D-EXP2 (§5/§6); bloque UB1K: D-EXP4-UB1K (§6.4, tokens id 32 verbatim del barrido-30); bloque MEC sobre NCM37C4 (tokens id 14 verbatim, 22.49 [M]): D-NCM37C4-MEC0 (control), D-MEC-512, D-MEC-1024, D-MEC-768 (§15, orden final); bloque COMBO: D-EXP4-NCM37C4 (§8). CLI: `--quick` (7 críticas), `--solo exp,ub1k,mec,combo`, `--extra-k`, `--si`.
+- **Corrección del no-op materializada (§4/§11.1)**: parser GGUF propio (stdlib, sin pip) lee `general.architecture` del archivo REAL y arma UNA clave `<arch>.expert_used_count=int:K`. Nunca más `qwen3moe.*` a ciegas. Si el parser falla, el script ABORTA (nada se asume).
+- **Autenticador obligatorio (§12.2)**: grep `n_expert_used = N` del log del server por run; si ≠ dosis pedida → run INVALIDO (`override_aplicado=NO`, `valido=NO`), no computa.
+- **Segundo autenticador (§12.6)**: `CUDA0 compute buffer size` registrado por run (debe bajar con k; confirma la dosis por vía independiente del t/s).
+- **Auditoría de flags integrada (encargo explícito del Director)**: antes de arrancar, decodifica `llama-flags-nuevo.txt` (dump UTF-16 b11856, fuente de verdad #1) y verifica CADA token de CADA config verbatim; valida valores legales (modos `-lm`, tipos KV sin turbo*, `-fa on|off|auto`), prohibidas (`--mlock`, `-nkvo`, `-ub 512`, `--spec-*`, flags muertas) y requeridos (`--override-kv`, `--moe-cache-mib`, `-ncmoe`...). Cualquier fallo → ABORTA sin tocar el server.
+- **Protocolo de medición de la casa (aprendido §8)**: 4 pasadas × 256 tokens, 4 prompts DISTINTOS misma familia, temp 0, seed fija, `cache_prompt`, se descarta la 1ª, decode = media 2-4, prefill = pasada 1 fría, pausas térmicas 60 s cada 8, CSV reanudable (resume por proto), guardarrail `/health` (aborta si hay server vivo).
+- **MEC reconciliado con aprendido §2**: el veneno medido (256/512 MiB sobre la base vieja) NO se repite; MEC corre SOLO sobre NCM37C4 (fit + KV q4_0 + ctx 4k liberan VRAM) y SOLO con control D-MEC-0 en la MISMA sesión; la dosis 256 ni se prueba; si una dosis pierde vs control → el informe la descarta (regla §15).
+- **Sanity automática de 3 pares** (17×23 / Don Quijote / planeta rojo) por config + VRAM por `nvidia-smi` (aviso >3700 MiB) + detección de fit-abort y avisos sysmem. La puerta de calidad COMPLETA (20 prompts manuales del Director, §5) sigue siendo paso humano posterior.
+- **Informe autónomo**: `faseD-N1-INFORME.md` evalúa SOLO el árbol de decisión §11.4 (dosis viva / banda no domina / build ignora → plan B RUTA 0), veredicto MEC vs control y recuerdos de casa. Salidas en `D:\ZLia\faseD-logs\`: INFORME + `faseD-N1-resultados.csv` + `faseD-N1-datos.json` + `faseD-N1-consola.log` + `logs-config/NN-nombre.log`. Pre-vuelo: pin del server (build 11856), bytes del modelo (14,273,277,376 B), hparams del GGUF (256/8).
+- **Validación**: `scripts/test_faseD_n1.py` — 30/30 VERDE con server falso (parser GGUF sintético v3 con salto de arrays de 5.000 tokens, dump sintético UTF-16, E2E de 8 configs, control EXP10 frena, override ignorado → runs inválidos + plan B, resume, MEC vs control, informe sin códigos ANSI).
+
+### 20.2 Qué NO cambia
+
+Dosis de fase D SIN CAMBIOS (NCM37C4 + D-MEC-0/512/1024/768 + escalera EXP6→4→3, con EXP5 y EXP2 informativas y el run autenticador cruzado `-ot` de §18 disponible). Expectativas [T] de §5 intactas. El instrumento añade como medidas explícitas D-EXP4-UB1K (§6.4) y D-EXP4-NCM37C4 (combo del stack §8); nada más.

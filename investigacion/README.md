@@ -10,6 +10,8 @@ Estado de la ronda 11 (2026-10-26, orden Director: "para cada archivo crees otro
 
 Estado de la ronda 12 (2026-10-27, decisión del Director: orden de ejecución de la campaña): **orden aprobado N1 → N3 → N2 → N4 → RUTA 0 + N5** — validado técnicamente (qué transfiere y qué no entre cuants, ramificación plan B, lugar del gate). Detalle completo en la sección "ORDEN DE EJECUCIÓN APROBADO" al final de este archivo.
 
+Estado de la ronda 13 (2026-10-27, orden Director: "vamos nivel por nivel... crea todas las pruebas que necesites y genere un log"): **PASO 1 (N1) INSTRUMENTADO** — `InformacionCritica/barrido-n1-expertos.py` v1.0 + `BARRIDO-N1.bat`: 14 configs de la fase D (escalera EXP con clave `<arch>.expert_used_count` construida desde el GGUF real — corrección del no-op del barrido-30 —, stack ORO-UB1K, MEC 0/512/1024/768 sobre NCM37C4 con control en sesión, combo EXP4×NCM37C4), autenticador obligatorio `n_expert_used = N` por run, segundo autenticador buffer CUDA0, auditoría integrada de TODAS las flags contra el dump b11856 (aborta si algo no es verbatim), protocolo de medición de la casa, CSV reanudable e informe autónomo con el árbol de decisión §11.4. Validado 30/30 con server falso (`scripts/test_faseD_n1.py`). Anexo completo: N1 §20. El Director ejecuta `BARRIDO-N1.bat` y pasa `faseD-N1-INFORME.md` + `faseD-N1-resultados.csv` para el análisis.
+
 | # | Resumen simple | Archivo completo (fuente de verdad) |
 |---|---------|------------------------------|
 | 1 | [`nivel-1-recorte-expertos-resumen.md`](nivel-1-recorte-expertos-resumen.md) | [`nivel-1-recorte-expertos.md`](nivel-1-recorte-expertos.md) |
