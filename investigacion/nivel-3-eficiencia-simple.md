@@ -313,3 +313,61 @@ Se fusionó una técnica que reutiliza checkpoints de estado para especulación 
 - **Sin cambios de dosis:** el protocolo de mediana de 3, el baseline matcheado y las traducciones §14 se mantienen; esta ronda añade la fecha de defunción de los alias (obligatoria tras RUTA 0) y el mecanismo op-offload que explica nuestros números de TTFT híbridos.
 
 *Referencias nuevas: openclawdc.com/blog/llama-cpp-flags-explained (15-Sep-2026, PR #20834 y #28334 con fechas); huggingface.co/blog/Doctor-Shotgun/llamacpp-moe-offload-guide (op-offload, umbral 32 tokens); reddit r/LocalLLaMA 1tany5t (-ub 4096: 380→2091 t/s); github ikawrakow/ik_llama.cpp issue #1699 (PP -2x); dump b11856 del Director (-ngl auto por defecto) [M].*
+
+
+---
+
+## 18. ANEXO — Décima ronda: AUDITORÍA DE RESPALDO RIGUROSO punto a punto (2026-10-26)
+
+Auditoría del Director aplicada a este nivel: re-verificación independiente de cada punto [F] hoy (lecturas directas de issues/discusiones/blogs citados) + re-chequeo del dump contra la manpage Debian. **Resultado: 0 puntos refutados; el bloque cache/prompt-híbrida y el bug de timeouts quedan confirmados verbatim; 2 matices de estado (cierre de #26038, fecha exacta de muerte de alias); protocolos SIN cambios.**
+
+### 18.1 Cache de prompts en híbridos (el bloque más delicado del nivel)
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| Línea literal "forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory)" y su exclusividad en qwen35moe/gemma4moe (§3.1, §0) | ✔ VERBATIM | Issue #21831 leído hoy: la línea de log exacta, el repro con 18 tokens, y el análisis de asg-3d (14-Abr-2026): *"The 'forcing full prompt re-processing' error is exclusive to hybrid architectures (e.g., qwen35moe, gemma4moe) that utilize recurrent layers... Pure Transformer models (e.g., qwen2) are unaffected"* con tabla A/B qwen35moe vs qwen2 |
+| El repro original de #21831 estaba VICIADO (18 tokens = solo el mensaje nuevo; stateless) (§11.6, §13) | ✔ VERBATIM | particula.tech leído hoy: *"The second logged prompt_tokens: 18, so the body carried only the new message, and /v1/chat/completions is stateless... The answer text is not [evidence]. Send the full history every turn"* — el texto coincide palabra a palabra con nuestro registro |
+| Checkpoints exigen contexto FULL/RS/n_swa>0; TODO del source admite rango mal calculado para SWA (§11.6) | ✔ VERBATIM | particula.tech: *"the context must be FULL, be RS, or the model must have n_swa > 0"* + cita del TODO literal *"here we incorrectly deterimne that the saved checkpoint data covers the [pos_min, pos_max] range / this is not true for SWA models"* |
+| Protocolo curl (time_starttransfer, stream:true, 8 turnos, sano = "restored context checkpoint" + TTFT plano) (§3.3, §13) | ✔ VERBATIM | El script bash del propio blog particula.tech coincide con el protocolo registrado (mismo endpoint, misma métrica, mismos veredictos sano/roto) |
+| Culpables de rotura de prefijo: reasoning strippado, tools en otro orden, historial reescrito; `<think>` rompe incluso con `-rea off` (§3.2, §11.6) | ✔ VERBATIM | particula.tech: *"reasoning traces stripped from earlier turns, tool definitions regenerated in a different order, and harnesses that rewrite history in place"* + *"even -rea off still trashes context, because the assistant turn emits two <think></think> tokens that get stripped next turn"*; fixes comunitarios en #20225 (mensaje user vacío tras tool_call, fix de plantilla jinja con reasoning_content) |
+| #20574: TTFT 4.2 s → 0.3 s (−93%) y +6% TBT con cache host-memory; PR #16391 (§3.2) | ✔ VERBATIM | Tutorial leído hoy (15-Mar-2026): tabla antes/después idéntica (4.2→0.3 s, 32→34 tok/s, +2 GB RAM); *"PR server : host-memory prompt caching #16391 merged October 2025"*; guía `--cram` 64/256/512/0 |
+| #21831 sigue activo en la práctica con qwen3.6 (§14) | ✔ EXISTE | Reddit reciente: *"Still an issue for me with qwen3.6"*; workaround `--ctx-checkpoints 69` "reduce, not fix" |
+| Workaround `-cpent` NO existe en b11856; fix real exige RUTA 0 o parche (§14) | ◻ + ✔ | El dump [M] (cero ocurrencias checkpoint-every) se mantiene; #21831 confirma que el flag hermano `--checkpoint-every-nb` (PR #20087) era *"currently non-functional in both release binaries and self-compiled builds"* — coherente con nuestra decisión de no contar con él |
+
+### 18.2 Especulación: silencios, timeouts, drift y presupuesto
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| #25345: llama-server IGNORA `-md` en silencio con KV unificada activa (§12) | ✔ VERBATIM | Título exacto del issue leído hoy: *"Misc. bug: llama-server silently ignores -md (speculative decoding never engages) when the unified KV cache is active"* (bug-unconfirmed, closed) |
+| #23268: streaming colgado intermitente (<1%) con draft-mtp Y ngram-mod; conexión viva sin EOS; llama-swap 300 s; Vulkan AMD-395 con nuestro modelo UD-Q8_K_XL (§15) | ✔ VERBATIM | Issue leído hoy: todo coincide (comando con `--spec-draft-n-max 6`, ngram-mod 24/48, *"probability of less than 1%"*, *"tasks that exceeded 300 seconds"*); cerrado sin fix documentado |
+| MTP en uso real: RAM 95% + swap + timeouts a las ~3 h, dual 3090 (§12) | ✔ VERBATIM | xhinker Medium (21-May-2026): *"Then three hours later, your server RAM is at 95%, swap is churning, and your agent is timing out on every tool call"* |
+| vLLM #38182: hit-rate del prefix cache cae 92→71% con MTP; con cache off: TPOT −21.6%, TTFT −31.4% (§14, N5 §13) | ✔ VERBATIM | Issue vivo hoy (25-Mar-2026): *"prefix-cache hit rate for Qwen3.5 drops significantly if mtp is enabled... only speculative decoding methods based on hidden states tend to yield lower prefix cache hit rates"* (cifras exactas registradas en ronda 6 vía estudio thc1006 v3) |
+| Aceptación cae con la profundidad: n2 óptimo, n4 ya pierde (§15, coherencia con N5 v4) | ✔ VERBATIM (nueva fuente) | Benchmark ajeno con nuestro modelo exacto (MXFP4, 24 GB): sin MTP 91.4 → n2 111.1 t/s (+22%, accept 76.1%) → n3 98.8 (+8%, 58.5%) → **n4 87.6 (−4%, 44.4%)** — replica de forma independiente la forma de la tabla v4 de thc1006 (MTP-n2 +22.7%, accept 78.4%) |
+| PR #19493 speculative checkpointing fusionado (§11.5) | ✔ EXISTE | Reddit "llama.cpp speculative checkpointing was merged" (1sprdm8) vivo; dosis ngram-mod de la lectura de ronda 3 |
+| Drift de salida MTP: 7/50 idénticas, 34 vs 33 = ruido; greedy para matching exacto (§15) | ◻ | Fuente mauriziofonte.it no re-abierta hoy; el principio (verificación en lote ≠ decodificación 1-a-1; no esperarlo bit a bit) lo corrobora la docs oficial ("use greedy sampling when exact output matching is required", registrada ronda 7) y la ausencia total de contradicciones |
+| Defaults b11856 ≠ master (n-max 16 vs 3; p-min 0.75 vs 0.00) [M] (§15) | ◻ + ✔ | Seguimos fijando ambos flags explícitos; la discusión #25198 (p-min 0.8 + n-max 8-16 en coding: 47→163-225 t/s en 27B) confirma que el knob p-min existe y es potente en builds nuevos |
+
+### 18.3 Alias de carga, sistema y tooling
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| Muerte de `--no-mmap`/`--mlock`: plegados en `-lm` y luego eliminados → `error: invalid argument` (§14, §17) | ✔ VERBATIM | openclawdc actualizado 15-Sep-2026: *"--no-mmap and --mlock no longer exist. llama.cpp merged them into -lm, --load-mode and then removed the old spellings, so older command lines now fail with error: invalid argument"*; manpage Debian lista `-lm auto|none|mmap|mlock|mmap+mlock|dio` (mismos modos que el dump [M]) |
+| `-lzm` lazy auto = solo tensores >4 GiB; no aplica al 3.6 (N4 §6) | ✔ VERBATIM | Manpage Debian: *"auto: on, but only for tensors larger than 4 GiB"* — coincidente con el dump |
+| `-ngl` default 'auto' ya en b11856 (§17) | ✔ VERBATIM | Manpage: *"-ngl... either an exact number, 'auto', or 'all' (default: auto)"* |
+| op-offload: umbral 32 tokens default; `-ub` amortiza copias; ik usa 32×total/activos (§17, §13) | ✔ VERBATIM | Doctor-Shotgun: *"the default required batch size to trigger this operation is 32 tokens, while in ik_llama.cpp, this threshold is 32 * total_experts / active_experts tokens"*; recomienda `-b 4096 -ub 4096` (nuestra regla: NO copiar sin medir en 4 GB queda en pie) |
+| "Solo -fa y -ub compran velocidad cuando el modelo cabe" (§14, §17) | ✔ VERBATIM | openclawdc (en ambas guías) y coherencia total con el CSV propio [M] |
+| Cliff silencioso 5090: 54/64.5/69.4/27.5 (N4 §13, citado aquí) | ✔ VERBATIM | openclawdc leído hoy con los 4 números exactos y la causa *"the allocation silently falls back to system memory"* |
+| Sysmem Fallback Policy (driver 546.01, Oct-2023) y mecánica WDDM (§11.1) | ✔ EXISTE (mecanismo) | La mecánica del spill silencioso WDDM queda hoy triple-fuente: issue #9964 (*"pushed to shared GPU memory... incredibly slow due to memory speed"*), openclawdc y guías dedicadas; la KB a_id/5490 y el foro Crovella quedan de las lecturas de ronda 3 |
+| GUIDs powercfg 8c5e7fda/381b4222/e9a42b02 (§11.2) | ◻ | Documentación MS de ronda 3; sin cambios |
+| v0.7.0: chat session API, restore de slots/prompt-cache "mucho mejor", puerto 9931, mtmd en MTP (§15) | ✔ VERBATIM | Notas oficiales leídas hoy: *"The server gets a refactored chat session API (common_chat_session, part-based formatted output), much better slot and prompt-cache restore behavior... a new default port (9931)"* |
+| SPEED-Bench en master (§15) | ◻ | Registrado ronda 7; no re-buscado hoy |
+| Timeline b11747/b11552/b11456/b11869/b11888 (§13) | ◻ | De release history ronda 5; coherente con las fechas 0.6.0=05-Oct y 0.7.0=15-Oct re-confirmadas hoy |
+| thc1006 v4: 3002 arm-runs, varianza 9.4 pp, checker anti-drift, commit 3737e4137 (§13) | ✔ VERBATIM | Repo leído hoy: *"llama.cpp speculative decoding measured on one RTX 3090, Qwen3.6-35B-A3B UD-Q4_K_XL, commit 3737e4137. Published figures are re-derived from the committed data by a checker that fails on drift"*; discusión #14 de unsloth muestra las líneas "skipping speculative decoding" y el cross-check en master bcb5eeb64 |
+
+### 18.4 Estado [M]/[T] y protocolo
+
+- **[M dump b11856]**: defaults (32/slot, 8192, cache-ram 8192, prio 0, poll 50, fit ON/fitt 1024, cache-reuse 0, shift OFF, n-max 16, p-min 0.75, -cd/-ctkd/-ctvd presentes) — respaldados por la doble lectura dump+manpage donde el flag existe en ambas; los defaults específicos del build siguen siendo autoridad local (la manpage es de master).
+- **[M CSV]**: ORO-UB1K +26.5% prefill, CRAM512/SHIFT neutros, afinidad −9..−38% — datos propios, intocados; la regla "mediana de 3, baseline matcheado, no perseguir <5pp" queda respaldada por el estudio v4 (varianza 9.4 pp) y por el benchmark ajeno MXFP4 (misma forma n2>n3>n4).
+- **Protocolo SIN cambios**: combo ganadores + curl protocol + `-ctxcp 4` + traducción `-lm` obligatoria tras RUTA 0.
+
+*Referencias de esta auditoría: github issues #21831 (con análisis asg-3d), #20225, #25345, #23268, #9964, #24055; github discussion #20574; particula.tech (blog completo); reddit 1qzitx1, 1sprdm8; xhinker Medium (MTP bug); vLLM issue #38182; thc1006/qwen3.6-speculative-decoding-rtx3090 y unsloth discussion #14; benchmark MXFP4 24GB (comentario público); openclawdc flags-explained y moe-offload-flags; Doctor-Shotgun HF blog; manpages.debian.org llama-server.1; notas oficiales v0.7.0; discusión #25198.*

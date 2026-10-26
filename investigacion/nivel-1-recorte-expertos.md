@@ -368,3 +368,69 @@ La sexta ronda trae la primera batería de números de PRODUCCIÓN del `--moe-ca
 - **Dosis de fase D: SIN cambios** — NCM37C4 + D-MEC-0/512/1024 + escalera EXP6→4→3 se mantienen íntegras. Único añadido opcional: el run autenticador cruzado `-ot` del punto 3.
 
 *Referencias nuevas: llmkube.com/blog/hybrid-moe-offloading-qwen-36-deltanet (18-Abr-2026, el 5x de -cmoe y la clasificación); huggingface.co/blog/Doctor-Shotgun/llamacpp-moe-offload-guide (mecánica -ot, prioridad de reglas, op-offload); github ggml-org/llama.cpp PR #11397 (origen de -ot), discussions #13154, #22183; manpages.debian.org/unstable/llama.cpp-tools/llama-server.1 (sintaxis comas); reddit r/LocalLLaMA 1v4gzc4 (3090 A/B), 1tany5t (PP 5.5x), 1nyxmci (8GB, snippet); github ikawrakow/ik_llama.cpp issue #1699 (fork vs mainline con el 3.6); github discussion #30426 (Omni en 1060 6GB); huggingface.co/DJLougen/Qwen3.6-35B-A3B-REAP-90pct-GGUF (card completa, piso IQ1_S); github hanxiao/Qwen3.6-35B-A3B-MTP-L4 (escalera -ncmoe); dump b11856 del Director (L108-118: -ot, -cmoe, -ncmoe "first N", -ngl auto; L323: -otd) [M].*
+
+
+---
+
+## 19. ANEXO — Décima ronda: AUDITORÍA DE RESPALDO RIGUROSO punto a punto (2026-10-26)
+
+Orden del Director: "respalda cada punto de los 4 archivos, de forma rigurosa". Método: re-verificación independiente de los puntos [F] contra fuente primaria (40+ búsquedas frescas y lectura directa de las páginas citadas), re-chequeo de los [M] del dump contra la manpage Debian de llama-server (segunda fuente del mismo texto, independiente del dump), y consistencia interna de los [M] CSV y las [T]. **Resultado global del nivel 1: 0 puntos refutados; ~20 confirmados verbatim; 2 matices de precisión; dosis de fase D SIN cambios.**
+
+Veredictos usados abajo: **✔ VERBATIM** = re-encontrado hoy con las mismas cifras/texto en la fuente; **✔ EXISTE** = fuente confirmada viva hoy (detalle fino no visible en el snippet pero registrado en rondas previas con URL); **⚠ MATIZ** = confirmado con precisión a añadir; **◻** = no re-buscado hoy (respaldo original en pie).
+
+### 19.1 Evidencia académica y de poda
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| MoE-Spec ~95% calidad @2.0× en Qwen3-30B-A3B, el más favorable de los evaluados (§0, §3.1) | ✔ VERBATIM | arXiv 2602.16052v1 (17-Feb-2026): *"Qwen3-30B-A3B shows the most favorable tradeoff, maintaining approximately 95% quality even at 2.0× speedup with tight error bars"* |
+| REAP retiene 97.6% coding / 96.7% SWE-Bench a 50% de poda (§3.2, §11.3) | ✔ VERBATIM + ⚠ | Blog Cerebras (16-Oct-2025): *"with the Qwen3-480B-Coder-FP8 model, REAP at 50% pruning retains 97.6% of its baseline non-agentic coding ability and 96.7% on the agentic SWE-Bench benchmark"* — MATIZ de precisión: las cifras son del **480B-Coder**, no del 30B; nuestro texto no especificaba modelo |
+| Not All Experts are Equal (ACL 2024), REAP arXiv 2510.13999, repo CerebrasResearch/reap (§3.2) | ✔ EXISTE | arXiv y GitHub del repo confirmados vivos hoy; paper evalúa EvalPlus/LiveCodeBench/SWE-Bench Verified con mini-SWE-agent (método leído hoy) |
+| Cola larga 2604.23036, Shapley-MoE, C-PRUNE (§3.2) | ◻ | No re-buscados individualmente hoy; la tesis "routing skew" la re-confirma por otro camino el dato Gini 0.76 de #20757 (abajo) |
+| El override NO renormaliza pesos → truncation implícita (§1, §7) | ◻ (apoyado hoy) | El mecanismo sigue sin contradicción en ninguna fuente re-visita; la guía oficial de unsloth de expert_override no lo desmiente |
+
+### 19.2 El override-kv: clave, autenticación y estado del flag dedicado
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| `--override-kv llama.expert_used_count=int:3` imprime `n_expert = 8` / `n_expert_used = 3` en el log (§12.2) | ✔ VERBATIM | Discusión #5114 (Ene-2024, marcada como respuesta): las DOS líneas de log literales, idénticas a las registradas; además hilo reddit de Mixtral y tutos japoneses (DeepSeek-V3 k8→2-4 sube 18→22-25 t/s; k=1 rompe la generación) = la escalera EXP tiene 2 validaciones externas más |
+| Issue #19528 (`--expert-override`/`--moe-topk`) cerrado not-planned; override-kv es LA vía (§12.3) | ✔ EXISTE | El issue está vivo en GitHub (11-Feb-2026, "Add a command-line flag --expert-override or --moe-topk..."); estado not-planned registrado en ronda 3 |
+| Discusión #30155: override k10→7 da +29% t/s y hit-rate de cache 50→80% (§3.3, §11.2) | ✔ EXISTE + ⚠ | La discusión está viva hoy; MATIZ de precisión: el título real es *"Is it reasonable to override **qwen4exp**.expert_used_count"* — el arch de esa discusión es `qwen4exp` (MoE de la familia 4), no un genérico; las cifras 35→45 t/s quedan de la lectura de ronda 1 |
+| Clave correcta = `<arch del GGUF>.expert_used_count` con comas en un flag (§11.1, §12.1) | ✔ VERBATIM | Manpage Debian llama-server (re-chequeada hoy): `--override-kv KEY=TYPE:VALUE,...` con tipos int/float/bool/str — mismo texto que el dump b11856 [M]: el dump queda respaldado por segunda fuente |
+
+### 19.3 MEC (`--moe-cache-mib`) y la línea evolutiva del cache
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| PR #29887 "GPU cache for MoE experts kept in host memory" + #30112 multi-GPU MERGED (§14, §16) | ✔ VERBATIM | Reddit del PR vivo hoy: anuncio de am17an, *"update #30112 MERGED"*, benchmark del hilo: 3080 10GB Qwen3.6-35B-A3B ~35→40 t/s; con `-cmoe` + `--moe-cache-mib`: **47 t/s gen y prefill 500 (desde 350)** = exactamente las cifras 35→47/350→500 registradas en §14 |
+| v0.7.0 oficializa MEC: ~2.2x decode, `moe_cache_size` en llama.h (§16) | ✔ VERBATIM | Notas de release v0.7.0 (15-Oct-2026, espejo SourceForge leído hoy): *"a new GPU cache for MoE experts kept in host memory (--moe-cache-mib, up to ~2.2x decode speedup when experts are offloaded)"* + *"The expert cache is now shared across multiple GPUs [#30112]"* + API `moe_cache_size` |
+| Gate de batch que excluía verificación especulativa del cache + opt-in posterior (§15) | ✔ VERBATIM | Reporte dual-6950XT (freenode, 04-Sep-2026): *"a single-token gate blocked the cache on small speculative-verification batches, turning multi-token drafting into a loss on a weak host. An opt-in token limit restores cache use"*; escalera 8.2 → 12-13 (85%) → 17.4-17.8 (92%) → 18.9-19.1 t/s (93%) = verbatim a §15/§14 |
+| PoC #20757 martinalderson: overlap 44%, Gini 0.76, hit-rate 47→67%, SAM bypass +55% prefill, sin SAM el MoE-GPU EMPEORA (9 vs 28) (§14) | ✔ VERBATIM | Issue leído hoy: todos los números y hasta la tabla (27.9 → 35.1 t/s) y la perplexity "identical within error bars" coinciden al carácter |
+| RFC #28248 pool persistente NO fusionado (§14) | ✔ EXISTE | Vivo hoy (06-Sep-2026); menciona la copia selectiva de expertos de #15346 como base |
+| Sinergia MEC×MTP GLM +28%→+51% (§15, RFC #24528 fork Lidenburg) | ✔ EXISTE | RFC vivo hoy (12-Jun-2026) con el fork Lidenburg enlazado; cifras GLM de la lectura de ronda 6 |
+| Thrash del cache chico: 600 MiB = −48% (28→14.5 t/s) (§15) | ◻ | Registrado ronda 6 desde el hilo de #29887; el hilo sigue vivo; el dato CUvinny del mismo hilo (9070XT: cache 8000 MiB = 76.9 t/s, 12000 = 42.6, pp se degrada antes) AÑADE hoy otra muestra de que el tamaño y el prefill importan |
+| 5070Ti UD-Q4_K_XL: 83.27 / 116.64 / 143.43 t/s con MEC 7-9 GiB (§15) | ✔ EXISTE | note.com/high_u citado y leído en ronda 6; no re-abierto hoy — el punto crítico (escala 7-9 GiB >> nuestros 512-1024 MiB) es matemática propia [T] |
+| b11888: fix de profundidad recursiva en grammar (§15) | ◻ | De release notes de ronda 6; irrelevante para dosis (sin GBNF) |
+
+### 19.4 Offload, -ot, fork ik y cross-checks de producción
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| `-ot "exps=CPU"` NO matchea `shexp` → shared/atención/KV quedan en GPU (§18) | ✔ VERBATIM | Guía Doctor-Shotgun leída hoy: *"Attention + Dense FFN + Shared expert FFN on the GPU along with the model's k/v cache and compute buffer. The remaining Routed expert FFN are all assigned to the CPU"* |
+| Primera regla que matchea gana; comas oficiales; repetir `-ot` deprecado (§18) | ✔ VERBATIM | Misma guía: *"The first statement takes priority"* + *"Multiple -ot expressions are officially recommended to be provided as a comma-separated list, rather than specifying the -ot argument multiple times, which is deprecated"*; manpage Debian solo documenta comas |
+| `-ncmoe` = "first N layers" (dump L113) vs "highest numbered" (Doctor-Shotgun) (§18) | ✔ VERBATIM (ambas fuentes) | Manpage Debian: *"keep the MoE (MoE) weights of the first N layers in the CPU"* = dump; la guía mantiene su nota *"starts counting layers starting from the highest numbered layers"* → la contradicción es real y nuestra resolución (irrelevante en 40/40 MoE, run autenticador cruzado) queda la vía correcta |
+| `-cmoe` REGRESA 5x cuando el modelo cabe (107.8 vs 21.7) (§18) | ✔ EXISTE (tesis VERBATIM) | Blog llmkube vivo hoy (18-Abr-2026) con título tautológico del punto: *"Why Qwen 3.6 Doesn't Need --cpu-moe"*: *"Because the model fits in VRAM without any offloading, the 'VRAM savings' that --cpu-moe normally trades for is not needed. Enabling it anyway..."*; cifras del box dual-16GB de la lectura de ronda 9 |
+| 3090: -cmoe 27.8-31.6 vs auto/parcial 47.8-55.4 (~1.7x) (§18) | ✔ EXISTE | Reddit 1v4gzc4 registrado ronda 9 |
+| ik_llama.cpp −2x PP / −1.5x TG con el 3.6 (§18) | ✔ VERBATIM | Issue #1699 vivo hoy (27-Abr-2026): *"ik_llama.cpp is ~2x slower on prompt processing (PP) and ~1.5x slower on token generation (TG) compared to mainline llama.cpp. Model Qwen3_6-35..."*; hilos hermanos (reddit Qwen3.5, discusión 1737) confirman el patrón |
+| #30426 Omni-30B en 1060 6GB: ~2.4 GB VRAM backbone+visión, 18.5 GB RAM, 16.2 t/s, PP 270 (§18) | ✔ VERBATIM | Discusión leída hoy (MIThriade, 12-Oct-2026): tabla de hardware y todos los números coinciden; comando `-cmoe -ngl 99 -c 4096 -t 8` |
+| Piso GGUF IQ1_S 1.66 GB; REAP-90 "meme, mostly incoherent" (§18) | ✔ VERBATIM | Card DJLougen leída hoy: *"This is a 90%-expert-pruned model. It loads, it streams tokens, and the tokens are mostly incoherent — more so at IQ1_S than Q4_K_M"* |
+| Dato hermano 8GB (17.6-29.2 t/s) (§18) | ✔ EXISTE + refuerzo | Encontrado hoy además: mdda.net (11-May-2026) corre el 3.6 en GTX 1080 8GB con `--n-cpu-moe` y concluye *"PCIe maxed out + GPU half-idle = bandwidth-limited"*; reddit 4060 8GB+96GB RAM con el 3.6 en marcha — el régimen bandwidth-bound queda corroborado por 2 fuentes más |
+| KV del 3.6 modesta por diseño (solo 10 capas GA) (§18, coherencia) | ✔ VERBATIM (corroboración) | Reddit dual-5060Ti: *"Qwen 3.6's DeltaNet hybrid attention keeps the KV cache small enough that offloading solves a problem that doesn't actually exist here"* |
+
+### 19.5 Estado [M] y [T] del nivel
+
+- **[M dump b11856]** (`-ot` L108, `-otd` L323, `-ncmoe` "first N" L113, `-ngl` auto L116, `--moe-cache-mib` default 0, `-lm` modos, `-lzm` >4GiB): **TODOS los textos del dump coinciden palabra por palabra con la manpage Debian de llama-server re-leída hoy** — el dump deja de ser fuente única y pasa a estar respaldado 1:1 por segunda fuente independiente.
+- **[M CSV barrido-30]** (familia EXP plana, NCM37C4 22.49, FIT-A 22.40): datos propios; la auditoría no los toca. El test de coherencia §11.4 (k=4 debe subir ~15-17% si la dosis vive) sigue siendo el árbitro.
+- **[T] modelo de banda** (~32 GB/s efectivos): reforzado hoy por mdda.net (mismo régimen bandwidth-bound en PCIe 3.0) y por la clasificación openclawdc "f16 KV más rápido que q8_0 cuando cabe" (consistente con KVQ51=0%).
+- **Dosis fase D: SIN CAMBIOS** — NCM37C4 + D-MEC-0/512/1024 + escalera EXP6→4→3 + run autenticador cruzado `-ot` se mantienen íntegras.
+
+*Referencias de esta auditoría: arXiv 2602.16052v1; blog Cerebras REAP y repo CerebrasResearch/reap; discusiones #5114, #30155, #20757, #28248, #24528, #30426; issue #19528 e ik_llama.cpp #1699; reddit PR #29887 (con #30112 MERGED), 1v4gzc4, dual-5060Ti, 4060-8GB; freenode dual-6950XT; notas oficiales v0.7.0; manpages.debian.org llama-server.1; Doctor-Shotgun HF blog; openclawdc flags-2026; llmkube deltanet; mdda.net GTX-1080; DJLougen card; note.com high_u y aisatoshi.*

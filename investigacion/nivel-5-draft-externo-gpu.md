@@ -208,3 +208,45 @@ Existe ahora un estudio público y riguroso SOBRE NUESTRO MODELO EXACTO: repo `t
 - **Sin cambios en dosis S:** la dosis v6 de §13 (arrastre 2-3, conf-min como A/B tras RUTA 0) queda intacta; esta ronda aporta producción ajena que calibra expectativas por escala de VRAM (12GB: 80+ t/s con acc 80%+; L4: 90-99; 3090: 48-55 parcial).
 
 *Referencias nuevas: github hanxiao/Qwen3.6-35B-A3B-MTP-L4 (escalera -ncmoe con MTP y flags completos); reddit r/LocalLLaMA 1t82zxv (12GB, snippet), 1v4gzc4 (3090 MTP-MXFP4); github ikawrakow/ik_llama.cpp issue #1699.*
+
+
+---
+
+## 17. ANEXO — Décima ronda: AUDITORÍA DE RESPALDO RIGUROSO punto a punto (2026-10-26)
+
+Auditoría del Director aplicada al nivel con mayor superficie especulativa: re-verificación independiente de sidecars, mecanismos y tablas. **Resultado: 0 puntos refutados; la mecánica DSpark, la tablas del estudio v4 y la regla n2 quedan triple-fuente; 1 matiz de linaje del sidecar DSpark (discusión #26230) + 1 dato de estado nuevo (PR #26275); dosis v6 SIN cambios.**
+
+### 17.1 Sidecars DFlash / DSpark / EAGLE3
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| williamliao/Qwen3.6-35B-A3B-DSPARK-GGUF existe, base Koopah NVFP4-DSPARK, cuants IQ4_XS..Q8_0 (§13, §15) | ✔ VERBATIM | Card leída hoy: *"GGUF conversion of DSpark speculative-decoding draft model... Base model: Koopah/Qwen3.6-35B-A3B-NVFP4-DSPARK. Target model: Qwen/Qwen3.6-35B-A3B"* + secciones de benchmark DSpark max 2/3/5 vs DFlash max 7 |
+| DFlash max 7 = rey de código; DSpark max 3 default generalista; accept sola no predice throughput; confidence truncation dinámica (§13) | ✔ VERBATIM | Misma card: *"DFlash max 7 is the strongest overall speculative-decoding configuration"*, *"Acceptance rate alone is not sufficient to predict throughput; draft cost, accepted depth, and the number of speculative rounds also matter"*, sección *"Dynamic confidence truncation"* — tres frases-título idénticas a nuestras conclusiones |
+| Mecánica DSpark = DFlash + cabeza Markov semi-autorregresiva in-graph, término low-rank keyed en el token previo (§14) | ✔ VERBATIM | docs/speculative.md master leída hoy: *"DSpark extends DFlash with a semi-autoregressive Markov head: the draft still emits a whole block per forward pass, but each block position's logits are biased by a low-rank term keyed on the previous token, chained in-graph across the block"* |
+| Soporte DSpark en llama.cpp (§14: PR #25173, flag `--spec-draft-conf-min`) | ✔ VERBATIM + ⚠ dato nuevo | La card williamliao añade el dato de integración: *"Support for DSpark-format speculators is being added to llama.cpp in ggml-org/llama.cpp#26275. Until merged, use a build compiled from the PR branch"* → la familia de PRs de soporte es #25173/#26275; refuerza que la dosis S2 exige RUTA 0 a un build posterior |
+| Linaje del sidecar 35B: "incluye un fix para hybrid-GDN state commit NO presente en el DFlash original" (Koopah) (§13) | ✔ EXISTE + ⚠ matiz | La card Koopah (viva hoy, con v2 publicada: *"batch throughput near 700 tok/s aggregate"*) mantiene la afirmación del fix; MATIZ de linaje registrado hoy en la discusión #26230 (18-Oct-2026): *"the 35b variants are the z-lab's DFlash draft model with bolted on Markov and confidence heads, not DSpark draft models trained from scratch"* → el sidecar es DFlash+heads (warm-start), exactamente como describe nuestra §13, pero la comunidad lo matiza explícitamente; el spot-check ES sigue siendo el árbitro |
+| EAGLE3-Caption de EntityDeletr (517 MB, COCO, Jul-2026) (§2, §10) | ✔ EXISTE | Card viva hoy (01-Jul-2026): *"This is an Eagle3 draft model derived from the open-source Qwen/Qwen3.6-35B-A3B"*, cuantizado desde PatchyTisa; la cifra 83% queda de la lectura de ronda 0 (dominio captions) |
+| EAGLE3 en target híbrido tiene historial de bugs (#24541) → S3 solo fallback (§12-14) | ✔ EXISTE (contexto) | Issue #24541 vivo hoy (12-Jun-2026, *"EAGLE3 with Qwen3.6 (qwen3_5 hybrid) target"*): la conversión funcionaba pero el runtime fallaba en el híbrido — coherente con relegar EAGLE3 a fallback |
+| LiliCorr: coseno in/out sobre DFlash, merge 15-Oct #30506 (§14) | ✔ VERBATIM | arXiv 2608.20530 leído hoy: *"LiLiCorr, a Lightweight Likelihood-based cosine similarity... We co-train the DFlash drafter with LiLiCorr, so it learns to propose candidates that correlate into longer accepted sequences"*; notas v0.7.0: *"LiliCorr speculative decoding: candidate selection with a small draft transformer on top of DFlash [#30506]"* |
+| #27210 MTP adaptativo NO fusionado (§14) | ✔ EXISTE | El hilo de la propuesta sigue vivo (reddit *"New: Llama.cpp adaptive speculation"*); no aparece en docs master de hoy → sigue sin fusionar |
+| AngelSlim/Qwen3-a3B_eagle3 en la lista oficial EAGLE3 (§14) | ◻ | De docs master ronda 7; el anuncio "The Eagle(3) has landed (for Qwen)" sigue vivo hoy |
+| Jetson AI Lab: n-max arranca bajo, advertencia MoE de la verificación paralela (§14, N1 §16) | ✔ EXISTE | Tutorial vivo hoy con los flags `--spec-type draft-mtp --spec-draft-n-max 3` (13→35 t/s en AGX Thor); la advertencia MoE registrada ronda 7 |
+
+### 17.2 El régimen en que paga el spec (tablas y orden)
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| thc1006 v4: DFlash-n2 +26.3% > MTP-n2 +22.7% >> draft externo denso −73/−74%; accept cae 72→55% n2→n4 (§12) | ✔ VERBATIM (triple) | (1) Repo oficial leído hoy (checker anti-drift, commit 3737e4137, UD-Q4_K_XL, 3090); (2) benchmark ajeno MXFP4 24GB replica la forma: n2 +22%/acc 76.1%, n3 +8%, n4 −4%; (3) test ajeno del 27B: MTP ~2.7x, DFlash ~3.7x (coding) — mismo orden en 3 fuentes |
+| S6 draft-simple (Qwen3.5-0.8B) NO-GO: −73% incluso en GPU (§12) | ✔ EXISTE | La tabla v4 del repo oficial contiene los modos draft-n8/n1; el vocab 248,320 del 0.8B (ronda 4) sigue documentado |
+| Full-GPU el spec interno TAMBIÉN gana (errata v1 sustituida por v4) (§12) | ✔ VERBATIM | Repo + discusión #14: las líneas *"skipping speculative decoding"* explican los "bimodal tails" de la v1; cross-check A100 vLLM −11.4% con flags matcheadas → la lección de medición queda ratificada |
+| MoE bandwidth-bound es donde MÁS paga el verify de bloque (§11, §12) | ✔ VERBATIM (corroboración) | mdda.net (GTX 1080): *"PCIe maxed out + GPU half-idle = the system is bandwidth-limited... speculative decoding when it works"* listado como palanca válida; Cohere blog: la intensidad aritmética baja del MoE hace no-monótona la curva de speedup |
+| MTP bandwidth-pobre paga más (L4 +45-57% vs 3090 +22.7%) (§13, §16) | ✔ EXISTE | Repo hanxiao vivo (frase del auto-fit verificada hoy); reddit 12GB 80 t/s acc 80%+ leído hoy verbatim; reddit 3090 MXFP4: parcial > full con nextn en los pesos |
+| -np>1 y mmproj no soportados con spec (§4, N2 §13.5) | ✔ VERBATIM | Discusión #3 del repo MTP (también re-confirmada hoy); caso visual fallido con spec en reddit (1wigxje) |
+
+### 17.3 Estado [M]/[T] y dosis
+
+- **[M dump b11856]**: cero dflash/dspark/eagle3/mtp en el dump; enum sin draft — RE-CONFIRMADO como el gate de toda la fase S/E (la card williamliao exige PR #26275 para DSpark: b11856 no basta ni para sidecars). RUTA 0 a b11901 sigue siendo el blanco.
+- **[T] techo ×1.8-2.5 con p 0.7-0.8**: la triple réplica de la forma n2>n3>n4 (v4, MXFP4, 27B-test) y el acc 76-80% externo sitúan el rango en pie; el dato 4GB/Turing sigue [N/D] (será dato propio tras RUTA 0).
+- **Dosis fase S v6 SIN CAMBIOS**: S1 = MTP n2 → S2 = DSpark Q4_K_M (307 MB, SHA256 `a3542c05…`) n2/n3 (+A/B conf-min 0.5-0.7) → S2b = DFlash Q8_0 n2 → S3 = EAGLE3 fallback. Regla de oro intacta: solo GGUF sidecar oficiales, n-max ∈ {2,3}, mediana de 3, spot-check ES.
+
+*Referencias de esta auditoría: HF williamliao/Qwen3.6-35B-A3B-DSPARK-GGUF (card completa) y Koopah NVFP4-DSPARK-v2; docs/speculative.md master; github discusión #26230, PR #26275 (referenciado en card), issue #24541, #27210; arXiv 2608.20530 (LiLiCorr); notas oficiales v0.7.0; jetson-ai-lab speculative-decoding; thc1006/qwen3.6-speculative-decoding-rtx3090 + unsloth discussion #14; reddit 1uyg3za (27B all-methods), 1t82zxv, 1v4gzc4, 1wigxje; comentario público benchmark MXFP4 24GB; mdda.net; EntityDeletr card.*

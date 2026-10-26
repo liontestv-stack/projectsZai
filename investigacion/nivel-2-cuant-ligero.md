@@ -341,3 +341,49 @@ Cambio de inventario que afecta DIRECTAMENTE al plan de descarga del proyecto: e
 - **Sin cambios en el veredicto del nivel:** UD-IQ3_XXS (14,069,266,720 B, SHA256 `36f9ec0e…`) sigue siendo la descarga objetivo; el apunte de esta ronda es de encuadre (piso físico + cierre de la poda extrema), no de plan.
 
 *Referencias nuevas: huggingface.co/DJLougen/Qwen3.6-35B-A3B-REAP-90pct-GGUF (card completa con piso IQ1_S y nota del autor); huggingface.co/0xSero/Qwen3.6-35B-GGUF.*
+
+
+---
+
+## 20. ANEXO — Décima ronda: AUDITORÍA DE RESPALDO RIGUROSO punto a punto (2026-10-26)
+
+Auditoría del Director ("respalda cada punto de forma rigurosa") aplicada a este nivel: re-verificación independiente de los puntos [F] contra fuente primaria hoy. **Resultado: 0 puntos refutados; la frontera localbench y el comando del proyecto quedan confirmados verbatim; 1 matiz resuelto a favor del registro (headroom MTP ~1 GB).**
+
+### 20.1 La frontera de calidad y la marca (§0, §2, §12)
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| localbench midió 64 cuants de 6 uploaders contra BF16 (~250K tokens de tareas reales); unsloth 14/26 posiciones de frontera; mudler/APEX y lmstudio NUNCA en frontera (§0.2, §2) | ✔ VERBATIM | Post de oobabooga (20-Abr-2026) leído hoy: *"64 GGUF quants from 6 uploaders"* con la lista exacta de repos (unsloth 22, bartowski 27, lmstudio 3, ggml-org 1, mudler 7, AesSedai 4); *"unsloth dominates: 14 of 26 frontier positions"*; *"lmstudio-community and mudler (APEX) never appear on the frontier"* |
+| El 3.6 cuantiza MEJOR que el 3.5 (Q8_0 KL 0.069 vs 0.121); tool-calling peor categoría (KL 0.177 a Q8_0); IQ1_M retiene 86.9% top-1 (§2) | ✔ VERBATIM | Mismo post: *"Qwen 3.6 35B A3B quantizes significantly better than its predecessor... Q8_0 has KL 0.069, compared to 0.121"*; *"Tool calling is the worst category at Q8_0 (KL 0.177), worse than long documents (0.121)"*; *"Even at UD-IQ1_M (10.0 GB), the model retains 86.9% top-1"* |
+| KLD se mide con tareas reales, no Wikipedia; calibración infla (§1) | ✔ VERBATIM | Página de benchmarks unsloth (Mar-2026): *"Perplexity and KLD can be misleading as they're highly influenced by calibration. Most GGUFs are evaluated on Wiki-test"* — y localbench declara ~250K tokens de coding/chat/tool-calling/ciencia/no-latin/long-docs |
+| Unsloth domina el ranking del 3.6 (§2, §10) | ✔ VERBATIM (2ª fuente) | Reddit r/unsloth: *"Unsloth ranks first in 21 of 22 model sizes"*; hilo r/LocalLLaMA 1so5nrl exacto al citado en §11 |
+| unsloth quita el MTP de los cuants pequeños (§1, §3) | ✔ VERBATIM | Reddit Dynamic 3.0: *"We also removed the MTP module from smaller quants under UD-Q2_K_XL (8.37GB and lower)"* — coincide con el patrón registrado (solo ≤Q2 lo pierde; IQ3_XXS lo lleva) |
+| GSQ-RCO: 27B denso a 11.8 GB; método Gumbel-Softmax + escalas por grupo; familia probada en 3.8, sin 3.6 (§15-17) | ✔ VERBATIM | MindStudio (08-Sep-2026): *"ISTA's Das Lab shrank Qwen3.8-27B to 11.8GB"*; card modelscope: *"jointly learns the per-coordinate grid assignments and the per-group scales via a Gumbel-Softmax relaxation"*; review japonés independiente (note.com zephel01) corrió las 8 configuraciones del 27B GSQ-RCO (IQ2_XS..IQ3_S ±MTP) y confirma la solidez de la familia — sigue SIN variante 3.6-35B |
+| FR-Spec / #25187: d2t, rama avifenesh NO fusionada (§13.8) | ✔ VERBATIM | Issue vivo hoy (30-Jun-2026, *"FR-Spec-style draft-vocab trimming for native MTP"*, d2t tensor, verificación independiente del trim en Qwen3.8-27B); blog Avifenesh (17-Ago-2026) confirma el origen ACL 2025 |
+
+### 20.2 El candidato de descarga y su autenticador (§3, §12-18)
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| Repos unsloth del 3.6 (normal y MTP) disponibles; UD-IQ3_XXS objetivo; escalera al byte (§3, §12.1, §16-17) | ✔ EXISTE | Ambos repos viven hoy en HF (y espejos modelscope); tamaños y SHA256 verificados por API en rondas 6-8 (byte a byte, snapshot 2026-10-26); sin cambios visibles hoy |
+| Restricciones oficiales MTP: `-np > 1` y `--mmproj` no soportados (§13.5) | ✔ VERBATIM | Discusión #3 del repo MTP: *"-np > 1 and --mmproj are not yet supported with MTP"* |
+| Claim del uploader "1.5-2× sin pérdida de accuracy" (§13.5) | ✔ VERBATIM (actualizado) | Guía oficial MTP unsloth hoy: *"~1.4-2.2x faster generation with no change in accuracy"*; tuit de danielhanchen: *"Unsloth GGUFs now run 1.8x faster"* — el rango 1.4-2.2 envuelve nuestro techo conservador 1.28-1.4 [T] |
+| `--spec-draft-n-max 2` mejor punto de partida, probar 1-6 (§12.4) | ✔ VERBATIM | Guía oficial: *"We found --spec-draft-n-max 2 to work best in most setups. However, do not assume 2 is optimal... Try values from 1 through 6"* |
+| Headroom MTP ~1 GB (§12.4) | ✔ VERBATIM | Guía Qwen3.6 hoy: *"MTP uses slightly more VRAM than standard GGUFs, so plan for ~1 GB additional RAM/VRAM headroom"* — nota: una página general de unsloth habla de ~2 GB para MTP en general; la guía ESPECÍFICA del 3.6 dice ~1 GB → nuestro registro queda respaldado por la fuente específica |
+| Tabla de requisitos: 35B-A3B 3-bit = 18 GB combinados (§12.3) | ✔ VERBATIM | Tabla de la guía MTP: **35B-A3B / 3-bit = 18 GB** (rig: 16 RAM + 4 VRAM = 20 ✓) |
+| 240 t/s del 35B-A3B en RTX 6000 (§12.4) | ✔ VERBATIM | Guía: *"Qwen3.6 35B-A3B at 240 tokens/s on a RTX 6000 GPU"* |
+| CUDA 13.2 genera gibberish en low-bit (§12.5) | ✔ VERBATIM | Docs oficiales Qwen3.6 hoy: *"Do NOT use CUDA 13.2 as you may get gibberish outputs"* |
+| ctx nativo 262,144; presence_penalty hasta 1.5 en instruct (§13.5 nota) | ✔ VERBATIM | Docs Qwen3.6: *"Maximum context window: 262,144 (can be extended to 1M via YaRN)"*; tabla instruct: presence_penalty 1.5 para general |
+| Vocab-trim NO viable (Q4_K_S 20.07 GB, no 3-bit) (§13.3) | ✔ VERBATIM | Card HF de Elsephire viva hoy: instrucciones de uso por defecto con **Q4_K_S** y nota *"Cuts file size by 10.33%"* — confirma que el artefacto publicado es Q4_K_S (no 3-bit) y que el ahorro es modesto |
+| REAP-50 del 3.6: Q4_K_M-imat / Q5_K_M-imat (§13.4) | ✔ EXISTE | Repo anik-jha vivo hoy con ambas variantes imat listadas |
+| 2-bit agéntico funcional: 30+ tool calls, 13 GB RAM (§14) | ✔ VERBATIM | Post r/unsloth vivo hoy con ese titular exacto, ahora también citado en la doc oficial de unsloth |
+| Piso físico IQ1_S 1.66 GB; REAP-90 incoherente (§19) | ✔ VERBATIM | Card DJLougen leída hoy (verbatim en N1 §19.4) |
+| 0xSero sin adoptar (§19) | ◻ | Vigilancia pasiva; sin cambios |
+
+### 20.3 Estado [M]/[T]
+
+- **[M]** tamaños/SHA256 por API HF (rondas 6-8): método validado (lfs.oid, no blobId); el árbol se re-chequeó en ronda 8 y no hay indicios hoy de renombrados nuevos.
+- **[T]** +8% t/s por −7.5% de bytes: apoyado por el modelo de banda de N1 (§19.5 de ese archivo) y por la física bandwidth-bound corroborada hoy por mdda.net.
+- **Dosis de descarga: SIN CAMBIOS** — UD-IQ3_XXS 14,069,266,720 B, SHA256 `36f9ec0e…7150`, sigue siendo la descarga principal; escalera RAM IQ2_XXS-MTP/IQ1_M-MTP intacta.
+
+*Referencias de esta auditoría: localbench.substack.com (oobabooga, 20-Abr-2026); unsloth.ai/docs/models/qwen3.6 y /docs/models/mtp y /gguf-benchmarks; HF unsloth/Qwen3.6-35B-A3B-GGUF (discusión #10), MTP-GGUF (discusión #3), Elsephire vocab-trim, anik-jha reap50, DJLougen REAP-90, ISTA-DASLab GSQ-RCO + modelscope + mindstudio.ai + note.com zephel01; reddit r/unsloth (rankings, Dynamic 3.0, 2-bit agéntico), r/LocalLLaMA 1so5nrl; x.com danielhanchen; github issue #25187 y blog avifenesh.ai.*

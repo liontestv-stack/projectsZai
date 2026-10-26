@@ -198,3 +198,48 @@ D:\llama.cpp\llama-server.exe -m D:\ZLia\models\APEX-I-MINI.gguf -ngl 99 -cmoe -
 - **Sin cambios de dosis:** los presupuestos de §13-§16 se mantienen; esta ronda añade validación externa del suelo backbone y el encuadre del desborde permanente.
 
 *Referencias nuevas: github ggml-org/llama.cpp discussion #30426 (Omni-30B en 1060 6GB: 2.4GB VRAM / 18.5GB RAM / 16.2 t/s); llmkube.com/blog/hybrid-moe-offloading-qwen-36-deltanet (regla del desborde, KV solo de 10 capas Gated Attention); openclawdc.com/blog/llama-cpp-moe-offload-flags-explained (98%→71% RAM con -lm none; mlock con headroom).*
+
+
+---
+
+## 18. ANEXO — Décima ronda: AUDITORÍA DE RESPALDO RIGUROSO punto a punto (2026-10-26)
+
+Auditoría del Director aplicada a este nivel: re-verificación independiente de los [F] hoy + re-chequeo del dump contra manpage. **Resultado: 0 puntos refutados; el mapa VRAM/backbone y el régimen bandwidth-bound quedan cross-validados por 3 fuentes nuevas; 1 novedad de estado (#26038 cerrado not-planned 09-Oct); orden de dosis SIN cambios.**
+
+### 18.1 Mapa de memoria y colocación
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| `-ncmoe` = "first N layers" (dump [M], §3) | ✔ VERBATIM | Manpage Debian leída hoy: *"keep the MoE weights of the first N layers in the CPU"* — segunda fuente independiente del dump |
+| `-ot` se aplica al final, comas, `exps=CPU` deja shared/atención/KV en GPU (§3) | ✔ VERBATIM | Doctor-Shotgun leído hoy (verbatim en N1 §19.4); discusión #13154 registrada en ronda 0/1 |
+| Cliff ×10 por overshoot (12.70→1.28 t/s, #13154 dpmm99) (§3, §9) | ◻ (mecanismo triple-fuente hoy) | La CIFRA exacta no se re-encontró hoy; el MECANISMO (spill silencioso WDDM a "shared GPU memory" con colapso de caudal) queda confirmado por 3 fuentes independientes leídas hoy: issue #9964 (*"pushed to shared GPU memory... incredibly slow"*), openclawdc (5090: 69.4→27.5 *"the allocation silently falls back"*) y guías dedicadas al shared-VRAM crawl. El número exacto queda respaldado por la fuente original de ronda 1 |
+| `--moe-cache-mib` consume la misma VRAM libre; default 0 (§13) | ✔ VERBATIM | Manpage: *"GPU cache size in MiB for the MoE experts kept in the CPU... (default: 0, disabled)"* |
+| 5070Ti: MEC en producción = caches de 7,168 y 9,216 MiB (§14) | ✔ EXISTE | note.com/high_u (ronda 6); escala GiB >> nuestro presupuesto 1.2-1.7 GB — la lectura de techo se mantiene |
+| Thrash cache chico: 600 MiB = −48% (§14) | ◻ | Hilo #29887 vivo; hoy se añadió al acervo otra muestra del mismo hilo (9070XT: 8000 MiB=76.9 t/s, 12000=42.6 t/s, prefill se degrada antes) — refuerza que el tamaño del pool y el ctx mandan |
+| Suelo VRAM backbone ~2.4 GB con visión / ~1.5 GB sin (§17, §8) | ✔ VERBATIM | #30426 leído hoy con la tabla exacta (GTX 1060 6GB: 2.4 GB VRAM, 18.5 GB RAM, 16.2 t/s, PP 270, `-cmoe -ngl 99`) |
+| KV del 3.6 modesta por diseño (solo 10 capas GA con KV) (§17) | ✔ VERBATIM (corroboración) | Reddit dual-5060Ti: *"DeltaNet hybrid attention keeps the KV cache small enough that offloading solves a problem that doesn't actually exist here"* |
+| KV f16 > q8_0 en velocidad cuando cabe (§13) | ✔ VERBATIM | openclawdc: *"f16 KV cache is faster than q8_0 when it fits... Quantized KV is a memory feature, not a speed feature"* |
+
+### 18.2 RAM, pageouts y carga
+
+| Punto (§) | Veredicto | Respaldo re-verificado hoy |
+|---|---|---|
+| `-lm none` (antes --no-mmap): RAM 98%→71% a igual velocidad (§13, §17) | ✔ VERBATIM | openclawdc: *"One community report measured system RAM use dropping from 98% to 71% at the same generation speed after adding this flag (then spelled --no-mmap)"* |
+| mlock solo con headroom; prohibido en este rig (§6, §17) | ✔ VERBATIM | openclawdc: *"it will just fail or starve everything else"* — coherente con nuestra prohibición (14.27 GB de pesos / 16 GB RAM) |
+| `-lm` modos del dump = auto/none/mmap/mlock/mmap+mlock/dio (§6) | ✔ VERBATIM | Manpage Debian idéntica |
+| Expert streaming: ~5 implementaciones, ~2× teórico, no fusionado (§7) | ✔ VERBATIM | shawnmayzes (13-Oct-2026): *"at least five independent approaches as of this writing... one project's discussion cites a roughly 2x throughput improvement from overlapping that I/O with compute... It isn't merged and stable everywhere yet"* |
+| `-ub 64 -b 512` encoge buffers y libera VRAM; ctx máx 56,320; KV 22 KiB/t; ECC off +10% (§14, repo hanxiao) | ✔ EXISTE | Repo hanxiao/Qwen3.6-35B-A3B-MTP-L4 vivo hoy: *"MTP (Multi-Token Prediction) parks several MoE expert layers on the CPU to be safe, and every token routed to a CPU-resident expert pays a big penalty"* (la frase del auto-fit conservador); los números L4 quedan de la lectura completa de rondas 6/9 |
+| #23472: fit ignora la VRAM del MTP → OOM (§15) | ✔ VERBATIM | Título exacto leído hoy: *"Eval bug: -fit on ignoring the VRAM required by the built-in MTP leads to OOM crash"* (cerrado vía #23485) |
+| #26038: sobre-reserva del draft context (~800 MiB, ROCm Qwen3.6-27B) (§15) | ✔ VERBATIM + ⚠ | Issue vivo hoy con ese título; **NOVEDAD de estado: cerrado "not planned" el 09-Oct-2026 tras stale** → el sobre-reserva NO se arreglará pronto; refuerza medir el buffer del draft con el log, no asumir que el fit lo cubre |
+| #26432: GTT fallback silencioso con ctx+MTP → colapso sin error (§15) | ✔ VERBATIM | Título exacto: *"Silent GTT fallback when context + MTP exceeds VRAM — no error at load, massive throughput collapse at runtime"* (not planned) — el "aceptación normal pero t/s desplomado" queda como señal de alarma confirmada |
+| 12GB: 80+ t/s con acceptance 80%+ (N5 §16, cross-ref) | ✔ VERBATIM | Reddit 1t82zxv leído hoy con el titular exacto |
+
+### 18.3 Estado [M]/[T] y dosis
+
+- **[M dump]** `-lm/-lzm/-ncmoe/--moe-cache-mib/-ngl`: doble fuente (dump + manpage) desde hoy.
+- **[T presupuesto 1.2-1.7 GB libres]**: consistente con el suelo backbone externo (2.4 GB con mmproj en 1060) y con el CSV propio; sin cambios.
+- **[T hot set ~1.0 GB del routed activo]**: base del umbral de thrash; sigue siendo derivación propia a espera del D-MEC-0.
+- **Orden de dosis v5 SIN CAMBIOS**: `-ctxcp 4` → Sysmem Fallback OFF + Alto rendimiento → `-lm` según pageouts → MEC 512 sobre NCM37C4 → escalar si sobra VRAM → KV f16 solo diagnóstico.
+- **Añadido operativo único**: al llegar a RUTA 0, NO esperar fix de #26038 (cerrado not-planned): el ctx/buffer del draft se mide con el log desde el primer run.
+
+*Referencias de esta auditoría: manpages.debian.org llama-server.1; Doctor-Shotgun HF blog; openclawdc flags-2026; shawnmayzes.com (13-Oct-2026); github #9964, #23472, #26038 (cierre 09-Oct), #26432, discusión #30426; reddit dual-5060Ti, 1t82zxv; hanxiao/Qwen3.6-35B-A3B-MTP-L4; note.com/high_u; freenode dual-6950XT.*
