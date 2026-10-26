@@ -331,3 +331,13 @@ Cambio de inventario que afecta DIRECTAMENTE al plan de descarga del proyecto: e
 - **Sin más cambios de inventario:** escalera al byte de la ronda 7 se mantiene; GSQ-RCO sigue sin 3.6-35B-A3B.
 
 *Referencias nuevas: huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main (lfs.oid de UD-IQ3_XXS y mmproj-F16, snapshot 2026-10-26).*
+
+
+## 19. ANEXO — Novena ronda: el piso físico de formato del 3.6 (IQ1_S 1.66 GB) y la cola de poda extrema cerrada por su propio autor (2026-10-26)
+
+- **Piso GGUF del 3.6 fijado [F card DJLougen]:** `Qwen3.6-35B-A3B-REAP-90pct-IQ1_S.gguf` = **1.66 GB** y es el MÍNIMO GGUF posible de la familia: llama.cpp mantiene el embedding de 248,320 y la lm_head untied a ≥2-bit (forzar 1-bit aborta la conversión). Lectura para nuestra escalera: el UD-IQ1_M de unsloth (11.37 GB, ronda 5) está ~7x por encima del piso físico — nuestro plan de descarga (UD-IQ3_XXS 14.07 GB, SHA256 cerrado) ni roza territorio de calidad-no-go por formato.
+- **REAP-90pct = keep-26 de 256 (−90% expertos), 6.15B params [F]:** Q4_K_M 3.4 GB ("the sensible one") / IQ1_S 1.6 GB ('"I have 4 GB of VRAM and a dream"'). Requiere build con soporte `qwen3_5_moe`/`QWEN35MOE` ✓ (nuestro target b11901 lo trae). El propio autor re-confirma lo que la ronda 1 documentó: "THIS MODEL IS MEANT TO BE A MEME... the tokens are mostly incoherent" → **NO-GO definitivo para producción**, la poda extrema descargable no es camino (el recorte viable sigue siendo runtime k≥4, N1 §5).
+- **Repo alternativo sin adoptar [F]:** `0xSero/Qwen3.6-35B-GGUF` (cuants dinámicos de precisión mixta, producidos y benchmarkeados en Ryzen AI MAX+ 395 — LPDDR5X ~256 GB/s, otro régimen de banda): sin SHA256 publicados ni escalera nextn documentada → sigue sin competir con el plan unsloth+SHA256 cerrado en rondas 6-8. Vigilancia pasiva.
+- **Sin cambios en el veredicto del nivel:** UD-IQ3_XXS (14,069,266,720 B, SHA256 `36f9ec0e…`) sigue siendo la descarga objetivo; el apunte de esta ronda es de encuadre (piso físico + cierre de la poda extrema), no de plan.
+
+*Referencias nuevas: huggingface.co/DJLougen/Qwen3.6-35B-A3B-REAP-90pct-GGUF (card completa con piso IQ1_S y nota del autor); huggingface.co/0xSero/Qwen3.6-35B-GGUF.*

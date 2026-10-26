@@ -187,3 +187,14 @@ D:\llama.cpp\llama-server.exe -m D:\ZLia\models\APEX-I-MINI.gguf -ngl 99 -cmoe -
 - **Sin cambios en el veredicto del nivel:** orden de dosis v5 (§13) + control D-MEC-0 (§14) + presupuesto del draft (§15) se mantienen íntegros.
 
 *Referencias nuevas: lautenbacher.io (config producción UD-Q4_K_S + draft-mtp + KV q4_0, 8-Jul-2026); releases.atom b11901 (vía N3 §16).*
+
+
+## 17. ANEXO — Novena ronda: el suelo VRAM del backbone validado por terceros, la regla del desborde permanente y el soporte externo a -lm none (2026-10-26)
+
+- **Suelo VRAM del backbone validado externamente [F discusión #30426, 12-Oct-2026]:** Qwen3-Omni-30B-A3B-Thinker Q4_K_M con `-cmoe -ngl 99` en **GTX 1060 6GB** + 32GB DDR4: backbone denso + proyección de visión (mmproj F16 ~0.9 GB [F rondas previas]) caben en **~2.4 GB de VRAM**, con 18.5 GB en RAM; ~16.2 t/s decode, ~270 t/s PP. Quitando el mmproj, el backbone solo ≈ 1.5 GB → **consistente con nuestra estimación de buffers+atención de §8** [T cross-check]: la parte no-MoE del 3.6 en VRAM es del mismo orden.
+- **La regla del desborde permanente [F llmkube + T]:** el offload de expertos es un intercambio VRAM ahorrada ↔ coste CPU/token — en un rig donde el modelo CABE, `-cmoe` REGRESÓ 5x (107.8 → 21.7 t/s, dual 16GB); en la 1650 el desborde es permanente (35B nunca cabe) → el presupuesto de offload (NCM37C4 hoy) **no se "gradúa" nunca**: solo se re-optimiza si cambia cuant, ctx o entra MEC/draft (y ese re-cálculo ya está cableado en las fases D→E→S del barrido).
+- **Soporte externo a `-lm none` [F openclawdc]:** reporte comunitario de RAM 98% → 71% a igualdad de velocidad con (el entonces) `--no-mmap`; y advertencia simétrica sobre mlock: solo con headroom, porque sin él "falla o estrella al resto" — coherente con nuestra prohibición de `--mlock` en este rig (14.27 GB de pesos / 16 GB RAM, ronda 1) y con la dosis `-lm none` documentada.
+- **El KV del 3.6 es "modest" por diseño [F llmkube]:** solo las **10 capas Gated Attention** aportan KV cache (las 30 DeltaNet llevan estado recurrente compacto, no cache creciente) → a 90K ctx con q8_0 el KV es pequeño. Coherente con nuestros 22 KiB/t [M] y explica por qué el ctx grande es viable en 4GB SOLO si el presupuesto de expertos está bien dosificado: el KV no es el enemigo, los expertos sí.
+- **Sin cambios de dosis:** los presupuestos de §13-§16 se mantienen; esta ronda añade validación externa del suelo backbone y el encuadre del desborde permanente.
+
+*Referencias nuevas: github ggml-org/llama.cpp discussion #30426 (Omni-30B en 1060 6GB: 2.4GB VRAM / 18.5GB RAM / 16.2 t/s); llmkube.com/blog/hybrid-moe-offloading-qwen-36-deltanet (regla del desborde, KV solo de 10 capas Gated Attention); openclawdc.com/blog/llama-cpp-moe-offload-flags-explained (98%→71% RAM con -lm none; mlock con headroom).*
