@@ -295,3 +295,12 @@ El enum completo de `--spec-type` en b11856 [F dump L390]: `none, draft-simple, 
 5. Con fase E: la dosis cubre también el draft; `--prio-draft 2` recomendado; `-ncmoed` disponible si aprieta VRAM.
 
 **Referencias nuevas de esta ronda**: discusión #5114 (override validado 2024): https://github.com/ggml-org/llama.cpp/discussions/5114 · issue #19528 CERRADO not planned: https://github.com/ggml-org/llama.cpp/issues/19528 · FR-Spec MTP + `nextn.shared_head_head` en qwen35moe.cpp: https://github.com/ggml-org/llama.cpp/issues/25187 · DFlash: https://github.com/ggml-org/llama.cpp/pull/22105 · dump local del build b11856 (líneas 162–166, 344–352, 390) [M].
+
+## 13. ANEXO — Cuarta ronda: granularidad 256, sinergia con especulación y gates de calidad (2026-10-26)
+
+- **Granularidad del router 3.6 [F ficha oficial]:** 256 expertos / 8 activos (vs 128/8 del Qwen3-30B-A3B [F su ficha]) → el doble de candidatos por slot: mayor redundancia por token → los recortes k=6/k=4 deberían costar MENOS calidad que en el hermano de 128 [T, argumento estadístico; sin evidencia directa del 3.6 → lo da el gate].
+- **El draft MTP también es MoE [F bytes]:** el/los layer(s) nextn del repo -MTP (858,111,296 B medidos) contienen expertos ruteados → `expert_used_count` los afecta también → dosis k baja abarata TAMBIÉN el draft (doble ahorro DDR4) y puede bajar su aceptación [N/D → medir accept en el combo D×E].
+- **Evidencia indirecta de recortes agresivos [F anécdota]:** "Qwen3-30B-A6B-16-Extreme" (variante comunitaria con 16 expertos, bien recibida en r/LocalLLaMA May-2025) → los MoE Qwen toleran recortes fuertes; NO sustituye al gate propio del 3.6.
+- **Gate de calidad barato para dosis EXP (propuesto):** (1) llama-perplexity sobre snippet ES fijo (compatibilidad con qwen3_5_moe N/D → 2 min en el rig; si la tool falla, gate = solo spot-check), (2) sanity prompt del barrido con temp 0 y semillas fijas, (3) comparar k=8 vs 6 vs 4 en la MISMA sesión.
+- **Interacción con N5:** los drafts sidecar (EAGLE3/DFlash) se entrenaron contra el modelo COMPLETO: recortar k del target no cambia el draft pero sí su distribución de aceptación [T] → anotar accept por dosis k.
+- **Validez:** el gate n_expert_used del log (firma literal "llm_load_print_meta: n_expert_used = N" [F #5114]) sigue siendo condición de validez de cada config EXP (el NO-OP del barrido-30 por clave equivocada no se repite: parser GGUF propio).

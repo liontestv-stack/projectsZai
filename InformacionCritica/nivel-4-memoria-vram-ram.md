@@ -136,3 +136,12 @@ D:\llama.cpp\llama-server.exe -m D:\ZLia\models\APEX-I-MINI.gguf -ngl 99 -cmoe -
 - shawnmayzes.com Oct-2026 (`--n-cpu-moe` = first N en RAM; expert streaming ~2× sin fusionar) — [F]
 - API HF: bytes de UD-IQ3_XXS (13,211,155,424 B), UD-IQ3_XXS-MTP (14,069,266,720 B), nextn (858,111,296 B) — [F]
 - Ronda 3 de este repo: Sysmem Fallback OFF (driver 546.01+), powercfg GUIDs, RAM por escenario — [F]
+
+## 12. ANEXO — Cuarta ronda: corrección KV, semillas ya medidas en el rig y leak VRAM del prefill (2026-10-26)
+
+- **CORRECCIÓN a §2 [T]:** la KV se ALMACENA chica pero se LEE completa en cada token por las 10 capas GA: lecturas ≈ posición × 10.9 KB/t → @16k ≈ 179 MB/t desde VRAM (~1.4 ms/t ≈ 3% del turno de 46.5 ms a 21.5 t/s); GDN sigue siendo O(1) ✓. → **Reducir `-c` SÍ es palanca pequeña de decode en posiciones largas** (no de RAM: la KV vive en VRAM). En el barrido-30 (posiciones ~550) el efecto era ≈ 0; en chats largos reales cuenta.
+- **SEMILLAS YA MEDIDAS EN EL RIG [F CSV barrido-30]:** NCM38 (`-ncmoe 38 -c 8192` KV q4) 21.67; NCM39 21.30; NCM39Q8 21.61; **NCM37C4 (`-ncmoe 37 -c 4096` KV q4) 22.49 = +4.4%, el mejor decode del barrido**; FIT-A (`-ngl auto -ncmoe 34 -fitt 256`) 22.40 = +4.0%. → La fase H NO parte de cero: semillas FIT-A y NCM37C4. Dosis nueva de aislamiento: NCM37@-c16384 vs NCM37@-c8192 vs NCM37C4 (separa el efecto de capas-GPU del confound ctx-4k). NCM39 ≈ ancla sugiere que con <2-3 capas el overhead de reparto no se paga.
+- **Semántica `--fit` confirmada [M dump]:** ajusta solo argumentos NO fijados para caber en VRAM (margen `-fitt` 1024 MiB default, `-fitc` ctx mínimo 4096) → en la fase H fijar SIEMPRE `-c` y `-ngl` explícitos para que fit no mute las dosis en silencio; leer del log cualquier ajuste que fit haya hecho.
+- **[F #23635] Leak VRAM en prefill con MTP + KV cuantizada** (detalle y protocolo en N3 §12): en combos H×E, `nvidia-smi` durante prefill; si crece sin parar → KV f16 de diagnóstico y revisar build.
+- **Calibración externa [F]:** aminrj.com (24 GB: 3.6 @65k ctx — KV+overhead coherente con la KV chica del 3.6); mychen76 (6 GB VRAM + 32 GB RAM: ~30 t/s híbrido — su CPU/RAM superan al rig, no comparable directo); r/LocalLLaMA 80 t/s @12 GB con MTP (offload completo, no híbrido).
+- **Techo N4 sin cambios:** +3-5% por VRAM [T] + 0-15% por pageouts [N/D]; con `-ctxcp 4` (N3 §12) el frente RAM probablemente se resuelva casi solo [T] — el presupuesto de checkpoints puede ser el pageout driver #1 del rig.
