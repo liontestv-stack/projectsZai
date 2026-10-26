@@ -121,3 +121,63 @@ REAP-50 canónico retiene 97.6% coding / 96.7% SWE-Bench [F Cerebras]; hay build
 - Vocab-trim del 3.6: https://huggingface.co/Elsephire/Qwen3.6-35B-A3B-vocabulary-trimming-GGUF · REAP-50: https://huggingface.co/anik-jha/Qwen3.6-35B-A3B-coding-reap50-GGUF
 - FR-Spec (coste draft ∝ vocab): issue https://github.com/ggml-org/llama.cpp/issues/25187
 - Datos propios: ancla 21.53 t/s, APEX-I-MINI 14.27 GB [M]
+
+---
+
+## 12. ANEXO — Segunda ronda: inventario exacto de HF vía API (2026-10-26) [F]
+
+### 12.1 Tamaños exactos del repo unsloth (texto, sin mmproj)
+
+Leído por API de HF (`/tree/main`), bytes exactos:
+
+| Cuant | GB | Comentario |
+|---|---|---|
+| UD-IQ1_M | 10.05 | NO-GO agéntico [F unsloth] |
+| UD-IQ2_XXS | 10.76 | NO-GO (cliff) |
+| UD-IQ2_M | 11.52 | NO-GO (cliff) |
+| UD-Q2_K_XL | 12.29 | solo test con mitigaciones |
+| **UD-IQ3_XXS** | **13.21** | **el peldaño GO (+8% t/s [T])** |
+| **UD-IQ3_S** | **13.68** | **REVELACIÓN: 0.59 GB MENOR que el APEX-I-MINI (14.27) a la MISMA densidad** |
+| UD-Q3_K_S | 15.36 | no aporta (más grande que hoy) |
+| UD-Q3_K_M / UD-Q3_K_XL | 16.60 / 16.85 | no caben cómodos |
+| UD-IQ4_XS | 17.73 | fuera |
+| MXFP4_MOE | 21.71 | fuera |
+| Q8_0 | 36.90 | referencia |
+
+mmproj (visión) van aparte: F16 0.90 GB — no se necesita para uso de texto.
+
+### 12.2 REVELACIÓN 1: el cambio "sin bajar peldaño"
+
+UD-IQ3_S (13.68 GB) es IQ3_S como el APEX-I-MINI (14.27 GB): **−0.59 GB (−4%) a calidad superior por la frontera localbench [F]** (mudler/APEX nunca en frontera). Cambio de marca "gratis": +4% t/s [T] y sanea RAM sin tocar la escalera. Opción conservadora si IQ3_XXS asustara.
+
+### 12.3 REVELACIÓN 2: el repo MTP de unsloth con UD quants (para fase E en una descarga)
+
+`unsloth/Qwen3.6-35B-A3B-MTP-GGUF` EXISTE (API verificada) y trae la cabeza nextn DENTRO de los UD quants:
+
+| Cuant con MTP | GB | vs sin MTP |
+|---|---|---|
+| **UD-IQ3_XXS-MTP** | **14.07** | +0.86 GB (módulo nextn) |
+| UD-IQ3_S-MTP | 15.35 | +1.67 |
+| UD-Q2_K_XL-MTP | 12.57 | +0.28 |
+| UD-IQ2_XXS-MTP | 11.82 | +1.06 |
+
+**La descarga única soñada**: UD-IQ3_XXS-MTP = 14.07 GB ≈ el footprint RAM del APEX-I-MINI actual (14.27), con cuant mejor (frontera [F]) y MTP incluido → habilita `--spec-type draft-mtp` (×1.28–1.4+ [F]) sin segunda descarga. La tabla de requisitos MTP de unsloth [F]: 35B-A3B 3-bit = **18 GB combinados** (rig: 16 RAM + 4 VRAM = 20 ✓ cabe).
+El repo oficial ggml-org MTP solo trae BF16 (66.21) y Q8_0 (35.21 GB) [F] — confirmado: la vía 3-bit MTP es la de unsloth.
+Verificación al descargar: el parser del barrido (fase E) debe ver los tensores `nextn.*` en el GGUF.
+
+### 12.4 Guía MTP de unsloth para el 3.6 [F]
+
+- "llama.cpp has merged MTP support" (ya no experimental).
+- `--spec-draft-n-max 2` funciona mejor "en la mayoría de setups", PERO "no asumir: probar 1 a 6" — coincide con el protocolo T2 del tester-mtp.
+- MTP usa ~1 GB extra de RAM/VRAM de margen.
+- Referencia: 35B-A3B a 240 t/s en RTX 6000 (techo de hardware muy superior; aquí esperamos 27–36 [T]).
+
+### 12.5 Aviso de hardware/software: CUDA 13.2 roto [F]
+
+Reddit oficial de unsloth (danielhanchen): **CUDA 13.2 genera gibberish en cuants low-bit de todos los modelos** (NVIDIA lo confirmó; fix en 13.3; workaround: usar CUDA 13.1). Acción del rig: comprobar qué CUDA lleva el build b11856 (log de arranque del server / DLLs); si es 13.2, juzgar un IQ3 con cuidado y considerar toolkit 13.1 antes de descartar calidad.
+
+### 12.6 Decisión sugerida actualizada
+
+1. Descargar **UD-IQ3_XXS-MTP (14.07 GB)** → A/B contra APEX-I-MINI (fase B + sanity tool-calling).
+2. Si el MTP aprieta la RAM en el arranque real: plan B = UD-IQ3_XXS (13.21) + draft MTP separado más adelante.
+3. Cambio mínimo sin riesgo: UD-IQ3_S (13.68) si se quiere solo "misma IQ, menos bytes".
