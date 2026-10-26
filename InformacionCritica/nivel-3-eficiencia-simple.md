@@ -108,3 +108,44 @@ Con `-np 4` (4 slots), el throughput agregado del server sube ~14% [M, medido pr
 - Tip ggerganov --cache-reuse 256: https://x.com/ggerganov/status/1909657397964292209
 - Guía MoE CPU+GPU (colocación -ot/--cpu-moe, auto-fit): https://huggingface.co/blog/Doctor-Shotgun/llamacpp-moe-offload-guide
 - Datos propios [M]: barrido-30-resultados.csv (37 configs), barrido-qwen-30.py (flags exactos), lanzador v2.1 ORO-UB1K, aprendido.md
+
+---
+
+## 10. ANEXO — Segunda ronda: flags exactos del build b11856 (2026-10-26)
+
+### 10.1 Defaults confirmados en el dump del Director [M]
+
+Del dump `llama-flags-nuevo.txt` (help del build b11856):
+
+| Flag | Default del build | Nota |
+|---|---|---|
+| `--ctx-checkpoints N` (-ctxcp) | **32 por slot** | PR #15293 |
+| `--checkpoint-min-step N` (-cms) | **8192** (0 = sin mínimo) | con chats de 16K caben ≤2 checkpoints: bajar a 1024–2048 para chat continuo |
+| `--cache-ram N` (-cram) | **8192 MiB** (0 = off, −1 = sin límite) | con 14.27 GB de modelo en 16 GB RAM, el default PELEA con el modelo → 512–1024 |
+| `--kv-unified` (-kvu) | ON si slots=auto | un solo buffer KV compartido; el log del issue #24055 muestra `kv_unified = true` con auto |
+| `--cache-idle-slots` | ON (requiere cache-ram) | guarda slots idle en la cache de prompts: gratis para nosotros |
+| `--context-shift` | **OFF** | ORO-SHIFT ya midió ON + reuse 256 sin coste [M] |
+| `--cache-reuse N` | (L620 del dump) | usar 256 explícito |
+| `--threads-batch N` (-tb) | existe | candidato de test: `-tb 4` explícito para prefill |
+
+### 10.2 Presupuesto RAM de los checkpoints [T]
+
+Cada checkpoint guarda el **estado recurrente GDN**: 30 capas × 32 heads × matriz 128×128 × 4 B ≈ **63 MB**. El default 32 checkpoints ≈ **2 GB** — exactamente el tipo de RAM que este rig no tiene. `--cache-ram` los cap: con 512 MiB caben ~8 checkpoints (suficiente para chat continuo de contexto moderado).
+
+### 10.3 Bug conocido en la familia de checkpoints [F]
+
+Issue #24055: en builds recientes (flag renombrado de `--checkpoint-every-n-tokens` a `--checkpoint-min-step`), el nuevo flag puede **no crear checkpoints y forzar re-procesado completo** (first bad commit e98cb51). El log del issue muestra además un warning real en un híbrido de la misma familia: **"cache_reuse is not supported by this context, it will be disabled"** — o sea, la cache puede auto-apagarse según el contexto/colocación.
+
+Protocolo de validación en el rig (obligatorio antes de dar por buena la cache):
+1. Arrancar con `-lv 4 --cache-reuse 256 --cache-ram 512 -cms 1024 --ctx-checkpoints 16`.
+2. Buscar en el arranque: `cache_reuse is not supported by this context` (si sale → la vía cache-reuse queda condicionada a build/colocación).
+3. Repro curl de 5 turnos (§3.3): sano si aparece `restored context checkpoint` y TTFT plano; roto si `forcing full prompt re-processing`.
+4. Si el flag está roto en b11856: probar `-cms 0`, y si persiste, queda apuntado como motivo de actualización de build (junto con `--moe-topk` del Nivel 1).
+
+### 10.4 Stack de referencia de un híbrido hermano [F]
+
+Config de issue #24055 (Qwen3.6-27B-MTP en 2×P100): `--ctx-checkpoints 64 --checkpoint-min-step 512 --cache-reuse 256 --cache-ram 2048 --kv-unified --cont-batching --flash-attn on` — coincide línea por línea con lo que este documento recomienda; las diferencias (cache-ram 2048, checkpoints 64) son de un rig con más RAM libre.
+
+### 10.5 Actualización del techo del Nivel 3 [T]
+
+Con los defaults corregidos (cache-ram 512–1024, cms 1024, reuse 256, shift ON), el combo ganador queda: `-ub 1024 -b 4096 -np 2 --cache-reuse 256 --cache-ram 512 -cms 1024 --context-shift` ⊕ (NCM37C4 o FIT-A). El IQ3_XXS del Nivel 2 libera la RAM que hace viable este combo sin pelea de memoria.
