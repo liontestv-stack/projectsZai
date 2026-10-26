@@ -132,3 +132,29 @@ D:\llama.cpp\llama-server.exe -m D:\ZLia\models\APEX-I-MINI.gguf -ngl 99 -cmoe -
 - **Calibración MTP [F]:** jarvislabs (RTX PRO 6000, Q8_0): MoE 35B-A3B solo **×1.17** (193.36→225.48) vs dense 27B ×1.73 → en GPU-bound el MoE paga poco; unsloth guía ×1.28 [F]; mer.vin: n-max 2 es el favorito comunitario en MoE; reddit reporta 80%+ accept con el GGUF-MTP en otro setup. Rango realista para el rig DDR4-bound: ×1.2-1.8 — la fase E/S lo mide.
 - **Riesgo operativo MTP [F #23635 + xhinker]:** leak VRAM en prefill con KV cuantizada (cerrado upstream; verificar build tras RUTA 0) y reporte de RAM→swap a las ~3 h → monitoreo RAM/VRAM obligatorio en fase E (protocolo N3 §12).
 - **Descargas exactas de la fase S (solo los GGUF):** EAGLE3 `Qwen3.6-35B-A3B-Caption-Eagle3DraftModel.gguf` = 517,403,232 B [F API]; DFlash `Qwen3.6-35B-A3B-DFlash-q8_0.gguf` = 421 MB [F]; NO descargar `model.safetensors` (1.43 GB) ni `model.gguf` (1.44 GB) del repo EAGLE3.
+
+## 12. ANEXO — Quinta ronda: estudio controlado v4 en RTX 3090 — DFlash-n2 gana, el draft externo denso MUERE (2026-10-26)
+
+Existe ahora un estudio público y riguroso SOBRE NUESTRO MODELO EXACTO: repo `thc1006/qwen3.6-speculative-decoding-rtx3090` — Qwen3.6-35B-A3B **UD-Q4_K_XL**, RTX 3090, ctx 8192, commit llama.cpp 3737e4137, con **ERRATA propio que se retracta de sus resultados v1 negativos**. Metodología v4 [F]: 3.002 arm-runs en 74 directorios (25 Ago–31 Ago 2026), baseline matcheado DENTRO de cada corrida, supresión de thinking verificada por request, texto+token-ids completos por request, telemetría GPU continua, cifras re-derivadas de los datos por un checker que falla ante drift.
+
+- **TABLA OFICIAL v4 [F] (baseline sin spec 115.7 t/s en 3090 — comparar SOLO los %, no los t/s absolutos):**
+
+| Modo | t/s | Δ vs baseline | Accept | tok/ciclo |
+|---|---|---|---|---|
+| **spec-dflash-n2** | **146.2** | **+26.3%** | 72.3% | 0.81 |
+| spec-mtp-n2 | 141.9 | +22.7% | 78.4% | 0.77 |
+| spec-dflash-n4 | 137.9 | +19.2% | 55.2% | 1.24 |
+| ngram-map-k4v-m8 | 115.4 | −0.3% | 50.0% | 0.01 |
+| ngram-mod-n24 | 103.1 | −10.9% | 5.0% | 0.19 |
+| ngram-cache | 93.7 | −19.0% | 5.2% | 0.17 |
+| **spec-draft-n8 (0.8B ext.)** | **30.9** | **−73.3%** | 29.5% | 1.86 |
+| spec-draft-n1 (0.8B ext.) | 29.2 | −74.8% | 69.7% | 0.50 |
+
+- **ORDEN OFICIAL de métodos para el 3.6-35B-A3B [F]:** DFlash-n2 > MTP-n2 > DFlash-n4 >> ngram (muerto fuera de coding) >>> draft externo denso. La dosis n2 (2 tokens de draft) domina a n4 porque la aceptación cae con la profundidad (72→55%) más rápido de lo que crece el ciclo.
+- **S6 (draft-simple con Qwen3.5-0.8B) = NO-GO FORMAL [F]:** la ronda 4 lo propuso como dosis; el estudio lo midió: **−73% incluso con el draft en GPU** — y la conclusión literal del autor: *"with external draft model, speculation loses badly and batching widens the gap"*. Con accept 69.7% a n1 AÚN pierde −74.8%: el coste de los forwards del draft supera cualquier ganancia. → S6 se elimina de la fase S; las únicas vías spec del proyecto son MTP (nextn interno) y los sidecars DFlash/DSpark.
+- **ERRATA del estudio [F] — lecciones de medición para el rig:** (1) el "100% acceptance" de la v1 era un ARTEFACTO de cómo llama.cpp cuenta la aceptación en esta clase de modelo → **no fiarse del accept rate del log como métrica única** (usar t/s y spot-check de texto); (2) el draft de la v1 nunca fue vocabulary-compatible (lo que produjo el falso "todos pierden"); (3) 3/4 de los requests v1 devolvían thinking truncado en vez de respuestas; (4) llama-server+draft abortaba en commit bcb5eeb64 (b11856 es posterior — riesgo bajo, pero si la fase S aborta al arrancar, recordar este precedento).
+- **Varianza → dosis de repetición [F]:** mismo config 12 veces en un día = 9.4 pp de rango; DFlash-n2 osciló +17.3%…+26.7% clusterizado por corrida. → La fase S mide S0 (ancla), S1 (MTP-n2) y S2 (DFlash-n2) con **mediana de 3 corridas** y baseline matcheado por corrida; deltas <5pp no son conclusión (protocolo ya adoptado en N3 §13).
+- **Aceptación y cuant [F reddit 27B]:** "acceptance is quant-independent at matched depth; DFlash is the fastest algo overall; EAGLE3 is dominated by both, useful only as a fallback" — coherente con la tabla; permite usar estos accepts como prior para nuestro UD-IQ3_XXS-MTP [T]. EAGLE3 queda relegado a S3-fallback (su sidecar 517 MB sigue inventariado); referencia de familia: PRISM-EAGLE3 en el 3.6-27B mejora accept length 2.2→2.4 (hasta ~3.35 en PRO) [F Ex0bit] — el techo EAGLE3 sin training propio es modesto.
+- **ngram ratificado como muerto en chat [F]:** ngram-map-k4v con accept 50% pero **0.01 tokens/ciclo** = el mecanismo existe pero no entrega tokens en texto general (coherente con el barrido-30: accept 0.00-0.16); la dosis #19493 (ngram-mod 24/48/64) queda exclusivamente para sesiones de coding.
+- **Dosis fase S ACTUALIZADA (sustituye §7):** S1 = `-spec-type mtp --spec-draft-n-max 2` (o `--spec-draft-*` según autenticador #25345) sobre la mejor config H; S2 = DFlash sidecar 421 MB con `n-max 2` (LA config compuesta de z-lab usa n-max 7/p-min 0.50 — el estudio dice n2; probar 2 y 3); S3 = EAGLE3 solo si S2 falla el spot-check ES; S6 ELIMINADA. Expectativa para el rig [T]: ≥ ×1.2 sobre el mejor H — el 3090 es compute-bound (verify caro) y aun así gana +26%; el rig es bandwidth-bound (verify ≈ 1 pasada DDR4 compartida con el draft) que es el régimen donde el spec paga MÁS [T §11, reforzada por el dato de que en full-GPU el draft interno también ganó en v4].
+- **Nota de consistencia interna:** la ronda 4 citaba el hackmd del mismo autor ("todos pierden en full-GPU, baseline 135.7") como anti-dato; el ERRATA del repo muestra que esa v1 estaba rota (draft sin vocab, thinking truncado). El anti-dato full-GPU queda SUSTITUIDO por el dato v4: con draft INTERNO (MTP/DFlash) el spec gana también en full-GPU (+22-26%); lo que pierde siempre es el draft EXTERNO denso.
