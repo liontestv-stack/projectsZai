@@ -20,7 +20,16 @@ Ejecuta la bateria completa SIN GPU ni modelo real:
       decision SS11.4 ramifica a plan B
   T11 E2E bloques mec+combo -> MEC veredicto vs control en el informe
   T12 informe MD: contiene secciones y clave de override correcta
+  --- bateria v1.1 (regresiones de la auditoria tras el HTTP 400 real) ---
+  T13 merge base+diff: el comando lanzado SIEMPRE trae -m/-ngl/--port y el
+      diff al final (causa raiz del HTTP 400: v1.0 lanzaba solo el diff)
+  T14 identidad: sin linea de modelo en el log -> config invalida (fantasma)
+  T15 HTTP 400 con cuerpo capturado en la nota; el barrido SOBREVIVE (rc 0)
+  T16 server que muere en la carga -> fila NO con exit code, barrido sigue
+  T17 resume v1.1: las filas NO se re-miden, las SI se saltan
+  T18 consola.log SIEMPRE sin ANSI aunque USE_COLOR este activo
 """
+import csv
 import importlib.util
 import json
 import os
@@ -131,21 +140,37 @@ def dump_sintetico(ruta, quitar=()):
 FAKE_SERVER_PLANTILLA = r'''#!/usr/bin/env python3
 import json, re, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
-PORT = __PUERTO__
+PORT_FIJO = __PUERTO__
 IGNORAR = __IGNORAR__
+MODO = "__MODO__"
+MODELLINE = __MODELLINE__
 K = 8
 args = sys.argv[1:]
 if "--version" in args:
     print("version: 0.7.0-dev (build 11856, commit 3642238cc)"); sys.exit(0)
+MODEL = "(sin -m)"
+PORT = PORT_FIJO
 for i, a in enumerate(args):
     if a == "--override-kv" and i + 1 < len(args):
         m = re.search(r"int:(\d+)", args[i + 1])
         if m and not IGNORAR:
             K = int(m.group(1))
+    if a in ("-m", "--model") and i + 1 < len(args):
+        MODEL = args[i + 1]
+    if a == "--port" and i + 1 < len(args):
+        PORT = int(args[i + 1])
+print("RECIBIDO: " + " ".join(args).replace(MODEL, "<modelo>"), flush=True)
+if MODO == "muere":
+    print("error: failed to load model: no existe", flush=True)
+    sys.exit(1)
+if MODELLINE:
+    print("main: model  = " + MODEL, flush=True)
 print("llm_load_print_meta: general.architecture = qwen3_5_moe", flush=True)
 print("llm_load_print_meta: n_expert = 256", flush=True)
 print("llm_load_print_meta: n_expert_used = " + str(8 if IGNORAR else K), flush=True)
 print("CUDA0 compute buffer size : " + str(round(900.0 + 100.0 * K, 2)) + " MiB", flush=True)
+print("main: server is listening on http://127.0.0.1:" + str(PORT) + " - starting the main loop", flush=True)
+POSTS = [0]
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
@@ -160,6 +185,15 @@ class H(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n) or b"{}")
         except Exception:
             body = {}
+        POSTS[0] += 1
+        if MODO == "http400" and POSTS[0] <= 1:
+            msg = b'{"error":{"message":"the request exceeds the available context size"}}'
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(msg)))
+            self.end_headers()
+            self.wfile.write(msg)
+            return
         p = (body.get("prompt") or "").lower()
         if "17 x 23" in p: c = "391"
         elif "don quijote" in p: c = "Cervantes"
@@ -177,10 +211,12 @@ HTTPServer(("127.0.0.1", PORT), H).serve_forever()
 '''
 
 
-def escribir_fake_server(ruta, puerto, ignorar=False):
+def escribir_fake_server(ruta, puerto, ignorar=False, modo="ok", modeline=True):
     open(ruta, "w").write(
         FAKE_SERVER_PLANTILLA.replace("__PUERTO__", str(puerto))
-                             .replace("__IGNORAR__", str(ignorar)))
+                             .replace("__IGNORAR__", str(ignorar))
+                             .replace("__MODO__", modo)
+                             .replace("__MODELLINE__", str(modeline)))
     os.chmod(ruta, 0o755)
 
 
@@ -351,6 +387,121 @@ def main():
           "\x1b[" not in informe1)
     check("T12d informe DOSIS VIVA detectada (mock frena/sube bien)",
           "DOSIS VIVA" in informe1)
+
+    # T13 merge base+diff (causa raiz del HTTP 400 de la v1.0)
+    try:
+        log1 = open(os.path.join(logs1, "logs-config",
+                                 "01-D-ANCLA.log")).read()
+        rec = [l for l in log1.splitlines() if l.startswith("RECIBIDO: ")][0]
+        check("T13a base+diff en el comando lanzado",
+              "-m " in rec and "-ngl 99" in rec and "--port 19931" in rec
+              and "-cmoe" in rec and "-fa on" in rec and "-lm none" in rec,
+              rec[:130])
+        with open(os.path.join(logs1, "faseD-N1-resultados.csv")) as f:
+            filas_m = list(csv.DictReader(f))
+        fancla_m = [r for r in filas_m if r["id"] == "1"][0]
+        check("T13b CSV flags = comando completo, diff al final",
+              fancla_m["flags"].startswith("-m ")
+              and "-cmoe" in fancla_m["flags"]
+              and fancla_m["flags"].index("-lm none")
+                  < fancla_m["flags"].index("-cmoe"))
+    except Exception:
+        check("T13 merge base+diff", False, traceback.format_exc(-5))
+
+    # T14 identidad: sin linea de modelo en el log -> config invalida
+    try:
+        logs4 = os.path.join(tmp, "logs4")
+        fake4 = os.path.join(tmp, "fake_server4.py")
+        escribir_fake_server(fake4, 19934, ignorar=False, modeline=False)
+        argv4 = ["--server", fake4, "--modelo", gguf, "--logs", logs4,
+                 "--puerto", "19934", "--solo", "exp", "--sin-nvidia",
+                 "--sin-pausas", "--carga-timeout", "60"]
+        rc4 = mod.main(argv4)
+        with open(os.path.join(logs4, "faseD-N1-resultados.csv")) as f:
+            filas14 = list(csv.DictReader(f))
+        check("T14a fantasma detectado: 8 filas NO, rc 0",
+              rc4 == 0 and len(filas14) == 8
+              and all(r["valido"] == "NO" for r in filas14))
+        check("T14b nota de identidad",
+              all("NO menciona el modelo esperado" in r["nota"]
+                  for r in filas14))
+    except Exception:
+        check("T14 identidad", False, traceback.format_exc(-5))
+
+    # T15 HTTP 400 con cuerpo capturado (regresion exacta del desastre v1.0)
+    try:
+        logs5 = os.path.join(tmp, "logs5")
+        fake5 = os.path.join(tmp, "fake_server5.py")
+        escribir_fake_server(fake5, 19935, modo="http400")
+        argv5 = ["--server", fake5, "--modelo", gguf, "--logs", logs5,
+                 "--puerto", "19935", "--solo", "exp", "--sin-nvidia",
+                 "--sin-pausas", "--carga-timeout", "60"]
+        rc5 = mod.main(argv5)
+        with open(os.path.join(logs5, "faseD-N1-resultados.csv")) as f:
+            filas15 = list(csv.DictReader(f))
+        check("T15a el barrido SOBREVIVE a un 400 (8 filas, rc 0)",
+              rc5 == 0 and len(filas15) == 8,
+              "rc=%s filas=%d" % (rc5, len(filas15)))
+        check("T15b cuerpo del 400 capturado en la nota",
+              all("HTTP 400" in r["nota"]
+                  and "exceeds the available context size" in r["nota"]
+                  for r in filas15), filas15[0]["nota"][:130])
+        check("T15c informe generado igualmente",
+              os.path.exists(os.path.join(logs5, "faseD-N1-INFORME.md")))
+    except Exception:
+        check("T15 http400", False, traceback.format_exc(-5))
+
+    # T16 server que muere durante la carga
+    try:
+        logs6 = os.path.join(tmp, "logs6")
+        fake6 = os.path.join(tmp, "fake_server6.py")
+        escribir_fake_server(fake6, 19936, modo="muere")
+        argv6 = ["--server", fake6, "--modelo", gguf, "--logs", logs6,
+                 "--puerto", "19936", "--solo", "exp", "--sin-nvidia",
+                 "--sin-pausas", "--carga-timeout", "60"]
+        rc6 = mod.main(argv6)
+        with open(os.path.join(logs6, "faseD-N1-resultados.csv")) as f:
+            filas16 = list(csv.DictReader(f))
+        check("T16a muerte en carga = 8 filas NO, rc 0",
+              rc6 == 0 and len(filas16) == 8
+              and all(r["valido"] == "NO" for r in filas16))
+        check("T16b nota de carga fallida",
+              all("carga fallida" in r["nota"] for r in filas16))
+    except Exception:
+        check("T16 muerte en carga", False, traceback.format_exc(-5))
+
+    # T17 resume v1.1: filas NO se re-miden; filas SI se saltan
+    try:
+        fake7 = os.path.join(tmp, "fake_server7.py")
+        escribir_fake_server(fake7, 19935, modo="ok")
+        argv17 = ["--server", fake7, "--modelo", gguf, "--logs", logs5,
+                  "--puerto", "19935", "--solo", "exp", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        rc17 = mod.main(argv17)
+        with open(os.path.join(logs5, "faseD-N1-resultados.csv")) as f:
+            filas17 = list(csv.DictReader(f))
+        check("T17a 8 filas NO re-medidas -> CSV con 16 filas",
+              rc17 == 0 and len(filas17) == 16, str(len(filas17)))
+        check("T17b las nuevas 8 quedan validas",
+              all(r["valido"] == "SI" for r in filas17[8:]))
+    except Exception:
+        check("T17 resume de fallidas", False, traceback.format_exc(-5))
+
+    # T18 consola.log sin ANSI aunque USE_COLOR este activo
+    try:
+        mod.USE_COLOR = True
+        logs8 = os.path.join(tmp, "logs8")
+        argv18 = ["--server", fake1, "--modelo", gguf, "--logs", logs8,
+                  "--puerto", "19931", "--solo", "ub1k", "--sin-nvidia",
+                  "--sin-pausas", "--carga-timeout", "60"]
+        mod.main(argv18)
+        cons = open(os.path.join(logs8, "faseD-N1-consola.log")).read()
+        check("T18a consola.log sin ANSI (USE_COLOR on)", "\x1b[" not in cons)
+        check("T18b consola.log con contenido", "CORRIDA" in cons)
+    except Exception:
+        check("T18 consola sin ANSI", False, traceback.format_exc(-5))
+    finally:
+        mod.USE_COLOR = False
 
     print("=" * 70)
     if FALLOS:

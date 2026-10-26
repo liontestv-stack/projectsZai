@@ -455,3 +455,35 @@ La ronda 12 fijó el orden de campaña N1→N3→N2→N4 y el Director encargó 
 ### 20.2 Qué NO cambia
 
 Dosis de fase D SIN CAMBIOS (NCM37C4 + D-MEC-0/512/1024/768 + escalera EXP6→4→3, con EXP5 y EXP2 informativas y el run autenticador cruzado `-ot` de §18 disponible). Expectativas [T] de §5 intactas. El instrumento añade como medidas explícitas D-EXP4-UB1K (§6.4) y D-EXP4-NCM37C4 (combo del stack §8); nada más.
+
+## 21. ANEXO — Ronda 14: auditoría total del instrumento v1.1 tras el HTTP 400 real (2026-10-27)
+
+Contexto: el Director ejecutó la v1.0 en su rig real (`D:\ZLia\barrido-n1-expertos.py`, 14 configs, puerto 9931). El parser GGUF y la auditoría de flags pasaron (arch leído del GGUF real, VERDE 14 configs), pero la PRIMERA pasada de medición de D-ANCLA murió con `urllib.error.HTTPError: HTTP Error 400: Bad Request` y traceback crudo: sin CSV, sin informe, sin diagnóstico. Encargo del Director: "hazle una auditoría total cazando todos los bugs posibles y súbelo a git". Este anexo registra la auditoría (NADA cambia en las dosis ni en las conclusiones de §0-§20).
+
+### 21.1 Causa raíz (lectura línea a línea + prueba T13)
+
+La v1.0 lanzaba el server con SOLO los flags diff de cada config: `medir_config` llamaba a `lanzar_server(ruta_server, cfg["flags"])` SIN fusionar `BASE_FLAGS_FIJAS`, y esa base además NO incluía `-m`. D-ANCLA quedaba como `llama-server.exe -cmoe`: sin modelo, sin `--port 9931`, sin `-c 16384`, sin `-fa`, sin KV q8_0, sin `-lm none`. El server que respondía en el puerto no podía ser el nuestro; su `/completion` rechazó el POST con 400 — y la v1.0 DESCARTABA el cuerpo del error (`HTTPError.read()` nunca se llamaba), así que el 400 quedó sin diagnóstico y la excepción mató el barrido entero. Dos bugs encadenados: lanzamiento incompleto + diagnóstico tragado. Lección de instrumentación: **el cuerpo de un error HTTP es oro; descartarlo convierte un bug de 1 línea en un misterio de 1 día**.
+
+### 21.2 Las 10 correcciones de la v1.1 (proto `faseD-N1-v2`)
+
+1. **CRÍTICO (causa raíz)**: comando lanzado = SIEMPRE `server -m <modelo> <BASE_FLAGS_FIJAS> <diff de la config>` — el diff va al final y gana (llama.cpp deja ganar al último valor). El CSV registra ahora el comando COMPLETO por fila (reproducibilidad 1:1).
+2. **Cuerpo de error HTTP capturado** (`_post_json`): cualquier 4xx/5xx llega con el mensaje del server en consola + nota del CSV + JSON. Un 400 ya no es un misterio.
+3. **Una config nunca tumba el barrido**: fallo HTTP/conexión → fila NO-VALIDA al CSV, se sigue con la siguiente; el informe se genera igualmente. Reintentos SOLO para transitorios (5xx/429/conexión, 2 intentos con espera); los 4xx fallan de inmediato (reintentar un pedido mal hecho no ayuda).
+4. **Identidad del server verificada por su log**: si el log del server no menciona el basename del modelo esperado → config invalidada sin medir (nunca medir un server fantasma/watchdog que se cuelgue del puerto). Aviso suave si el log no confirma `listening on` en el puerto pedido.
+5. **Muerte del server a mitad de medición** detectada por exit code (`proc.poll()` en cada pasada) — antes era un timeout ciego de 600 s.
+6. **Resume v2**: solo las filas SI cuentan como hechas; las NO se re-miden (la v1.0 habría saltado PARA SIEMPRE una config fallida).
+7. **La auditoría de flags cubre TAMBIÉN la base**: la v1.0 solo miraba el diff — el "VERDE" de la corrida real nunca había auditado `-ngl/-fa/-ctk/-ctv/-lm/--port`.
+8. **consola.log SIEMPRE sin ANSI** (el Tee elimina códigos de color en el archivo); consola Windows con VT habilitado (`os.system("")`) — la v1.0 pintaba basura `[96m` en cmd.
+9. **stderr también al log** (los tracebacks entran en consola.log); **Ctrl+C** guarda informe parcial y permite reanudar (rc 130); excepción no capturada en una config → fila de fallo, no crash.
+10. **Parser GGUF con buffer de 1 MiB** (los arrays de ~248k tokens del vocab real se saltan mucho más rápido) + `sanity_chat` con timeout 240→120 s que corta al primer fallo de conexión + `taskkill` protegido fuera de Windows.
+
+### 21.3 Validación: 42/42 VERDE (`scripts/test_faseD_n1.py` ampliado)
+
+Nuevos checks de regresión: **T13** el comando lanzado trae `-m <modelo> -ngl 99 -c 16384 ... --port ... -cmoe` con el diff al final (prueba directa de la causa raíz, vía log RECIBIDO del server falso); **T14** server sin línea de modelo en su log → 8 filas NO con nota de identidad, sin medir nada; **T15** regresión EXACTA del desastre: server que responde 400 → el barrido sobrevive con rc 0, 8 filas NO con el cuerpo `{"error":...}` capturado en la nota, informe generado; **T16** server que muere en la carga → filas NO con exit code; **T17** resume re-mide las 8 fallidas (CSV 16 filas, las nuevas SI); **T18** consola.log sin ANSI aunque USE_COLOR esté activo. Los 30 checks originales siguen verdes (T02 parser ahora en 0.00 s). Durante la propia batería los tests cazaron un bug más de la v1.1-intermedia: una medición que fallaba aún se marcaba VALIDO → corregido (`valido = False` en los dos ramos de excepción) y cubierto por T17.
+
+### 21.4 Qué NO cambia y cómo relanzar
+
+- **Dosis de fase D SIN CAMBIOS** (§20.2 en pie). El fallo era del LANZAMIENTO, no de las dosis, ni de las claves, ni del parser: el parser leyó el arch del GGUF real (`qwen35moe`, sin guiones bajos — NÓTESE: la lección del barrido-30 anticipaba `qwen3_5_moe`; la forma exacta la dicta el archivo y los autenticadores deciden) y la auditoría de flags ya era verde.
+- **Los autenticadores cubren cualquier duda sobre el arch**: si el build normalizara el arch internamente o el override no aplicara, `n_expert_used = N` no aparecería en el log → run INVALIDO por §12.2, y el control EXP10 que debe frenar (~-6.5%) expondría un no-op aunque el log dijera lo contrario (§11.4). El instrumento es autocorrector en la misma corrida.
+- **Relanzamiento**: copiar el `barrido-n1-expertos.py` v1.1 actualizado a `D:\ZLia\` y ejecutar `BARRIDO-N1.bat`. El proto nuevo (`faseD-N1-v2`) ignora CSVs viejos → re-corrida completa (la v1.0 no llegó a escribir ninguna fila, no se pierde nada).
+- Si reaparece un 400, la nota dirá QUÉ respondió el server (contexto, endpoint, slot...): diagnóstico en la primera línea en vez de un misterio.

@@ -63,6 +63,31 @@ Uso:
   py barrido-n1-expertos.py --solo exp,mec,combo
   py barrido-n1-expertos.py --extra-k 9,7 -> dosis k extra en el bloque EXP
   py barrido-n1-expertos.py --si         -> mata un server vivo y sigue
+
+AUDITORIA v1.1 (28-oct-2026, tras el HTTP 400 de la primera corrida real):
+  La v1.0 lanzaba el server con SOLO los flags diff de cada config (p.ej.
+  D-ANCLA quedaba como `llama-server.exe -cmoe`): SIN -m, SIN --port 9931,
+  SIN contexto, SIN -fa, SIN KV cuantizada. El server que respondia en el
+  puerto no era el nuestro y POST /completion devolvio HTTP 400; ademas el
+  CUERPO del error se descartaba y una excepcion mataba TODO el barrido.
+  Correcciones materializadas:
+  1. CRITICO: el comando lanzado ahora es SIEMPRE
+     `server -m <modelo> <BASE_FLAGS_FIJAS> <flags diff de la config>`
+     (el diff va detras y gana: llama.cpp deja ganar al ultimo valor).
+  2. El cuerpo de CUALQUIER error HTTP se captura y se imprime en consola,
+     nota del CSV y JSON: un 400 ya no es un misterio.
+  3. Un fallo HTTP/conexion marca la config NO-VALIDA y el barrido SIGUE
+     con la siguiente (antes: traceback y muerte total, CSV vacio).
+  4. Identidad del server verificada por su log: si no menciona el modelo
+     esperado, esa config se invalida (nunca medir un server fantasma o
+     watchdog que se cuelgue del puerto).
+  5. Muerte del server a mitad de medicion -> detectada por exit code.
+  6. Resume v2: solo las filas SI cuentan como hechas; las NO se re-miden.
+  7. La auditoria de flags cubre TAMBIEN la base (v1.0 solo miraba el diff).
+  8. consola.log SIEMPRE sin colores ANSI; consola Windows con VT habilitado.
+  9. stderr tambien va al log; Ctrl+C guarda informe parcial (rc 130).
+ 10. Parser GGUF con buffer de 1 MiB (arrays gigantes saltan mucho mas
+     rapido). Retries solo para fallos transitorios (5xx/429/conexion).
 """
 import argparse
 import csv
@@ -78,8 +103,8 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n1-expertos v1.0 (2026-10-27)"
-PROTO = "faseD-N1-v1"
+VERSION = "barrido-n1-expertos v1.1 (2026-10-27)"
+PROTO = "faseD-N1-v2"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
 RUTA_MODELO_DEF = (r"D:\ZLia\models"
@@ -179,8 +204,13 @@ def gray(t):
     return _c(t, "90")
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
 class Tee:
-    """Copia todo lo que sale por consola a un archivo de log."""
+    """Copia la consola a un archivo. En el ARCHIVO se eliminan los codigos
+    de color ANSI (el log se lee/parsea despues); en pantalla se conservan
+    si la consola los soporta."""
 
     def __init__(self, ruta):
         self.ruta = ruta
@@ -192,7 +222,7 @@ class Tee:
         except Exception:
             pass
         try:
-            self.f.write(s)
+            self.f.write(_ANSI_RE.sub("", s))
             self.f.flush()
         except Exception:
             pass
@@ -245,11 +275,12 @@ def decodificar_dump(ruta_dump):
     return max(candidatos, key=len)
 
 
-def auditar_flags(ruta_dump, lista_configs):
-    """Verifica que TODOS los tokens de flag de TODAS las configs esten
-    verbatim en el dump del build (fuente de verdad #1). Aborta si falta
-    uno. Tambien revisa prohibidas y valores legales. Devuelve lista de
-    problemas (vacia = verde)."""
+def auditar_flags(ruta_dump, lista_configs, base_flags=()):
+    """Verifica que TODOS los tokens de flag de TODAS las configs (base +
+    diff; v1.1 la BASE tambien se audita, antes se le pasaba por alto)
+    esten verbatim en el dump del build (fuente de verdad #1). Aborta si
+    falta uno. Tambien revisa prohibidas y valores legales. Devuelve lista
+    de problemas (vacia = verde)."""
     problemas = []
     txt = decodificar_dump(ruta_dump)
     faltan = [t for t in DUMP_REQUERIDOS if t not in txt]
@@ -258,7 +289,7 @@ def auditar_flags(ruta_dump, lista_configs):
 
     tokens_usados = set()
     for cfg in lista_configs:
-        fl = cfg["flags"]
+        fl = list(base_flags) + list(cfg["flags"])
         for tok in fl:
             if tok.startswith("-"):
                 tokens_usados.add(tok)
@@ -272,7 +303,7 @@ def auditar_flags(ruta_dump, lista_configs):
                                      % (cfg["id"], tok))
     # -ub 512 prohibido (aprendido: 20.77, ruido; el validador rechaza)
     for cfg in lista_configs:
-        fl = cfg["flags"]
+        fl = list(base_flags) + list(cfg["flags"])
         for i, tok in enumerate(fl):
             if tok == "-ub" and i + 1 < len(fl) and fl[i + 1] == "512":
                 problemas.append("config %s usa -ub 512 (PROHIBIDO)" % cfg["id"])
@@ -357,7 +388,7 @@ def gguf_leer_hparams(ruta_modelo):
     """Lee SOLO la region de metadata del GGUF (v2/v3): general.architecture,
     expert_count y expert_used_count del arch. No lee tensores ni tokenizer
     completo. Devuelve dict con arch, n_expert, n_expert_used."""
-    f = open(ruta_modelo, "rb")
+    f = open(ruta_modelo, "rb", buffering=1 << 20)
     try:
         magic = f.read(4)
         if magic != b"GGUF":
@@ -559,8 +590,11 @@ def version_server(ruta_server):
 def matar_server_vivo(puerto):
     if health_ok(puerto):
         print(yellow("  server vivo en el puerto %d -> taskkill llama-server.exe" % puerto))
-        subprocess.run(["taskkill", "/F", "/IM", "llama-server.exe"],
-                       capture_output=True)
+        try:
+            subprocess.run(["taskkill", "/F", "/IM", "llama-server.exe"],
+                           capture_output=True)
+        except Exception as e:
+            print(yellow("  taskkill no disponible aqui (%s); cerrar a mano" % e))
         time.sleep(3)
         if health_ok(puerto):
             raise SystemExit(red("FATAL: el puerto %d sigue respondiendo tras "
@@ -576,7 +610,8 @@ def lanzar_server(ruta_server, flags, log_path, carga_timeout):
     while time.time() - t0 < carga_timeout:
         if proc.poll() is not None:
             logf.close()
-            return None, time.time() - t0, "el server murio durante la carga"
+            return None, time.time() - t0, ("el server murio durante la "
+                                            "carga (exit %s)" % proc.returncode)
         if health_ok(PUERTO_DEF, timeout=1.5):
             logf.close()
             return proc, time.time() - t0, "ok"
@@ -605,7 +640,18 @@ def apagar_server(proc):
     time.sleep(2)
 
 
-def leer_log_server(log_path):
+def cola_log(log_path, n=12):
+    """Ultimas lineas del log del server (diagnostico rapido de fallos)."""
+    try:
+        lineas = open(log_path, "rb").read().decode(
+            "utf-8", errors="replace").splitlines()
+        vivas = [l.strip() for l in lineas if l.strip()]
+        return " | ".join(vivas[-n:])[:700]
+    except Exception:
+        return "(log no disponible)"
+
+
+def leer_log_server(log_path, modelo_basename=None, puerto=None):
     try:
         txt = open(log_path, "rb").read().decode("utf-8", errors="replace")
     except Exception:
@@ -635,6 +681,14 @@ def leer_log_server(log_path):
         datos["override_aplicado"] = True
     else:
         datos["override_aplicado"] = False
+    # identidad (v1.1): el log debe PROBAR que este server carga NUESTRO
+    # modelo; si no, otro proceso (watchdog/proxy/server viejo) ocupa el
+    # puerto y medirlo falsearia todo sin ruido ninguno.
+    if modelo_basename is not None:
+        datos["modelo_en_log"] = modelo_basename.lower() in txt.lower()
+    if puerto is not None:
+        datos["puerto_en_log"] = ("listening on" in txt
+                                  and (":%d" % puerto) in txt)
     return datos
 
 
@@ -654,25 +708,62 @@ def vram_nvidia():
 
 
 # ------------------------------ medicion ------------------------------------
-def pasadas_medicion(puerto, prompts, n_predict=256, seed=424242, timeout=600):
+class MeasError(RuntimeError):
+    """Fallo de medicion con diagnostico (HTTP 4xx/5xx, server muerto...)."""
+
+
+def _post_json(url, cuerpo, timeout, proc=None, reintentos=2):
+    """POST application/json. v1.1: captura el CUERPO de cualquier error
+    HTTP (el 400 de la v1.0 quedo sin diagnostico porque se descartaba) y
+    reintenta SOLO fallos transitorios (5xx/429/conexion). Los 4xx son
+    rechazos del pedido: fallan de inmediato CON el mensaje del server."""
+    datos = cuerpo if isinstance(cuerpo, bytes) else \
+        json.dumps(cuerpo).encode("utf-8")
+    ultimo = None
+    for intento in range(reintentos + 1):
+        if proc is not None and proc.poll() is not None:
+            raise MeasError("el server murio a mitad de la medicion "
+                            "(exit code %s)" % proc.returncode)
+        req = urllib.request.Request(url, data=datos, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8", errors="replace"))
+        except urllib.error.HTTPError as e:
+            detalle = ""
+            try:
+                detalle = e.read().decode("utf-8", errors="replace")[:400]
+            except Exception:
+                pass
+            ultimo = MeasError("HTTP %d en %s -> %s"
+                               % (e.code, url, detalle or "(sin cuerpo)"))
+            if 400 <= e.code < 500 and e.code != 429:
+                raise ultimo
+        except Exception as e:
+            ultimo = MeasError("conexion fallo en %s: %r" % (url, e))
+        if intento < reintentos:
+            time.sleep(8)
+    raise ultimo
+
+
+def pasadas_medicion(puerto, prompts, n_predict=256, seed=424242, timeout=600,
+                     proc=None):
     """4 pasadas x n_predict tokens. Devuelve (prefill_ts, [dec r1..r4],
     detalles). Prefill = pasada 1 fria (prompt_per_second); decode = media
-    2-4 de predicted_per_second (protocolo aprendido SS8)."""
+    2-4 de predicted_per_second (protocolo aprendido SS8). proc se vigila:
+    si el server muere a mitad, MeasError (no un timeout ciego)."""
     url = "http://%s:%d/completion" % (HOST_DEF, puerto)
     prefill = None
     decs = []
     detalle = []
     for i, p in enumerate(prompts):
-        body = json.dumps({
+        cuerpo = {
             "prompt": p, "n_predict": n_predict, "temperature": 0.0,
             "seed": seed, "cache_prompt": True, "ignore_eos": True,
             "stream": False,
-        }).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
+        }
         t0 = time.time()
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode("utf-8", errors="replace"))
+        d = _post_json(url, cuerpo, timeout=timeout, proc=proc)
         t = d.get("timings", {}) or {}
         pf = t.get("prompt_per_second")
         dec = t.get("predicted_per_second")
@@ -687,27 +778,26 @@ def pasadas_medicion(puerto, prompts, n_predict=256, seed=424242, timeout=600):
     return prefill, decs, detalle
 
 
-def sanity_chat(puerto, n_predict=48, seed=424242, timeout=240):
+def sanity_chat(puerto, n_predict=48, seed=424242, timeout=120):
     url = "http://%s:%d/completion" % (HOST_DEF, puerto)
     ok_n = 0
     detalle = []
     for pregunta, esperados in SANITY_PARES:
-        body = json.dumps({
+        cuerpo = {
             "prompt": pregunta, "n_predict": n_predict, "temperature": 0.0,
             "seed": seed, "cache_prompt": False, "stream": False,
-        }).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
+        }
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                d = json.loads(r.read().decode("utf-8", errors="replace"))
+            d = _post_json(url, cuerpo, timeout=timeout, reintentos=0)
             txt = (d.get("content") or "").lower()
-        except Exception as e:
+        except MeasError as e:
             txt = "ERROR: %s" % e
         hit = any(e.lower() in txt for e in esperados)
         ok_n += 1 if hit else 0
         detalle.append({"pregunta": pregunta, "esperado": esperados,
                         "ok": hit, "respuesta": txt[:160]})
+        if txt.startswith("ERROR:"):
+            break  # server caido: las restantes fallaran igual (v1.1)
     return ok_n, len(SANITY_PARES), detalle
 
 
@@ -726,14 +816,15 @@ def csv_ruta(dir_logs):
 
 
 def csv_cargar_hechos(ruta_csv):
-    """Devuelve dict id->fila de corridas previas con el MISMO proto."""
+    """Dict id->fila de corridas previas validas (mismo proto). v1.1: solo
+    las filas SI cuentan como hechas; una config que fallo se re-mide."""
     hechos = {}
     if not os.path.exists(ruta_csv):
         return hechos
     try:
         with open(ruta_csv, "r", newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                if row.get("proto") == PROTO:
+                if row.get("proto") == PROTO and row.get("valido") == "SI":
                     try:
                         hechos[int(row["id"])] = row
                     except Exception:
@@ -767,8 +858,16 @@ def medir_config(cfg, contexto):
                 "familia": cfg["familia"], "flags": cfg["flags"],
                 "hipotesis": cfg["hipotesis"], "log": log_path}
 
+    # v1.1: el comando lanzado es SIEMPRE base + diff (el ultimo valor gana
+    # en llama.cpp). La v1.0 lanzaba SOLO el diff: D-ANCLA quedaba como
+    # `llama-server.exe -cmoe` (sin -m, sin --port, sin -c...): ahi nacio
+    # el HTTP 400 de la primera corrida real.
+    flags_full = list(contexto.get("base_flags") or []) + list(cfg["flags"])
+    fila["flags"] = " ".join(flags_full)
+    completo["flags"] = flags_full
+
     print(cyan("  [%02d] %s: lanzando server..." % (cfg["id"], cfg["nombre"])))
-    proc, load_s, estado = lanzar_server(contexto["ruta_server"], cfg["flags"],
+    proc, load_s, estado = lanzar_server(contexto["ruta_server"], flags_full,
                                          log_path, contexto["carga_timeout"])
     fila["load_s"] = "%.1f" % load_s if load_s else ""
     completo["load_s"] = round(load_s, 1) if load_s else None
@@ -779,12 +878,34 @@ def medir_config(cfg, contexto):
         if log_txt.get("fit_abort"):
             fila["nota"] += " (fit abortado: VRAM insuficiente para esta config)"
         print(red("    FAIL carga (%s)" % fila["nota"]))
+        print(red("    cola del log: %s" % cola_log(log_path)))
         completo.update({"valido": False, "nota": fila["nota"],
-                         "log_datos": log_txt})
+                         "log_datos": log_txt, "log_cola": cola_log(log_path)})
         return fila, completo
 
     try:
-        log_txt = leer_log_server(log_path)
+        log_txt = leer_log_server(log_path,
+                                  modelo_basename=os.path.basename(
+                                      contexto.get("ruta_modelo") or ""),
+                                  puerto=contexto.get("puerto", PUERTO_DEF))
+        # ---- identidad del server (v1.1): nunca medir un fantasma ----
+        if log_txt.get("modelo_en_log") is False:
+            fila["valido"] = "NO"
+            fila["nota"] = ("el log del server NO menciona el modelo esperado "
+                            "(%s): otro proceso ocupa el puerto %s o el "
+                            "arranque fue reemplazado"
+                            % (contexto.get("ruta_modelo"),
+                               contexto.get("puerto", PUERTO_DEF)))
+            print(red("    FAIL identidad: %s" % fila["nota"]))
+            print(red("    cola del log: %s" % cola_log(log_path)))
+            completo.update({"valido": False, "nota": fila["nota"],
+                             "log_datos": log_txt,
+                             "log_cola": cola_log(log_path)})
+            return fila, completo
+        if log_txt.get("puerto_en_log") is False:
+            print(yellow("    AVISO: el log no confirma 'listening on' en el "
+                         "puerto %s (se continua, pero revisar)"
+                         % contexto.get("puerto", PUERTO_DEF)))
         override_pedida = None
         fl = cfg["flags"]
         for i, tok in enumerate(fl):
@@ -822,32 +943,49 @@ def medir_config(cfg, contexto):
         if log_txt.get("sysmem_warn"):
             notas.append("aviso sysmem/shared en el log (posible spill)")
 
+        med_ok = False
         print(cyan("    midiendo: 4 pasadas x 256 tokens (temp 0, prompts "
                    "distintos)..."))
-        prefill, decs, detalle = pasadas_medicion(PUERTO_DEF, PROMPTS_MEDICION)
-        dec = media(decs)
-        fila["prefill_ts"] = fmt(prefill, 1)
-        for j, v in enumerate(decs):
-            fila["dec_r%d" % (j + 2)] = fmt(v, 2)
-        fila["decode_ts"] = fmt(dec, 2)
-        completo.update({"prefill_ts": prefill, "dec_r2_a_r4": decs,
-                         "decode_ts": dec, "pasadas": detalle,
-                         "log_datos": log_txt, "vram": vram})
+        try:
+            prefill, decs, detalle = pasadas_medicion(PUERTO_DEF,
+                                                      PROMPTS_MEDICION,
+                                                      proc=proc)
+            med_ok = True
+        except MeasError as e:
+            valido = False  # v1.1: una medicion que fallo JAMAS es valida
+            notas.append("medicion fallo: %s" % e)
+            print(red("    FAIL medicion: %s" % e))
+        except Exception as e:
+            valido = False
+            notas.append("medicion fallo (inesperado): %r" % e)
+            print(red("    FAIL medicion: %r" % e))
+        if med_ok:
+            dec = media(decs)
+            fila["prefill_ts"] = fmt(prefill, 1)
+            for j, v in enumerate(decs):
+                fila["dec_r%d" % (j + 2)] = fmt(v, 2)
+            fila["decode_ts"] = fmt(dec, 2)
+            completo.update({"prefill_ts": prefill, "dec_r2_a_r4": decs,
+                             "decode_ts": dec, "pasadas": detalle,
+                             "log_datos": log_txt, "vram": vram})
 
-        if contexto["con_sanity"]:
-            ok_n, tot, sdet = sanity_chat(PUERTO_DEF)
-            fila["sanity_ok_n"], fila["sanity_total"] = str(ok_n), str(tot)
-            completo["sanity"] = sdet
-            marca = green("%d/%d" % (ok_n, tot)) if ok_n == tot else \
-                yellow("%d/%d" % (ok_n, tot))
-            print("    sanity auto: %s" % marca)
-            if ok_n < tot:
-                notas.append("sanity auto incompleta (%d/%d)" % (ok_n, tot))
+            if contexto["con_sanity"]:
+                ok_n, tot, sdet = sanity_chat(PUERTO_DEF)
+                fila["sanity_ok_n"], fila["sanity_total"] = str(ok_n), str(tot)
+                completo["sanity"] = sdet
+                marca = green("%d/%d" % (ok_n, tot)) if ok_n == tot else \
+                    yellow("%d/%d" % (ok_n, tot))
+                print("    sanity auto: %s" % marca)
+                if ok_n < tot:
+                    notas.append("sanity auto incompleta (%d/%d)" % (ok_n, tot))
+        else:
+            completo.update({"log_datos": log_txt, "errores": list(notas)})
         fila["valido"] = "SI" if valido else "NO"
         fila["nota"] = "; ".join(notas)
         estado_run = green("VALIDO") if valido else red("INVALIDO")
         print("    decode %s t/s | prefill %s tok/s | %s %s"
-              % (bold(fmt(dec)), fmt(prefill, 0), estado_run,
+              % (bold(fmt(fila.get("decode_ts") or None)),
+                 fmt(fila.get("prefill_ts") or None, 0), estado_run,
                  gray(("; " + "; ".join(notas)) if notas else "")))
     finally:
         apagar_server(proc)
@@ -932,6 +1070,8 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
               % ("VERDE - todos los tokens verbatim en el dump b11856"
                  if not problemas_flags else "FALLOS: %s" % problemas_flags))
     md.append("- Clave override usada: `%s`" % (contexto.get("clave") or "N/D"))
+    md.append("- Comando base por config: `%s` (+ diff de la config; el "
+              "ultimo valor gana)" % (contexto.get("base_flags_str") or "N/D"))
     md.append("")
     md.append("## 1. Resultados")
     md.append("")
@@ -1043,7 +1183,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     PUERTO_DEF = args.puerto
-    base_flags = list(BASE_FLAGS_FIJAS)
+    # v1.1 CAUSA RAIZ del HTTP 400: antes el server se lanzaba con el diff de
+    # la config a secas (sin -m, sin --port, sin -c, sin -fa). Ahora la base
+    # SIEMPRE lleva el modelo y todos los flags fijos del protocolo.
+    base_flags = ["-m", args.modelo] + list(BASE_FLAGS_FIJAS)
     for i, tok in enumerate(base_flags):
         if tok == "--port" and i + 1 < len(base_flags):
             base_flags[i + 1] = str(args.puerto)
@@ -1052,11 +1195,17 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    if os.name == "nt":
+        try:
+            os.system("")  # habilita codigos VT/ANSI en la consola Windows
+        except Exception:
+            pass
 
     os.makedirs(args.logs, exist_ok=True)
     os.makedirs(os.path.join(args.logs, "logs-config"), exist_ok=True)
     tee = Tee(os.path.join(args.logs, "faseD-N1-consola.log"))
     sys.stdout = tee  # toda la consola queda copiada al log
+    sys.stderr = tee  # v1.1: los tracebacks TAMBIEN van al log
 
     print(gray("=" * 78))
     print(bold(VERSION))
@@ -1105,7 +1254,7 @@ def main(argv=None):
     configs = filtrar_configs(configs, solo=args.solo, quick=args.quick)
 
     print(cyan("[0] AUDITORIA DE FLAGS contra el dump b11856..."))
-    problemas = auditar_flags(RUTA_DUMP_DEF, configs)
+    problemas = auditar_flags(RUTA_DUMP_DEF, configs, base_flags)
     if problemas:
         for p in problemas:
             print(red("  FALLO: %s" % p))
@@ -1129,9 +1278,9 @@ def main(argv=None):
                 "carga_timeout": args.carga_timeout,
                 "con_sanity": not args.sin_sanity,
                 "sin_nvidia": args.sin_nvidia,
+                "puerto": args.puerto,
                 "base_flags_str": " ".join(base_flags),
                 "base_flags": base_flags}
-    contexto["flags_comando"] = base_flags
 
     # ---- 1. corrida --------------------------------------------------------
     print(cyan("[1] CORRIDA: %d configs (pausa termica 60 s cada 8)"
@@ -1154,23 +1303,45 @@ def main(argv=None):
         completos[cid] = dict(row)
 
     hechas_sesion = 0
-    for cfg in configs:
-        if cfg["id"] in hechos:
-            print(gray("  [%02d] %s: ya medida, salto" % (cfg["id"], cfg["nombre"])))
-            continue
-        if hechas_sesion and hechas_sesion % 8 == 0 and not args.sin_pausas:
-            print(yellow("  pausa termica 60 s (protege la medicion)..."))
-            time.sleep(60)
-        fila, completo = medir_config(cfg, contexto)
-        csv_append(ruta_csv, fila)
-        try:
-            dec = float(fila.get("decode_ts") or "") or None
-        except Exception:
-            dec = None
-        resultados[cfg["id"]] = dict(fila)
-        resultados[cfg["id"]]["decode_ts"] = dec
-        completos[cfg["id"]] = completo
-        hechas_sesion += 1
+    interrumpido = False
+    try:
+        for cfg in configs:
+            if cfg["id"] in hechos:
+                print(gray("  [%02d] %s: ya medida (valida), salto"
+                           % (cfg["id"], cfg["nombre"])))
+                continue
+            if hechas_sesion and hechas_sesion % 8 == 0 and not args.sin_pausas:
+                print(yellow("  pausa termica 60 s (protege la medicion)..."))
+                time.sleep(60)
+            try:
+                fila, completo = medir_config(cfg, contexto)
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                # v1.1: una config JAMAS tumba el barrido (la v1.0 murio con
+                # traceback en la config 01 y el resto se perdio entero)
+                fila = {c: "" for c in COLUMNAS}
+                fila.update({"proto": PROTO, "id": cfg["id"],
+                             "nombre": cfg["nombre"], "familia": cfg["familia"],
+                             "fecha_hora": ahora(), "valido": "NO",
+                             "nota": "excepcion no capturada: %r" % e})
+                completo = {"id": cfg["id"], "nombre": cfg["nombre"],
+                            "familia": cfg["familia"], "valido": False,
+                            "nota": fila["nota"], "excepcion": repr(e)}
+                print(red("  [%02d] EXCEPCION no capturada: %r" % (cfg["id"], e)))
+            csv_append(ruta_csv, fila)
+            try:
+                dec = float(fila.get("decode_ts") or "") or None
+            except Exception:
+                dec = None
+            resultados[cfg["id"]] = dict(fila)
+            resultados[cfg["id"]]["decode_ts"] = dec
+            completos[cfg["id"]] = completo
+            hechas_sesion += 1
+    except KeyboardInterrupt:
+        interrumpido = True
+        print(yellow("\n  INTERRUMPIDO (Ctrl+C): guardando informe parcial; "
+                     "lo ya medido queda en el CSV y se reanuda despues..."))
 
     # ---- 2. informe --------------------------------------------------------
     print(cyan("[2] INFORME..."))
@@ -1183,7 +1354,7 @@ def main(argv=None):
     print("")
     print(bold("Para pasar al analisis: faseD-N1-INFORME.md + "
                "faseD-N1-resultados.csv (+ carpeta logs-config si se pide)."))
-    return 0
+    return 130 if interrumpido else 0
 
 
 if __name__ == "__main__":
