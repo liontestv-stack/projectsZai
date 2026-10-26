@@ -57,10 +57,10 @@ Salidas (carpeta de logs, default D:\\ZLia\\faseD-logs):
   logs-config\\NN-NOMBRE.log <- stdout+stderr del server por config
 
 Uso:
-  py barrido-n1-expertos.py              -> 14 configs (~40-55 min)
+  py barrido-n1-expertos.py              -> 15 configs (~45-60 min)
   py barrido-n1-expertos.py --quick      -> 7 configs criticas (~25 min)
   py barrido-n1-expertos.py --solo exp   -> solo bloque EXP
-  py barrido-n1-expertos.py --solo exp,mec,combo
+  py barrido-n1-expertos.py --solo exp,mec,combo,ot
   py barrido-n1-expertos.py --extra-k 9,7 -> dosis k extra en el bloque EXP
   py barrido-n1-expertos.py --si         -> mata un server vivo y sigue
 
@@ -88,6 +88,27 @@ AUDITORIA v1.1 (28-oct-2026, tras el HTTP 400 de la primera corrida real):
   9. stderr tambien va al log; Ctrl+C guarda informe parcial (rc 130).
  10. Parser GGUF con buffer de 1 MiB (arrays gigantes saltan mucho mas
      rapido). Retries solo para fallos transitorios (5xx/429/conexion).
+
+AUDITORIA DE COBERTURA v1.2 (2026-10-27, encargo Director: "analiza si ya
+ tiene todo lo que debes probar en el barrido n1 expertos"):
+ 11. NUEVA config 15 D-OT-CTRL (bloque ot): el run autenticador cruzado
+     -ot del SS18 quedo "disponible" en papel pero JAMAS se materializo.
+     Replica la estructura de NCM37C4 (37 capas MoE en CPU, 3 en GPU;
+     shared/aten/KV en GPU porque 'exps' no matchea 'shexp') con UNA sola
+     flag -ot de lista por comas y SIN -ncmoe: debe clavar el control
+     D-NCM37C4-MEC0 (historico 22.49 [M]). Proto SIN cambios (faseD-N1-v2):
+     el resume reutiliza las filas v1.1 y solo mide la nueva.
+ 12. Veredicto MEC a 3 estados: antes un EMPATE dentro del ruido se
+     etiquetaba "pierde vs control... SE DESCARTA" (un +0.14 imprimia
+     "pierde (0.14)"). La letra del SS15 solo ordena descartar si la dosis
+     es MAS LENTA. Ahora: GANA / EMPATA (sin GO, sin castigo) / PIERDE.
+ 13. El buffer CUDA0 (2o autenticador, SS12.6/12.9.5) se registraba pero
+     nadie lo evaluaba: ahora protocolo_decision compara EXP4/3/2 contra
+     el ancla (debe BAJAR con k) y emite el veredicto del run cruzado -ot
+     contra el control NCM37C4 de la misma sesion.
+ 14. La columna CSV delta_vs_ancla_pct existia pero jamas se llenaba (y
+     las constantes historicas 21.53/22.49 estaban muertas): el delta se
+     calcula al vuelo y el informe cita las referencias del barrido-30.
 """
 import argparse
 import csv
@@ -103,7 +124,7 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n1-expertos v1.1 (2026-10-27)"
+VERSION = "barrido-n1-expertos v1.2 (2026-10-27)"
 PROTO = "faseD-N1-v2"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
@@ -140,6 +161,12 @@ CM = ["-cmoe"]
 UB1K = ["-ub", "1024", "-b", "4096"]            # id 32 verbatim barrido-30
 NCM37C4 = ["-ncmoe", "37", "-c", "4096",
            "-ctk", "q4_0", "-ctv", "q4_0"]      # id 14 verbatim barrido-30
+# SS18: equivalente -ot de NCM37C4 bajo la lectura del dump ("first N" en
+# CPU -> quedan en GPU las capas 37-39). Una sola flag, lista por comas
+# (repetir -ot esta deprecado); 'exps' NO matchea 'shexp' -> el shared
+# expert, la atencion y la KV nunca salen de GPU (igual que -ncmoe).
+OT_EQUIVALENTE = (r"blk\.(3[7-9])\.ffn_(gate|up|down)_exps=CUDA0,"
+                  r"exps=CPU")
 
 # ---- valores legales (verbatim del dump b11856, auditados 27-oct-2026) -----
 LM_MODOS = {"auto", "none", "mmap", "mlock", "mmap+mlock", "dio"}
@@ -158,7 +185,8 @@ PROHIBIDAS_PREFIJO = ("--spec-", "-turbo", "turbo")  # fase D no usa spec
 DUMP_REQUERIDOS = [
     "-m,", "--model", "-a,", "--alias", "-ngl,", "--gpu-layers",
     "-cmoe,", "--cpu-moe", "-ncmoe,", "--n-cpu-moe",
-    "--override-kv", "--moe-cache-mib", "-lm,", "--load-mode",
+    "--override-kv", "--moe-cache-mib", "-ot,", "--override-tensor",
+    "-lm,", "--load-mode",
     "-fa,", "--flash-attn", "-ctk,", "--cache-type-k", "-ctv,",
     "--cache-type-v", "-c,", "--ctx-size", "-b,", "--batch-size",
     "-ub,", "--ubatch-size", "-t,", "--threads", "--prio",
@@ -541,11 +569,23 @@ def construir_configs(arch, bloque="", extra_k=()):
         add(14, "COMBO", "D-EXP4-NCM37C4", list(NCM37C4) + _ovexp(arch, 4)[0],
             "stack SS8: EXP4 x NCM37C4 (el compuesto del objetivo +50%)")
 
+    if bloque in ("", "ot"):
+        add(15, "OT", "D-OT-CTRL",
+            ["-c", "4096", "-ctk", "q4_0", "-ctv", "q4_0",
+             "-ot", OT_EQUIVALENTE, "--moe-cache-mib", "0"],
+            "run autenticador cruzado SS18: -ot replica la estructura de "
+            "NCM37C4 (37 capas MoE en CPU, ultimas 3 en GPU; shared/aten/"
+            "KV en GPU porque 'exps' no matchea 'shexp') SIN -ncmoe y con "
+            "UNA sola flag de lista por comas; debe clavar el control "
+            "D-NCM37C4-MEC0 (hist. 22.49 [M]); si se desvia, bug de "
+            "comprension del knob ANTES de seguir barriendo")
+
     return configs
 
 
 BLOQUES_DE = {"exp": [1, 2, 3, 4, 5, 6, 7, 8],
-              "ub1k": [9], "mec": [10, 11, 12, 13], "combo": [14]}
+              "ub1k": [9], "mec": [10, 11, 12, 13], "combo": [14],
+              "ot": [15]}
 QUICK_IDS = [1, 2, 3, 4, 6, 10, 11]
 
 
@@ -1000,6 +1040,30 @@ def protocolo_decision(resultados, ancla_dec):
     exp4 = resultados.get(6)
     exp10 = resultados.get(2)
     exp8 = resultados.get(3)
+    # run autenticador cruzado -ot (SS18): NO depende del ancla EXP -> va
+    # antes del guardia (en --solo mec,ot el ancla no existe y el veredicto
+    # del cruzado igualmente debe salir)
+    ot = resultados.get(15)
+    if ot and ot.get("decode_ts"):
+        mec0 = resultados.get(10)
+        ref = mec0.get("decode_ts") if (mec0 and mec0.get("decode_ts")) \
+            else None
+        if ref:
+            desv = abs(ot["decode_ts"] / ref - 1.0)
+            if desv <= max(TECHO_RUIDO / ref, 0.02):
+                lineas.append("- RUN CRUZADO -ot (SS18): %.2f vs control "
+                              "NCM37C4 %.2f (hist. 22.49): knob -ot "
+                              "COMPRENDIDO, offload validado por 2a via"
+                              % (ot["decode_ts"], ref))
+            else:
+                lineas.append("- RUN CRUZADO -ot (SS18): %.2f se DESVIA del "
+                              "control NCM37C4 %.2f (%.1f%%): bug de "
+                              "comprension del knob ANTES de seguir barriendo"
+                              % (ot["decode_ts"], ref, desv * 100))
+        else:
+            lineas.append("- RUN CRUZADO -ot (SS18): %.2f t/s (sin control "
+                          "NCM37C4 en sesion; hist. 22.49 [M])"
+                          % ot["decode_ts"])
     if not ancla or not ancla.get("decode_ts"):
         lineas.append("- ANCLA sin dato: no se puede evaluar el arbol (run invalido?)")
         return lineas
@@ -1040,6 +1104,31 @@ def protocolo_decision(resultados, ancla_dec):
             lineas.append("- EXP4 PLANO o negativo CON override aplicado: el "
                           "build ignora la dosis -> PLAN B: RUTA 0 (build "
                           "b11901, 2 zips) (SS11.4 caso 3)" % ())
+    # 2o autenticador evaluado (SS12.6/SS12.9.5): el buffer CUDA0 debe
+    # BAJAR con k (menos expertos activos = intermedios MoE menores). Hasta
+    # v1.1 se registraba y nadie lo leia.
+    try:
+        b_ancla = float(ancla.get("buffer_mib")) if ancla else None
+    except (TypeError, ValueError):
+        b_ancla = None
+    if b_ancla:
+        for cid, kk in ((6, 4), (7, 3), (8, 2)):
+            r = resultados.get(cid)
+            try:
+                b = float(r.get("buffer_mib")) if r else None
+            except (TypeError, ValueError):
+                b = None
+            if not b:
+                continue
+            if b < b_ancla:
+                lineas.append("- BONUS SS12.6: buffer CUDA0 de EXP%d = %.0f "
+                              "MiB vs ancla %.0f MiB (-%.0f%%): menos expertos "
+                              "activos libera VRAM (2a via de autenticacion)"
+                              % (kk, b, b_ancla, (1 - b / b_ancla) * 100))
+            else:
+                lineas.append("- BONUS SS12.6: buffer CUDA0 de EXP%d NO bajo "
+                              "(%.0f vs ancla %.0f MiB): revisar (esperado "
+                              "menor con k bajo)" % (kk, b, b_ancla))
     return lineas
 
 
@@ -1092,6 +1181,8 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
         m = re.search(r"int:(\d+)", r.get("override_pedida") or "")
         if m and int(m.group(1)) in EXPECT_EXP:
             esperado = EXPECT_EXP[int(m.group(1))][0]
+        elif r.get("familia") == "OT":
+            esperado = "run cruzado SS18: ~control NCM37C4 (22.49 [M])"
         flags_cortos = (r.get("flags") or "").replace(
             contexto.get("base_flags_str", ""), "").strip()
         md.append("| %s | %s | `%s` | %s | %s | %s | %s | %s%s | %s | %s/%s | "
@@ -1106,6 +1197,12 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
                      r.get("sanity_ok_n") or "-", r.get("sanity_total") or "-",
                      r.get("valido") or ""))
     md.append("")
+    md.append("Referencias historicas del barrido-30 [M]: ancla/ORO-UB1K = "
+              "%.2f t/s - NCM37C4 = %.2f t/s (+4.4%%); ruido declarado "
+              "+/-0.3-0.5 t/s. La columna 'vs ancla' compara contra el "
+              "ANCLA DE ESTA SESION, no contra estos numeros."
+              % (ANCLA_UB1K, NCM37C4_REF))
+    md.append("")
     md.append("## 2. Protocolo de decision SS11.4 (evaluacion automatica)")
     md.append("")
     md.extend(protocolo_decision(resultados, ancla_dec) or
@@ -1113,16 +1210,26 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
     md.append("")
     mec_ctrl = resultados.get(10)
     if mec_ctrl and mec_ctrl.get("decode_ts"):
-        md.append("## 3. Veredicto MEC (control en la misma sesion)")
+        md.append("## 3. Veredicto MEC (control D-MEC-0 en la misma sesion; "
+                  "control historico NCM37C4 = 22.49 [M]: el MEC0 de esta "
+                  "sesion deberia clavarlo dentro del ruido)")
         md.append("")
         for cid in (11, 12, 13):
             r = resultados.get(cid)
             if not r or not r.get("decode_ts"):
                 continue
             dif = r["decode_ts"] - mec_ctrl["decode_ts"]
-            veredicto = ("GANA vs control (+%.2f): proponer como dosis"
-                         % dif) if dif > TECHO_RUIDO else (
-                "pierde vs control (%.2f): SE DESCARTA (regla SS15)" % dif)
+            if dif > TECHO_RUIDO:
+                veredicto = ("GANA vs control (+%.2f): proponer como dosis"
+                             % dif)
+            elif dif >= -TECHO_RUIDO:
+                veredicto = ("EMPATA con el control (%+.2f, dentro del "
+                             "ruido +/-%.2f): el cache NO aporta aqui -> se "
+                             "queda OFF (sin castigo; SS15 solo descarta si "
+                             "PIERDE)" % (dif, TECHO_RUIDO))
+            else:
+                veredicto = ("PIERDE vs control (%.2f): SE DESCARTA (regla "
+                             "SS15, caso 600 MiB)" % dif)
             md.append("- %s: %s t/s vs control %s -> %s"
                       % (r["nombre"], fmt(r["decode_ts"]),
                          fmt(mec_ctrl["decode_ts"]), veredicto))
@@ -1329,6 +1436,15 @@ def main(argv=None):
                             "familia": cfg["familia"], "valido": False,
                             "nota": fila["nota"], "excepcion": repr(e)}
                 print(red("  [%02d] EXCEPCION no capturada: %r" % (cfg["id"], e)))
+            if (cfg["id"] != 1 and fila.get("decode_ts")
+                    and (resultados.get(1) or {}).get("decode_ts")):
+                # v1.2: la columna existia desde la v1.0 pero jamas se llenaba
+                try:
+                    fila["delta_vs_ancla_pct"] = "%.1f" % (
+                        (float(fila["decode_ts"])
+                         / resultados[1]["decode_ts"] - 1.0) * 100)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
             csv_append(ruta_csv, fila)
             try:
                 dec = float(fila.get("decode_ts") or "") or None

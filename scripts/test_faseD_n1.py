@@ -18,7 +18,8 @@ Ejecuta la bateria completa SIN GPU ni modelo real:
   T09 resume: segunda corrida no re-mide (CSV intacto)
   T10 server falso que IGNORA el override -> runs INVALIDOS + protocolo de
       decision SS11.4 ramifica a plan B
-  T11 E2E bloques mec+combo -> MEC veredicto vs control en el informe
+  T11 E2E bloques mec+combo+ot -> MEC veredicto vs control en el informe y
+      run cruzado -ot evaluado (SS18)
   T12 informe MD: contiene secciones y clave de override correcta
   --- bateria v1.1 (regresiones de la auditoria tras el HTTP 400 real) ---
   T13 merge base+diff: el comando lanzado SIEMPRE trae -m/-ngl/--port y el
@@ -28,6 +29,12 @@ Ejecuta la bateria completa SIN GPU ni modelo real:
   T16 server que muere en la carga -> fila NO con exit code, barrido sigue
   T17 resume v1.1: las filas NO se re-miden, las SI se saltan
   T18 consola.log SIEMPRE sin ANSI aunque USE_COLOR este activo
+  --- bateria v1.2 (regresiones de la auditoria de COBERTURA) ---
+  T04a 15 configs (nace el bloque ot con la config 15 D-OT-CTRL)
+  T04h la config 15 replica NCM37C4 con UNA flag -ot, sin -ncmoe, cache 0
+  T11c el run cruzado se mide y el informe emite su veredicto COMPRENDIDO
+  T19 buffer CUDA0 evaluado en el arbol de decision (SS12.6, 2a via)
+  T20 delta_vs_ancla_pct llenado en el CSV (columna muerta de la v1.1)
 """
 import csv
 import importlib.util
@@ -114,6 +121,7 @@ def dump_sintetico(ruta, quitar=()):
 -ngl, --gpu-layers N   capas a GPU
 -cmoe, --cpu-moe       expertos a CPU
 -ncmoe, --n-cpu-moe N  primeras N capas MoE en CPU
+-ot, --override-tensor PATTERN=BUFTYPE,...  override tensor buffer type
 --override-kv KEY=TYPE:VALUE,...  override de metadatos
 --moe-cache-mib N      GPU cache size in MiB for the MoE experts (default 0)
 -c, --ctx-size N       contexto
@@ -256,7 +264,7 @@ def main():
     # T04 configs
     cfgs = mod.construir_configs("qwen3_5_moe")
     by_id = {c["id"]: c for c in cfgs}
-    check("T04a 14 configs construidas", len(cfgs) == 14, str(len(cfgs)))
+    check("T04a 15 configs construidas", len(cfgs) == 15, str(len(cfgs)))
     check("T04b clave override EXACTA desde el GGUF",
           by_id[2]["flags"][-1] == "qwen3_5_moe.expert_used_count=int:10",
           by_id[2]["flags"][-1])
@@ -274,7 +282,17 @@ def main():
                       if t == "-ub"))
     check("T04g filtrar --solo exp = 8 y --quick = 7",
           len(mod.filtrar_configs(cfgs, solo="exp")) == 8
-          and len(mod.filtrar_configs(cfgs, quick=True)) == 7)
+          and len(mod.filtrar_configs(cfgs, quick=True)) == 7
+          and len(mod.filtrar_configs(cfgs, solo="ot")) == 1)
+    check("T04h run cruzado -ot: UNA flag, sin -ncmoe, cache 0, igual KV",
+          by_id[15]["familia"] == "OT"
+          and by_id[15]["flags"].count("-ot") == 1
+          and "exps=CPU" in " ".join(by_id[15]["flags"])
+          and "CUDA0" in " ".join(by_id[15]["flags"])
+          and "-ncmoe" not in by_id[15]["flags"]
+          and "-ctk" in by_id[15]["flags"]
+          and by_id[15]["flags"][-2:] == ["--moe-cache-mib", "0"],
+          str(by_id[15]["flags"]))
 
     # T05/T06/T07 auditoria
     dump = os.path.join(tmp, "dump.txt")
@@ -358,21 +376,27 @@ def main():
     except Exception:
         check("T10 override ignorado", False, traceback.format_exc(-5))
 
-    # T11 bloques mec + combo
+    # T11 bloques mec + combo + ot
     logs3 = os.path.join(tmp, "logs3")
     argv3 = ["--server", fake1, "--modelo", gguf, "--logs", logs3,
-             "--puerto", "19931", "--solo", "mec,combo,ub1k", "--sin-nvidia",
+             "--puerto", "19931", "--solo", "mec,combo,ub1k,ot", "--sin-nvidia",
              "--sin-pausas", "--carga-timeout", "60"]
     try:
         mod.main(argv3)
         import csv as _csv
         with open(os.path.join(logs3, "faseD-N1-resultados.csv")) as f:
             filas4 = list(_csv.DictReader(f))
-        check("T11a 6 filas (mec 4 + combo 1 + ub1k 1)", len(filas4) == 6,
-              str(len(filas4)))
+        check("T11a 7 filas (mec 4 + combo 1 + ub1k 1 + ot 1)",
+              len(filas4) == 7, str(len(filas4)))
         informe3 = open(os.path.join(logs3, "faseD-N1-INFORME.md")).read()
-        check("T11b informe MEC veredicto vs control",
-              "Veredicto MEC" in informe3 and "SE DESCARTA" in informe3)
+        check("T11b informe MEC veredicto vs control (empate = EMPATA, "
+              "no descartado)",
+              "Veredicto MEC" in informe3 and "EMPATA" in informe3)
+        check("T11c run cruzado -ot medido, evaluado y COMPRENDIDO",
+              any(f["id"] == "15" and "-ot" in f["flags"] for f in filas4)
+              and "RUN CRUZADO -ot" in informe3
+              and "COMPRENDIDO" in informe3,
+              "cruzado_en_informe=%s" % ("RUN CRUZADO -ot" in informe3))
     except Exception:
         check("T11 bloques mec/combo", False, traceback.format_exc(-5))
 
@@ -387,6 +411,20 @@ def main():
           "\x1b[" not in informe1)
     check("T12d informe DOSIS VIVA detectada (mock frena/sube bien)",
           "DOSIS VIVA" in informe1)
+
+    # T19/T20 (bateria v1.2): buffer CUDA0 evaluado + delta_vs_ancla_pct
+    with open(os.path.join(logs1, "faseD-N1-resultados.csv")) as f:
+        filas20 = list(csv.DictReader(f))
+    check("T19 buffer CUDA0 evaluado en el arbol (SS12.6, 2a via)",
+          "SS12.6" in informe1 and "2a via" in informe1)
+    check("T20a delta_vs_ancla_pct vacio SOLO en el ancla",
+          all((r["delta_vs_ancla_pct"] == "") == (r["id"] == "1")
+              for r in filas20),
+          str([(r["id"], r["delta_vs_ancla_pct"]) for r in filas20]))
+    fexp4 = [r for r in filas20 if r["id"] == "6"][0]
+    check("T20b delta de EXP4 positivo y numerico",
+          float(fexp4["delta_vs_ancla_pct"]) > 0,
+          fexp4["delta_vs_ancla_pct"])
 
     # T13 merge base+diff (causa raiz del HTTP 400 de la v1.0)
     try:

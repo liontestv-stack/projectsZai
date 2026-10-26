@@ -487,3 +487,47 @@ Nuevos checks de regresión: **T13** el comando lanzado trae `-m <modelo> -ngl 9
 - **Los autenticadores cubren cualquier duda sobre el arch**: si el build normalizara el arch internamente o el override no aplicara, `n_expert_used = N` no aparecería en el log → run INVALIDO por §12.2, y el control EXP10 que debe frenar (~-6.5%) expondría un no-op aunque el log dijera lo contrario (§11.4). El instrumento es autocorrector en la misma corrida.
 - **Relanzamiento**: copiar el `barrido-n1-expertos.py` v1.1 actualizado a `D:\ZLia\` y ejecutar `BARRIDO-N1.bat`. El proto nuevo (`faseD-N1-v2`) ignora CSVs viejos → re-corrida completa (la v1.0 no llegó a escribir ninguna fila, no se pierde nada).
 - Si reaparece un 400, la nota dirá QUÉ respondió el server (contexto, endpoint, slot...): diagnóstico en la primera línea en vez de un misterio.
+
+## 22. ANEXO — Ronda 15: auditoría de COBERTURA del instrumento — ¿tiene todo lo que hay que probar? (2026-10-27)
+
+Encargo del Director: *"analiza si ya tiene todo lo que debes probar en el barrido n1 expertos"*. Método: matriz punto a punto de ESTE documento (§0-§21) contra `barrido-n1-expertos.py` v1.1 (1361 líneas) y su batería, línea por línea (configs, autenticadores, protocolo, informe, main). **Veredicto global: el instrumento ya tenía TODAS las dosis y TODOS los autenticadores del nivel; la auditoría cazó 4 huecos (1 dosis faltante, 1 veredicto defectuoso, 1 autenticador a medio materializar, 1 columna muerta) y la v1.2 los corrige. NADA cambia en dosis, claves, parser, expectativas ni conclusiones de §0-§21.**
+
+### 22.1 Matriz de cobertura (lo que YA estaba, verificado en el código)
+
+| Requisito del documento | Dónde exige el doc | En el script v1.1 |
+|---|---|---|
+| D-ANCLA, D-EXP10-CTRL, D-EXP8, D-EXP6/5/4/3/2 (bloque EXP sobre base -cmoe comparable 1:1 con 21.53 [M]) | §5/§6 | 8 configs, ids 1-8 ✔ |
+| D-EXP4-UB1K (tokens id 32 verbatim) | §6.4 | id 9 ✔ |
+| D-MEC-0 control explícito + D-MEC-512/1024/768 sobre NCM37C4 (tokens id 14 verbatim, 22.49 [M]), orden 0→512→1024→768, dosis 256 ni se prueba | §14/§15 | ids 10-13 ✔ |
+| D-EXP4-NCM37C4 (combo del stack) | §8 | id 14 ✔ |
+| Autenticador 1: grep `n_expert_used = N` por run; run INVÁLIDO si ≠ dosis | §12.2/§13 | regex `llm_load_print_meta\|print_info` + invalidación ✔ |
+| Autenticador 2: `CUDA0 compute buffer size` registrado por run | §12.6 | registrado en CSV/informe ✔ (evaluación: hueco G3) |
+| Control EXP10 debe frenar (~-6.5%) — firma anti no-op | §4/§11.4 | veredicto automático ✔ |
+| EXP8 clava el ancla (estabilidad de sesión) | §11.4 | veredicto automático ✔ |
+| Árbol de decisión (dosis viva / banda no domina / build ignora → RUTA 0) | §11.4 | `protocolo_decision` 3 casos ✔ |
+| MEC A/B contra control en la MISMA sesión; dosis más lenta = descartada | §15 | veredicto automático ✔ (matiz de empates: hueco G2) |
+| Clave única `<arch_del_GGUF>.expert_used_count=int:K`, jamás otras claves `expert_*` (§12.4 NO-TOCAR) | §11.1/§12.4 | parser + `_ovexp` ✔ |
+| Auditoría de flags integrada contra el dump b11856, base + diff | §20.1 | `auditar_flags` ✔ |
+| Protocolo de la casa: 4 pasadas × 256 tok, 4 prompts distintos, temp 0, descarta 1ª, media 2-4, pausas 60 s cada 8, CSV reanudable, guardarrail /health, `--si` | §20.1/aprendido | ✔ |
+| Pre-vuelo: pin build 11856, bytes modelo, hparams 256/8, arch del GGUF | §20.1 | ✔ |
+| Sanity auto 3 pares + VRAM >3700 MiB + fit-abort/sysmem | §20.1 | ✔ |
+| Expectativas [T] de §5 en el informe | §5 | `EXPECT_EXP` ✔ |
+| Puerta de calidad completa (20 prompts manuales) | §5/§20.1 | paso humano, recordado en el informe ✔ |
+
+### 22.2 Los 4 huecos cazados y su corrección en v1.2
+
+1. **G1 — el run autenticador cruzado `-ot` (§18.3) nunca se materializó.** §20.2 lo declaraba "disponible" pero las configs eran 14 y no incluía ninguno. Además el regex abreviado del §18 (`blk\.(3[7-9])\...=CPU`, una sola regla) NO replica NCM37C4: con una sola regla, `exps=CPU` manda SOLO las capas 37-39 a CPU (3 capas, no 37). La forma fiel a la mecánica "primera regla gana" (§18.2) es de DOS reglas: `-ot "blk\.(3[7-9])\.ffn_(gate|up|down)_exps=CUDA0,exps=CPU"` — primera regla fija los expertos de las capas 37-39 en CUDA0 (se quedan en GPU, réplica exacta de la lectura "first N en CPU" del dump), segunda regla manda el resto de `exps` a CPU; `shexp`/atención/KV jamás matchean → igual que `-ncmoe`. **Corrección**: config 15 `D-OT-CTRL` (bloque `ot`, `--solo ot`): mismo `-c 4096` + KV q4_0 + `--moe-cache-mib 0` que el control, SIN `-ncmoe`; veredicto automático vs D-NCM37C4-MEC0 de la sesión (hist. 22.49 [M]): desviación ≤ max(ruido, 2%) → "COMPRENDIDO"; si se desvía → bug de comprensión del knob ANTES de seguir barriendo. El veredicto se emite AUNQUE el ANCLA no exista en la sesión (no depende del bloque EXP). `DUMP_REQUERIDOS` ahora exige `-ot,/--override-tensor` verbatim en el dump.
+2. **G2 — el veredicto MEC etiquetaba EMPATES como derrotas.** Con `dif = dosis - control`, un empate dentro del ruido (p.ej. +0.14) caía en la rama "pierde vs control (0.14): SE DESCARTA". La letra de §15 solo ordena descartar si la dosis es MÁS LENTA; un empate no es derrota (ni es GO: el cache no aporta y se queda OFF sin castigo). **Corrección**: 3 estados — GANA (> +0.5) / EMPATA (±0.5, "se queda OFF, sin GO") / PIERDE (< −0.5, "SE DESCARTA, caso 600 MiB").
+3. **G3 — el buffer CUDA0 se registraba pero nadie lo evaluaba.** §12.9.5 lo pide como "confirmación de la dosis por segunda vía independiente del t/s" (bajar k → intermedios MoE menores → buffer menor). **Corrección**: el árbol compara EXP4/EXP3/EXP2 contra el ancla y emite "BONUS SS12.6: buffer CUDA0 de EXP4 = X MiB vs ancla Y (-Z%)" o su aviso si NO baja.
+4. **G4 — columna y constantes muertas.** `delta_vs_ancla_pct` llevaba en las columnas del CSV desde la v1.0 y JAMÁS se escribía; `ANCLA_UB1K = 21.53` y `NCM37C4_REF = 22.49` estaban definidas y sin uso. **Corrección**: el delta se calcula al vuelo para toda fila posterior al ancla (excepto la propia ancla), y el informe cita las referencias históricas del barrido-30 (21.53 / 22.49 / ruido ±0.3-0.5) aclarando que "vs ancla" compara contra el ANCLA DE SESIÓN.
+
+### 22.3 Matiz de reconciliación: la "mediana de 3" de §15
+
+El §15 pide el A/B MEC "con mediana de 3"; el protocolo de la casa (aprendido SS8, que produce los 21.53/22.49 [M]) usa la MEDIA de las pasadas 2-4. Interpretación adoptada: las "3" son las 3 pasadas decode del protocolo de la casa, y se computa su media para mantener comparabilidad 1:1 con los históricos [M]; el margen de ruido declarado (±0.3-0.5 t/s) aplica en el veredicto como TECHO_RUIDO. Si una decisión MEC quedara a menos de 5 pp, la regla de la casa manda repetir con 3 corridas completas antes de perseguirla (el informe lo recuerda).
+
+### 22.4 Qué NO cambia y cómo relanzar
+
+- **Dosis de fase D SIN CAMBIOS** (§20.2 en pie): 14 dosis + la nueva config 15 = 15 configs en 5 bloques (exp/ub1k/mec/combo/ot). Expectativas [T] de §5 intactas. Clave override, parser y autenticador principal intactos.
+- **Proto sin cambios (`faseD-N1-v2`)**: si la v1.1 ya corrió completa, el resume reutiliza sus filas válidas y SOLO mide la config nueva; si no había corrido nada, corre entera. Copiar el v1.2 a `D:\ZLia\` y ejecutar `BARRIDO-N1.bat`.
+- **Validación**: batería ampliada de 42 a 48 checks, TODO VERDE — nuevos: T04a (15 configs), T04h (config 15: UNA flag `-ot`, sin `-ncmoe`, cache 0, KV idéntica al control), T11c (el cruzado se mide y el informe emite "RUN CRUZADO -ot … COMPRENDIDO"), T19 (buffer CUDA0 evaluado en el árbol), T20a/b (`delta_vs_ancla_pct` vacío SOLO en el ancla y numérico en el resto). Durante el desarrollo la propia batería cazó 2 bugs del desarrollo: el veredicto del cruzado quedó tras el guardia del ANCLA (no salía en sesiones sin bloque EXP → movido antes del guardia) y un detalle de aserción del test.
+- Lección de instrumentación de esta ronda: **"disponible" no es "medible"** — un run autenticador que existe solo en el papel del documento no autentica nada; toda prueba prometida debe existir como config executable con veredicto automático, o debe quedar fuera del alcance declarado del instrumento.
