@@ -222,3 +222,76 @@ Si la dosis k=4 se aplica de verdad: bytes/token −0.20 GB sobre ~1.5 → **el 
 ### 11.5 Impacto en el roadmap [T]
 
 Con el descubrimiento del repo MTP de unsloth (ver anexo del Nivel 2), la escalera compuesta se simplifica: **UD-IQ3_XXS-MTP (14.07 GB) ya trae la cabeza nextn** → EXP (este nivel) + cuant + MTP caben en UNA sola descarga y UNA sesión de barrido. El objetivo 32–36 t/s pasa por: autenticar EXP k=4 → apilar MTP n-max 2 → rematar con NCM37C4/FIT-A.
+
+---
+
+## 12. ANEXO — Tercera ronda: mecánica interna del override hasta el último detalle (2026-10-26)
+
+### 12.1 Sintaxis y mecánica de `--override-kv`, confirmadas al carácter [F]
+
+Del dump del build b11856 (líneas 162–166) [F]:
+
+- Sintaxis: `--override-kv KEY=TYPE:VALUE,...` — "advanced option to override model metadata by key".
+- Tipos soportados: **`int`, `float`, `bool`, `str`** (ejemplo oficial del help: `--override-kv tokenizer.ggml.add_bos_token=bool:false,tokenizer.ggml.add_eos_token=bool:false`).
+- Múltiples overrides: separados por comas en un solo flag (el dump corrige el texto antiguo de 2024 que decía "may be specified multiple times" — ambas formas funcionan, la coma es la moderna).
+- La dosis correcta para este modelo queda entonces: `--override-kv qwen3_5_moe.expert_used_count=int:4` (con el arch REAL del GGUF, que el parser de fase D lee — ver §11.1).
+
+### 12.2 La firma de autenticación en el log, literal [F]
+
+Datapoint fundacional (discusión #5114, Mixtral 8x7B, en producción desde Ene-2024): `--override-kv llama.expert_used_count=int:3` produce en el log:
+
+```
+llm_load_print_meta: n_expert = 8
+llm_load_print_meta: n_expert_used = 3
+```
+
+→ La línea exacta a grep en cada run de fase D es **`llm_load_print_meta: n_expert_used = N`**. Si muestra la dosis pedida, el override VIVIÓ; cualquier otra cosa = run inválido (criterio ya cableado en barrido-total fase D).
+
+### 12.3 Issue #19528 CERRADO como "not planned": no esperen flag dedicado [F]
+
+Estado verificado (Mar-2026): el issue pidiendo `--expert-override`/`--moe-topk` fue cerrado por inactividad tras la respuesta del mantenedor CISC: *"There already is such an option; `--override-kv <arch>.expert_used_count=int:8`"*, con confirmación de un tercero en `nemotron_h_moe` (`--override-kv nemotron_h_moe.expert_used_count=int:8` "works").
+
+**Consecuencia operativa**: el "plan B" de §6.5 y §9 (esperar un flag dedicado upstream) está **MUERTO — el issue está cerrado como not planned**. `--override-kv` es LA vía oficial, soportada y permanente. Si la clave correcta fallara en el build b11856 (0 casos conocidos), el único plan B real es actualizar build, no esperar flag nuevo.
+
+### 12.4 Claves MoE emparentadas: lista de NO-TOCAR [T]
+
+El GGUF lleva más claves `<arch>.expert_*` que el loader consulta. Solo `expert_used_count` es seguro porque no cambia la FORMA de ningún tensor — solo cuántos del top-k se leen:
+
+| Clave | Valor del 3.6 | Por qué NO tocarla |
+|---|---|---|
+| `expert_count` | 256 | Cambiarla desincroniza con los tensores ffn_*_exps cargados → crash o corrupción |
+| `expert_feed_forward_length` | 512 | Idem: define la dim de los tensores de expertos |
+| `expert_shared_count` | 1 | El shared expert tiene tensor PROPIO (`ffn_*_shexp`); poner 0 rompe el grafo |
+| `expert_weights_scale` / `expert_weights_norm` | 1.0 / — | Alteran la matemática del router en silencio |
+| `expert_gating_func` | silu | Cambiar la activación = otra red |
+
+### 12.5 Per-layer NO es posible; dosis global k es lo que hay [T]
+
+MoE-Spec calcula presupuesto por capa/árbol; el override-kv es **global para todo el modelo** (una clave, un valor). Ningún build conocido acepta `<arch>.block.N.expert_used_count`. El recorte runtime en llama.cpp = truncation global del top-k, punto. Todo refinamiento por capa exige poda offline (REAP y familia, Nivel 2/§7).
+
+### 12.6 Bonus inesperado: bajar k libera VRAM del buffer de cómputo [T]
+
+Los intermedios de la MoE (`ggml_mul_mat_id`) escalan con el número de expertos usados por token: son por `n_tok × k × n_embd`. Bajar k=8→4 reduce ese buffer ~a la mitad → **margen VRAM extra en la GTX 1650** exactamente cuando el Nivel 3 lo necesita (subir `-ncmoe` o ctx). Verificable gratis en el log de cada run: comparar la línea `CUDA0 compute buffer size` del run EXP4 vs ancla.
+
+### 12.7 El draft MTP hereda la dosis; y tiene flags de colocación PROPIOS [F dump]
+
+- El draft MTP se construye del MISMO GGUF (tensores `nextn.*` dentro): un solo load, un solo override → **la dosis k aplica al trunk y al draft por igual** [T: mecánica del loader]. Sin conflicto; sinergia ya documentada en §7.
+- La cabeza del draft sale de `nextn.shared_head_head` a vocab completo (248,320) — hardcoded en `qwen35moe.cpp` según el análisis del issue #25187 [F]: el draft NO se beneficia del recorte de expertos en su cabeza, solo en su capa MoE.
+- b11856 trae flags de colocación EXCLUSIVOS del draft [F dump L344–350]: `-cmoed/--cpu-moe-draft` y `-ncmoed N` (MoE del draft a CPU), además de `-ngld`, `-tbd`, `--prio-draft` (default **0**, ver Nivel 3 §11.4), `-otd`. Si el nextn trae capa MoE propia y la VRAM aprieta con MTP activo, `-ncmoed` es la válvula.
+
+### 12.8 DFlash/DSpark existen en el build y están descartados con evidencia [F]
+
+El enum completo de `--spec-type` en b11856 [F dump L390]: `none, draft-simple, draft-eagle3, draft-mtp, draft-dflash, draft-dspark, ngram-simple, ngram-map-k, ngram-map-k4v, ngram-mod, ngram-cache`.
+
+- **DFlash (PR #22105)**: reporte directo de comunidad con el 3.6-35B: *"with dflash, there is not enough vram"* en una 6 GB → en nuestra 1650 de 4 GB, **NO-GO** [F]. Es spec "wide" que necesita VRAM extra para la cabeza del draft.
+- DSpark: sin datos de calidad/VRAM [N/D] — prioridad cero mientras MTP nativo esté disponible.
+
+### 12.9 Resumen de cambios operativos de esta ronda
+
+1. Plan B del §6.5 reemplazado: no hay flag futuro; el override-kv es definitivo (#19528 cerrado not planned).
+2. Autenticación literal: grep `llm_load_print_meta: n_expert_used = N`.
+3. Prohibido tocar las otras claves `expert_*` (§12.4).
+4. Bonus a medir en fase D: `CUDA0 compute buffer size` debe bajar con k (confirma la dosis por segunda vía independiente del t/s).
+5. Con fase E: la dosis cubre también el draft; `--prio-draft 2` recomendado; `-ncmoed` disponible si aprieta VRAM.
+
+**Referencias nuevas de esta ronda**: discusión #5114 (override validado 2024): https://github.com/ggml-org/llama.cpp/discussions/5114 · issue #19528 CERRADO not planned: https://github.com/ggml-org/llama.cpp/issues/19528 · FR-Spec MTP + `nextn.shared_head_head` en qwen35moe.cpp: https://github.com/ggml-org/llama.cpp/issues/25187 · DFlash: https://github.com/ggml-org/llama.cpp/pull/22105 · dump local del build b11856 (líneas 162–166, 344–352, 390) [M].
