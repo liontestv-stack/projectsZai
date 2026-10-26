@@ -311,3 +311,13 @@ Cambio de inventario que afecta DIRECTAMENTE al plan de descarga del proyecto: e
 - **Ningún otro cambio del inventario:** ni `APEX-I-MINI` (nuestro actual) ni los repos de bartowski/mudler mostraron movimientos relevantes en esta ronda; el A/B de marca de la ronda 2 (unsloth domina la frontera Pareto, mudler nunca en frontera) no tiene razón para cambiar.
 
 *Referencias nuevas: huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main (snapshot 2026-10-26); cards ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF y ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF (+ variante Coder); reddit r/LocalLLaMA "[Release] SOTA GGUFs for Qwen3.8-Flash-Next"; github IST-DASLab/GSQ issue #9 (reproducibilidad); mindstudio.ai blog GSQ-RCO.*
+
+
+## 17. ANEXO — Séptima ronda: verificación byte a byte del árbol del repo MTP y encuadre del UD-IQ3_S (2026-10-26)
+
+- **Árbol completo verificado hoy vía API de HF [F]** (snapshot 2026-10-26, `huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main`): `UD-IQ3_XXS.gguf` = **14,069,266,720 B exactos** — coincide con la ronda 6; el autenticador de descarga sigue siendo SHA256 36f9ec0e… Escalera relevante al byte: UD-IQ1_M 11,366,414,624 · UD-IQ2_XXS 11,819,399,456 · UD-IQ2_M 11,882,969,376 · UD-Q2_K_XL 12,574,128,416 · **UD-IQ3_XXS 14,069,266,720 (objetivo)** · UD-IQ3_S 15,346,432,288 · UD-IQ4_XS 18,209,036,576 · UD-Q4_K_M 22,663,387,424 · UD-Q4_K_XL 22,853,663,008 · MXFP4_MOE 22,182,574,368 · Q8_0 37,801,097,504. mmproj en 3 sabores — BF16 902,822,528 / F16 899,283,584 / F32 1,786,305,152 — (no descargar, decisión de rondas previas se mantiene).
+- **Encuadre para no confundir densidades entre repos [F]:** el `UD-IQ3_S` de ESTE repo (15.35 GB) lleva la cabeza nextn dentro; el 13.68 GB documentado en la ronda 5 era el del repo 3.5 SIN nextn. Comparaciones de densidad entre repos solo válidas si ambos lados llevan (o no) nextn.
+- **GSQ-RCO [F]:** sigue SIN 3.6-35B-A3B a fecha de hoy — la familia probada sigue siendo 3.8-27B / Flash-Next (+ variante Coder). La vigilancia de rondas 5-6 se mantiene sin cambios.
+- **Repo principal unsloth (sin -MTP) [F]:** única novedad visible es de tool-calling ("Developer Role Support" para Codex/OpenCode y parsing de objetos anidados mejorado); sin cuants nuevos. Irrelevante para el objetivo t/s, relevante solo si el Director usa el modelo como agente de código.
+
+*Referencias nuevas: huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main (snapshot 2026-10-26, verificación byte a byte de esta ronda); card unsloth/Qwen3.6-35B-A3B-GGUF (repo principal, notas de tool-calling).*
