@@ -186,3 +186,39 @@ El objetivo +50% (32.3–33.6) queda dentro del compuesto EXP+IQ3_XXS+MTP; el ×
 - REAP-90pct GGUF del 3.6 ("meme"): https://huggingface.co/DJLougen/Qwen3.6-35B-A3B-REAP-90pct-GGUF
 - Model card Qwen3.6-35B-A3B (arch): https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF
 - Datos propios: `barrido-30-resultados.csv`, `barrido-qwen-30.py` (familia EXP y control), `barrido-total.py` fase D [M]
+
+---
+
+## 11. ANEXO — Segunda ronda de investigación (2026-10-26)
+
+### 11.1 La clave exacta del override, confirmada en el código fuente [F]
+
+Del código maestro de llama.cpp (`src/llama-arch.cpp`):
+
+- Línea 219: `{ LLM_KV_EXPERT_USED_COUNT, "%s.expert_used_count" }` — el formato de la clave es `<arch>.expert_used_count`.
+- Línea 141: `{ LLM_ARCH_QWEN35MOE, "qwen35moe" }` — el string del arch en el código upstream es **`qwen35moe`**.
+- Matiz que importa: el TAG del repo HF de unsloth usa `qwen3_5_moe` y el repo REAP citó ambos ("qwen3_5_moe / QWEN35MOE"). El prefijo correcto es **el `general.architecture` que lleva el GGUF concreto y que imprime el log de carga** — no el tag de HF ni el nombre del enum. El parser de fase D lee ese campo del archivo: por eso es la fuente autoridad.
+
+Regla operativa final: `--override-kv <arch_del_log>.expert_used_count=int:N`. El run solo es válido si el log muestra `n_expert_used = N` tras la carga.
+
+### 11.2 Confirmación de comunidad: el override SÍ funciona cuando la clave es correcta [F]
+
+- Reddit (Qwen3-235B, arch `qwen3moe`): `--override-kv qwen3moe.expert_used_count=int:5` descrito como "el balance entre velocidad y masa", k=4 para más velocidad. Técnica validada en producción por terceros cuando la clave coincide.
+- Discusión #30155 (Oct-2026, k 10→7): +29% t/s y, detalle nuevo, el **hit-rate de la cache de expertos** sube de 50% a 80% — relevante si en el futuro se usa moe-cache; con todo en RAM como en este rig es efecto secundario [T].
+
+### 11.3 Refuerzo de la puerta de calidad [F]
+
+- MoE-Spec eligió el presupuesto que "maximiza throughput manteniendo calidad dentro de 1σ de EAGLE" (los valores exactos por modelo van en apéndice, no accesible [N/D]).
+- REAP-50 (poda global −50%, MÁS agresiva que nuestro k=4 que no borra nada) retiene 96.7% en SWE-Bench agéntico [F Cerebras]: el margen de seguridad a k=4 es amplio.
+- La cola-larga (2604.23036) castiga BORRAR expertos raros; nuestro método no borra — refuerza que k≥4 es territorio seguro y k=2 es el que requiere sanity estricto.
+
+### 11.4 Test de coherencia del rig (validación cruzada) [T]
+
+Si la dosis k=4 se aplica de verdad: bytes/token −0.20 GB sobre ~1.5 → **el t/s DEBE subir ~15–17%** a banda constante. Protocolo de decisión:
+1. t/s sube ~15% → dosis viva, escalera k=6→4→3 en marcha.
+2. t/s sube <10% con `n_expert_used` correcto → la banda ya no domina (revisar colocación NCM37C4/FIT-A antes de seguir bajando k).
+3. `n_expert_used` no cambia o t/s plano → build ignora el override: escalar a build upstream nuevo (flag dedicado `--moe-topk` del issue #19528 cuando se fusione).
+
+### 11.5 Impacto en el roadmap [T]
+
+Con el descubrimiento del repo MTP de unsloth (ver anexo del Nivel 2), la escalera compuesta se simplifica: **UD-IQ3_XXS-MTP (14.07 GB) ya trae la cabeza nextn** → EXP (este nivel) + cuant + MTP caben en UNA sola descarga y UNA sesión de barrido. El objetivo 32–36 t/s pasa por: autenticar EXP k=4 → apilar MTP n-max 2 → rematar con NCM37C4/FIT-A.
