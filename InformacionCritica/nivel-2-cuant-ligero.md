@@ -181,3 +181,101 @@ Reddit oficial de unsloth (danielhanchen): **CUDA 13.2 genera gibberish en cuant
 1. Descargar **UD-IQ3_XXS-MTP (14.07 GB)** → A/B contra APEX-I-MINI (fase B + sanity tool-calling).
 2. Si el MTP aprieta la RAM en el arranque real: plan B = UD-IQ3_XXS (13.21) + draft MTP separado más adelante.
 3. Cambio mínimo sin riesgo: UD-IQ3_S (13.68) si se quiere solo "misma IQ, menos bytes".
+
+---
+
+## 13. ANEXO — Tercera ronda: bytes exactos, SHA256, correcciones y restricciones MTP (2026-10-26)
+
+### 13.1 Bytes exactos y hash de los candidatos (API de HF, verificado hoy) [F]
+
+Repo `unsloth/Qwen3.6-35B-A3B-GGUF` (sin MTP):
+
+| Archivo | Bytes exactos |
+|---|---|
+| **UD-IQ3_XXS** | **13,211,155,424** |
+| UD-IQ3_S | 13,676,723,168 |
+| UD-Q2_K_XL | 12,290,628,576 |
+| UD-IQ1_M / UD-IQ2_XXS / UD-IQ2_M | 10,047,749,088 / 10,756,586,464 / 11,522,702,304 |
+| UD-Q3_K_S | 15,359,196,128 |
+
+Repo `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` (nextn DENTRO de cada cuant, 21 cuants):
+
+| Archivo | Bytes exactos | SHA256 (lfs.oid) |
+|---|---|---|
+| **UD-IQ3_XXS** | **14,069,266,720** | `36f9ec0e4c775f6efd3a61c1ea76f0875128469c3d012e3d9e2495a90e7a7150` |
+| UD-IQ3_S | 15,346,432,288 | `ab639a7f...f27f9` (primeros: ab639a7f330f) |
+| UD-Q2_K_XL | 12,574,128,416 | `ed7cda7e...0ca9e` |
+| UD-IQ2_XXS | 11,819,399,456 | `627e2b05...c0013` |
+| UD-IQ1_M | 11,366,414,624 | `223db8b3...ddc14` |
+
+- **Tamaño del módulo nextn, medido por diferencia de bytes** [T sobre datos F]: UD-IQ3_XXS: 14,069,266,720 − 13,211,155,424 = **858,111,296 B (0.86 GB)**; UD-IQ3_S: **1,669,709,120 B (1.67 GB)**. El módulo MTP se cuantiza al mismo nivel que el resto — por eso crece en cuants mejores.
+- `imatrix_unsloth.gguf_file` (192,223,904 B): es la matriz de calibración, SOLO para quien re-cuantiza — **no descargar**.
+- mmproj (visión): F16 = 899,283,584 B — aparte, innecesario para uso de texto.
+
+### 13.2 Protocolo de descarga con verificación de integridad [F método]
+
+```
+hf download unsloth/Qwen3.6-35B-A3B-MTP-GGUF Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf --local-dir D:\ZLia\models
+certutil -hashfile D:\ZLia\models\Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf SHA256
+```
+→ El hash debe salir `36f9ec0e4c775f6efd3a61c1ea76f0875128469c3d012e3d9e2495a90e7a7150`. Si la descarga se corta, `hf download` retoma (re-ejecutar el mismo comando); verificar hash SIEMPRE antes de borrar el APEX original.
+
+### 13.3 CORRECCIÓN: el vocab-trim NO es viable en este rig [F nuevo — deroga §6]
+
+Verificado por API: el repo `Elsephire/Qwen3.6-35B-A3B-vocabulary-trimming-GGUF` contiene UN SOLO GGUF:
+
+- `qwen3.6-35B-vocabulary-trimming-MTP-Q4_K_S.gguf` = **20,070,193,920 B (20.07 GB)**.
+
+Es decir: el vocab-trim publicado NO es 3-bit sino **Q4_K_S (con MTP dentro)** → 20.07 GB > 16 GB de RAM → **NO-GO por RAM en este rig**. El "+6–7% t/s" de §6 quedaba condicionado a un vocab-trim a ~3 bits: **no existe hoy** [N/D]. La opción se retira de la escalera hasta que alguien publique un vocab-trim 3-bit. (La matemática §6 sigue siendo válida como concepto; lo que falla es el artefacto disponible.)
+
+### 13.4 REAP-50 aterrizado en bytes: NO es upgrade de t/s en este rig [F bytes + T lectura]
+
+- `anik-jha/Qwen3.6-35B-A3B-coding-reap50-GGUF`: **Q4_K_M-imat = 11,373,058,080 B (11.37 GB)**; Q5_K_M-imat = 13,257,709,600 B (13.26 GB). (Llena el [N/D] de §7.)
+- Lectura de banda [T]: REAP-50 deja los expertos en 128 pero los cuantiza a Q4_K_M (~4.85 bpw) — los componentes densos suben de 3.26 → 4.85 bpw. Presupuesto aproximado: routed activos ~0.31 GB + densos ~1.02 GB + lm_head 0.21 + shared 0.05 ≈ **1.6 GB/token > 1.45 del APEX actual** → en este rig bandwidth-bound, REAP-50-Q4_K_M sería MÁS LENTO que el cuant actual a pesar de pesar 3 GB menos. Es un recorte de RAM/calidad, NO de velocidad. Posición en la escalera (§7) queda aún más rezagada.
+
+### 13.5 Restricciones oficiales del MTP, del README del repo [F]
+
+El README de `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` da el comando de referencia:
+
+```
+llama-server -hf unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL \
+  -ngl 99 -c 8192 -fa on -np 1 \
+  --spec-type draft-mtp --spec-draft-n-max 2
+```
+
+Y declara dos límites DUROS:
+
+1. **`-np > 1` no está soportado aún con MTP** → con fase E activa, `-np 1` obligatorio (impacto directo en el combo del Nivel 3: el +14% de slots solo aplica sin MTP).
+2. **`--mmproj` no soportado con MTP** → irrelevante para nosotros (sin visión).
+
+Claim del uploader [F]: "MTP enables ~1.5–2× faster inference with no accuracy loss". Nuestro techo conservador sigue siendo ×1.28–1.4 [T] hasta medir en el rig.
+
+Nota del comando oficial: usa `-c 8192` — con 14.07 GB en 16 GB de RAM, es la señal correcta: el contexto grande es el primer gasto a recortar. La familia entrena a 262,144 de ctx [F log issue #24055] — nuestro -c es presupuesto nuestro, no límite del modelo.
+
+### 13.6 Presupuesto RAM exacto con UD-IQ3_XXS (con y sin MTP) [T]
+
+| Escenario | Modelo | Libre en 16 GB (antes de SO ~2.5–3 GB) | Lectura |
+|---|---|---|---|
+| HOY (APEX-I-MINI) | 14.27 GB | ~1.7 GB | apretado (es el statu quo) |
+| UD-IQ3_XXS | 13.21 GB | ~2.8 GB | cómodo: cache-ram 512–1024 OK |
+| UD-IQ3_XXS + MTP | 14.07 GB | ~1.9 GB | apretado: `-c 8192`, `--cache-ram 256–512`, sin mlock, sin mmproj |
+| UD-IQ3_S + MTP | 15.35 GB | ~0.6 GB | NO cabe con MTP activo → solo sin MTP |
+
+Si el escenario MTP aprieta en el arranque real (pagina el SO): bajar `-c` a 4096, o volver al plan B (13.21 sin MTP + draft después).
+
+### 13.7 Cómo saber qué CUDA lleva el build b11856 (para el aviso 12.5) [T método]
+
+El log del server imprime `system_info: ... | CUDA : ARCHS = ... | USE_GRAPHS = 1 | ... | REPACK = 1` pero NO la versión del toolkit [F formato de log issue #24055]. Métodos prácticos en orden de fiabilidad:
+
+1. **El nombre del ZIP de release** que se descargó: los assets de llama.cpp se publican como `llama-bXXXX-bin-win-cuda-cu13.2-x64.zip` (la versión va en el nombre) [T patrón de naming; buscar el zip en la carpeta de descargas del Director].
+2. DLLs del bin: `cudart64_13.dll` (CUDA 13.x) vs `cudart64_12.dll` [T].
+3. `nvidia-smi` (máxima versión de CUDA soportada por el driver) + `echo %CUDA_PATH%` / `nvcc --version` si hay toolkit instalado.
+
+Si resulta ser cu13.2: el gibberish low-bit documentado (§12.5) aconseja re-descargar release cu13.1 antes de juzgar la calidad del IQ3_XXS.
+
+### 13.8 Estado de la vigilancia (§10) tras esta ronda
+
+- FR-Spec para MTP nativo: la infraestructura `d2t` ya existe en EAGLE-3 del propio llama.cpp; la propuesta (issue #25187) con rama `avifenesh/llama.cpp/tree/frspec-mtp-vocab-trim` (commit 047bfa508, ~30 líneas) NO está fusionada [F]. Cuando se fusione Y exista un GGUF-MTP con `output.weight` recortado + tensor `d2t`, el coste del draft baja ~75% en su cabeza — para nuestro vocab de 248K es el multiplicador MTP más grande en el horizonte. Vigilar.
+- `nextn.shared_head_head` confirmado como la tensor-cabeza que usa `qwen35moe.cpp` [F #25187] — es lo que el parser de fase E debe ver en el GGUF descargado (junto a `nextn.eh_proj/hnorm/enorm`).
+
+**Referencias nuevas de esta ronda**: API tree repo MTP (bytes + sha256): https://huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/tree/main · API tree repo principal: https://huggingface.co/api/models/unsloth/Qwen3.6-35B-A3B-GGUF/tree/main · README oficial MTP (comando y restricciones -np/mmproj): https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF · vocab-trim real (Q4_K_S 20.07 GB): https://huggingface.co/api/models/Elsephire/Qwen3.6-35B-A3B-vocabulary-trimming-GGUF/tree/main · REAP-50 bytes: https://huggingface.co/api/models/anik-jha/Qwen3.6-35B-A3B-coding-reap50-GGUF/tree/main · FR-Spec rama no fusionada: https://github.com/avifenesh/llama.cpp/tree/frspec-mtp-vocab-trim (issue https://github.com/ggml-org/llama.cpp/issues/25187).
