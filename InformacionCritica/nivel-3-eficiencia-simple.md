@@ -149,3 +149,102 @@ Config de issue #24055 (Qwen3.6-27B-MTP en 2×P100): `--ctx-checkpoints 64 --che
 ### 10.5 Actualización del techo del Nivel 3 [T]
 
 Con los defaults corregidos (cache-ram 512–1024, cms 1024, reuse 256, shift ON), el combo ganador queda: `-ub 1024 -b 4096 -np 2 --cache-reuse 256 --cache-ram 512 -cms 1024 --context-shift` ⊕ (NCM37C4 o FIT-A). El IQ3_XXS del Nivel 2 libera la RAM que hace viable este combo sin pelea de memoria.
+
+---
+
+## 11. ANEXO — Tercera ronda: Windows/GPU fino, defaults auditados al 100% y el conflicto MTP×slots (2026-10-26)
+
+### 11.1 NUEVO — "CUDA - Sysmem Fallback Policy" en el Panel NVIDIA: la válvula oculta de WDDM [F]
+
+- NVIDIA añadió el setting en driver **546.01 (Oct-2023)** [F KB oficial a_id/5490]: Panel de Control NVIDIA → Administrar configuración 3D → **"CUDA - Sysmem Fallback Policy"** → cambiar de "Driver Default" a **"Prefer No Sysmem Fallback"**.
+- Mecánica confirmada por ingeniería de NVIDIA [F foro developer, respuesta de Robert Crovella]: bajo WDDM (todo Windows de escritorio), `cudaMalloc` NO garantiza VRAM — el gestor de memoria de Windows puede aterrizar la asignación en la "memoria compartida" (RAM) **silenciosamente**, y paginar datos GPU↔RAM cuando le conviene. Ni el driver ni la app lo reportan.
+- **Por qué esto importa AQUÍ** [T compatible con lo medido]: el colapso FIT-C (−38%, §2) es exactamente el síntoma de un desborde de VRAM paginado en silencio por WDDM. Con "Prefer No Sysmem Fallback", el desborde falla RUIDOSO (error OOM inmediato) en vez de degradar a velocidad de RAM — que es exactamente lo que un barrido necesita para detectar malos fits al instante.
+- Cumple las reglas del Director: es un setting de driver/gráficos, NO es BIOS ni Defender.
+- Riesgo asumido: con fallback OFF, si algo pide más de los 4 GB → error visible en vez de lentitud. Mitigación: `-fit on` (default del build, §11.3) ya reserva margen de 1024 MiB; el setting es el detector, no el causante.
+
+### 11.2 Plan de energía: GUID exacto y comandos [F]
+
+- **Alto rendimiento = `8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c`** [F MS KB + práctica documentada]:
+  ```
+  powercfg /list
+  powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+  ```
+- Balanced (para volver atrás) = `381b4222-f694-41f0-9685-ff5bb260df2e` [F MS KB].
+- Si "Alto rendimiento" no aparece en el panel (pasa en desktops con Modern Standby): `powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c` y luego activar el GUID nuevo que imprime [F windowscentral].
+- Ultimate Performance = `e9a42b02-d5df-448d-aa00-03f14749eb61` (mismo método con /duplicatescheme) [T GUID documentado por Microsoft; no verificado en las fuentes de esta ronda].
+- Ganancia en ESTE rig: [N/D] — candidato a 1 run del barrido (fase C) con etiqueta propia.
+
+### 11.3 Defaults del build b11856: auditoría COMPLETA (ronda 2 + 3) [F dump]
+
+Tabla definitiva — todo lo que el launcher hereda si no se pasa el flag:
+
+| Flag | Default b11856 | Acción nuestra |
+|---|---|---|
+| `-t` | -1 (auto) | explícito 4 en launcher ✓ |
+| `-tb` | = `-t` | candidato `-tb 4` (idéntico en la práctica) |
+| `--prio` | **0** | launcher usa 2 ✓ (3 = realtime: ruido medido [M]) |
+| `--poll` | 50 | no tocar [M] |
+| `-ngl` | **auto** (acepta exacto/'auto'/'all') | launcher usa 99 ✓ |
+| `-fit` | **ON** | FIT-A tunó esto con `-fitt 256` [M] |
+| `-fitt` | **1024 MiB** margen por dispositivo | FIT-A lo baja a 256 (agresivo, medido +4%) |
+| `-fitc` | 4096 (piso de ctx que el fit puede elegir) | verlo si un fit sorprende con ctx chico |
+| `--cpu-strict` | 0 | no tocar [M: afinidad muerta] |
+| `-fa` | **auto** | launcher usa `on` explícito ✓ |
+| `--cache-prompt` | **ON** | bien (lo que falta activar es reuse) |
+| `--cache-reuse` | **0** (OFF) | pasar 256 explícito |
+| `-ctxcp` | 32/slot | bajar a 16 (RAM) |
+| `-cms` | 8192 | bajar a 1024 para chat continuo |
+| `-cram` | **8192 MiB** | bajar a 512 (rig actual) / 1024 con IQ3_XXS |
+| `-kvu` | ON si slots=auto | OK |
+| `--cache-idle-slots` | ON (requiere cache-ram) | gratis |
+| `--context-shift` | **OFF** | ON en el combo (medido sin coste [M]) |
+| `--metrics` | OFF | ON opcional para graficar |
+| `--slots` | ON | endpoint de monitoreo gratis |
+| `--log-prompts-dir` | OFF | ON solo para debug de cache (§3.3) |
+| `--sleep-idle-seconds` | -1 (OFF) | [N/D] qué libera al dormir; no usar por ahora |
+| `--threads-http` | -1 (→8 hilos) | irrelevante en uso mono-usuario |
+| `--spec-draft-n-max` | **3** | T2 usa 2 explícito ✓ |
+| `--spec-draft-prio` | **0** | **subir a 2 en fase E** (el draft heredaría prioridad normal) |
+| `--slot-save-path` | OFF | legacy KV-a-disco; no usar en híbridos [T] |
+
+Novedad del dump (no vista antes): **`--kv-unified-per-slot N`** [F dump L435–437]: con `-kvu` y SIN `-c`, el pool KV compartido se dimensiona como `n_parallel × N`. Forma limpia de fijar "-np 2 × 8192/slot" sin calcular `-c` global.
+
+### 11.4 CONFLICTO resuelto: MTP exige `-np 1` (deroga parte de §4) [F]
+
+El README oficial del repo MTP de unsloth para ESTE modelo declara: **`-np > 1` no soportado aún con draft-mtp** (y `--mmproj` tampoco). Consecuencia para el combo final:
+
+- Config SIN MTP (fases B/C/D): `-np 2` permitido, +14% agregado [M §4] con `-kv-unified-per-slot 8192` si se quiere ctx fijo por slot.
+- Config CON MTP (fase E): **`-np 1` obligatorio** — la ganancia MTP (×1.28+ [F]) absorbe y supera lo que los slots aportaban.
+- Con MTP añadir también `--spec-draft-prio 2` (default 0 dejaría el draft en prioridad normal, §11.3).
+
+### 11.5 "Speculative checkpointing" (PR #19493, fusionado Abr-2026): matiz con nuestro muerto ngram [F]
+
+Se fusionó una técnica que reutiliza checkpoints de estado para especulación por n-gramos. La dosis de comunidad que reporta 0–50% en CODING: `--spec-type ngram-mod --spec-ngram-size-n 24 --draft-min 48 --draft-max 64`. Nuestros NGRAMS/NGRAMM muertos [M] usaron dosificación corta distinta — técnicamente queda una re-apertura opcional para sesiones de código, con dosis exacta de arriba y expectativa baja (nuestro uso principal es chat ES) [T]. Prioridad: baja. Y confirmado aparte: **DFlash (PR #22105) NO-GO en VRAM de 4–6 GB** [F reporte con el propio 3.6-35B] (ver Nivel 1 §12.8).
+
+### 11.6 Detalles finos de la cache, confirmados a nivel de código [F]
+
+- La creación de checkpoints exige que el contexto sea `FULL`, `RS`, o `n_swa > 0` [F particula.tech citando el source del server]. En el híbrido GDN, el contexto es RS (rollback limitado por `n_rs_seq`) → SÍ aplica, pero con el TODO del source admitiendo que el cálculo de rango está mal para SWA — o sea, el feature es joven: el repro de validación (§3.3) es obligatorio, no opcional.
+- El repro del issue #21831 estaba VICIADO [F análisis particula]: mandaba solo el mensaje nuevo a un endpoint stateless; la respuesta "no sé tu nombre" no prueba nada. **La evidencia válida son las líneas de log** (`restored context checkpoint` vs `forcing full prompt re-processing`) y el TTFT plano — SIEMPRE enviando el historial completo en cada curl.
+- Causas típicas de rotura de prefijo, según mantenedores [F]: `<think>` de turnos anteriores que la plantilla emite y luego strippea (**incluso con `-rea off`** se emiten dos tokens `<think></think>` que se strippean al turno siguiente), tool definitions regeneradas en otro orden, historial reescrito en sitio. `--log-prompts-dir` + diff consecutivo = método endosado para cazar al culpable [F dump L730: "auto-created if not present"].
+- El log de arranque imprime `system_info: ... USE_GRAPHS = 1 | REPACK = 1` [F log #24055]: grep gratis para autenticar que el build activo tiene CUDA graphs y repack AVX2 (repack ON es +5% medido [M §2]).
+
+### 11.7 Líneas finales recomendadas (actualizan §8.1) [T sobre M+F]
+
+**Sin MTP** (fases B/C/D — combo ganadores):
+```
+-ub 1024 -b 4096 -np 2 --kv-unified-per-slot 8192 \
+--cache-reuse 256 --cache-ram 512 -cms 1024 --ctx-checkpoints 16 \
+--context-shift -fa on -t 4 --prio 2 \
+[⊕ NCM37C4 o FIT-A] [⊕ --override-kv <arch>.expert_used_count=int:K en fase D]
+```
+
+**Con MTP** (fase E):
+```
+-ub 1024 -b 4096 -np 1 \
+--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-prio 2 \
+--cache-reuse 256 --cache-ram 256 -cms 1024 --ctx-checkpoints 8 \
+--context-shift -fa on -t 4 --prio 2 -c 8192
+```
+(RAM más apretada con el GGUF-MTP de 14.07 GB — presupuesto en Nivel 2 §13.6; cache-ram 256 y ctx-checkpoints 8 son la reducción de la factura de RAM del Nivel 3 al servicio de la fase E.)
+
+**Referencias nuevas de esta ronda**: KB NVIDIA Sysmem Fallback (driver 546.01+): https://nvidia.custhelp.com/app/answers/detail/a_id/5490 · mecánica WDDM/cudaMalloc (R. Crovella, NVIDIA): https://forums.developer.nvidia.com/t/cudamalloc-with-sysmem-fallback/347791 · powercfg setactive GUID High Perf: https://learn.microsoft.com (KB 0e95387e) + https://blog.rmilne.ca/2023/10/06/using-powercfg-to-set-server-power-plan-from-command-line + https://www.windowscentral.com/how-use-powercfg-control-power-settings-windows-10 · mecánica checkpoints FULL/RS/SWA + repro viciado #21831 + `<think>` rompe-prefijo: https://particula.tech/blog/prompt-reprocessing-swa-hybrid-models-kv-cache · issue #24055 (log completo: kv_unified auto, cache_reuse warning, system_info): https://github.com/ggml-org/llama.cpp/issues/24055 · speculative checkpointing #19493: https://github.com/ggml-org/llama.cpp/pull/19493 (+ hilo r/LocalLLaMA 1sprdm8) · DFlash #22105: https://github.com/ggml-org/llama.cpp/pull/22105 · restricción -np>1 con MTP: https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF · dump local b11856 (líneas 7–17, 135–160, 435–459, 618–632, 728–731) [M].
