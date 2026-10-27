@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-abrir-qwen-apex.py v2.1-minimal — abrir el modelo, nada mas
-============================================================
-Doble click (o ABRIR-QWEN.bat) -> el modelo queda corriendo en
-http://127.0.0.1:9931 y esta ventana lo mantiene vivo.
+r"""
+abrir-qwen-apex.py v3.0 — abrir el modelo, nada mas (todo sale de config.txt)
+=============================================================================
+Doble click en ABRIR-QWEN.bat        -> perfil TRABAJO (8 expertos, fabrica)
+Doble click en ABRIR-QWEN-CHARLA.bat -> perfil CHARLA  (4 expertos, +41% t/s)
+
+TODA la configuracion (rutas, puerto, expertos, flags) vive en:
+    D:\ZLia\config.txt     (o config.txt junto a este script)
+Aqui abajo ya NO hay nada que editar. Si falta config.txt, avisa y sale.
 
   - Para HABLAR: abre CHATEAR-QWEN.bat (otra ventana, token a token)
   - Para CERRAR el modelo: cierra esta ventana (o Ctrl+C)
-  - Para MEDIR y mejorar t/s: BARRIDO-QWEN.bat (barrido de 37 configs)
+  - Para MEDIR: BARRIDO-N1.bat (la dosis ganadora se anota en config.txt)
 
-Sampling: preset oficial "think" de Qwen3.6 FIJO aqui abajo (card +
-generation_config; los defaults del server NO son optimos). Para cambiarlo
-al vuelo usa /preset en chatear-qwen.py.
-
-MEJORA DE VELOCIDAD: corre BARRIDO-QWEN.bat; al terminar imprime una linea
-FLAGS_GANADORAS = [...] -> pegala aqui abajo y listo. Si queda vacia, abre
-con la base verificada.
-
-v2.1 (26-oct-2026): entra el ORO-UB1K del barrido-30 (config 32), el mas
-INSTANTANEO del barrido por coste total: prefill 57.56 tok/s (+26.5% vs
-ancla 45.50, pasada fria de 293 tok) con decode intacto 21.55 (~21.53).
-FIT-A/NCM37C4 (22.40/22.49 decode) NO se aplican todavia: son ganadores de
-COLOCACION que quedaron sin medir combinados con UB1K (los combos 28-30
-mostraron que las colocaciones se pelean entre si). Mini-sweep pendiente:
-FIT-A + UB1K antes de tocar -ngl/-ncmoe aqui.
-
-Historia: la version completa con menu (V1/V2/sweep/MTP/presets) quedo
-conservada como abrir-qwen-apex-v13-avanzado.py.
+v3.0 (27-oct-2026): la config se muda a config.txt (pedido del Director:
+"toda configuracion debe ir en un solo archivo"). El comando generado es
+IDENTICO al v2.1 (mismos flags, verificado por test de regresion). NUEVO:
+modo dual SS25 Opcion A — el perfil charla anade
+--override-kv qwen35moe.expert_used_count=int:K SOLO si K != 8
+(8 es el default del modelo: el perfil trabajo no toca nada).
+Cambiar de perfil = cerrar esta ventana y abrir el otro .bat (~1 min).
 """
 import os
 import subprocess
@@ -35,39 +28,74 @@ import sys
 import time
 import urllib.request
 
-# ============================ CONFIG (editar aqui) ============================
-RUTA_SERVER = r"D:\llama.cpp\llama-server.exe"
-RUTA_MODELO = (r"D:\ZLia\models"
-               r"\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf")
-HOST = "127.0.0.1"
-PORT = 9931
-
-# Ganador barrido-25: LMNONE = 21.50 t/s vs BASE 20.85 (+3.1%).
-# + Ganador barrido-30 (26-oct-2026): ORO-UB1K (config 32) = -ub 1024 -b 4096
-#   sobre esta MISMA base (con -lm none): prefill 57.56 tok/s (+26.5% vs
-#   45.50) con decode 21.55 intacto. Es el que empieza a hablar antes:
-#   300 tok nuevos en ~5.2 s vs ~6.6 s de la base; a 8k+ tok gana ~19 s.
-#   Medido con 4 pasadas x 256 sin errores; el -ub/-b de BASE_FLAGS queda
-#   overrides por estos (mismo mecanismo que en el barrido: van despues).
-#   Revertir: borra esta lista y vuelve la base sola.
-FLAGS_GANADORAS = ["-lm", "none", "-ub", "1024", "-b", "4096"]
-
-# Base verificada (V1 del build b11856, preset think oficial fijo):
-BASE_FLAGS = [
-    "-m", RUTA_MODELO, "-a", "apex35b",
-    "-ngl", "99", "-cmoe",
-    "-c", "16384", "-b", "2048", "-ub", "256",
-    "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
-    "-t", "4", "--prio", "2", "--no-mmproj",
-    "--temp", "1.0", "--top-k", "20", "--top-p", "0.95",
-    "--min-p", "0.0", "--presence-penalty", "0.0",
-    "--host", HOST, "--port", str(PORT),
-]
-# ==============================================================================
+CONFIG_OFICIAL = r"D:\ZLia\config.txt"
+ALIAS = "apex35b"   # etiqueta fija del server en el rig (no es config diaria)
+KEYS = ("RUTA_SERVER", "RUTA_MODELO", "RUTA_LOGS", "PUERTO",
+        "EXPERTOS_TRABAJO", "EXPERTOS_CHARLA",
+        "FLAGS_BASE", "SAMPLING", "FLAGS_GANADORAS")
 
 
-def main():
-    url = "http://%s:%d/health" % (HOST, PORT)
+def encontrar_config():
+    """Orden de busqueda: variable de entorno CONFIG_TXT (tests/avanzado)
+    -> ruta oficial D:\\ZLia\\config.txt -> config.txt junto a este script."""
+    candidatas = []
+    if os.environ.get("CONFIG_TXT"):
+        candidatas.append(os.environ["CONFIG_TXT"])
+    candidatas.append(CONFIG_OFICIAL)
+    candidatas.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "config.txt"))
+    for c in candidatas:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def parsear_config(ruta):
+    """clave = valor -> dict. Ignora comentarios (#) y lineas vacias."""
+    cfg = {}
+    with open(ruta, "r", encoding="utf-8", errors="replace") as f:
+        for linea in f:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, _, valor = linea.partition("=")
+            cfg[clave.strip()] = valor.strip()
+    return cfg
+
+
+def construir_comando(cfg, perfil):
+    """Arma el comando del server. FLAGS_GANADORAS van AL FINAL (last-wins).
+    El override de expertos SOLO se anade si k != 8 (8 = default del modelo)."""
+    k = int(cfg.get("EXPERTOS_CHARLA", "4") if perfil == "charla"
+            else cfg.get("EXPERTOS_TRABAJO", "8"))
+    cmd = [cfg["RUTA_SERVER"], "-m", cfg["RUTA_MODELO"], "-a", ALIAS]
+    cmd += cfg.get("FLAGS_BASE", "").split()
+    if k != 8:
+        cmd += ["--override-kv", "qwen35moe.expert_used_count=int:%d" % k]
+    cmd += cfg.get("SAMPLING", "").split()
+    cmd += cfg.get("FLAGS_GANADORAS", "").split()
+    cmd += ["--host", "127.0.0.1", "--port", cfg.get("PUERTO", "9931")]
+    return cmd, k
+
+
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else list(argv)
+    perfil = "charla" if args and args[0].lower().startswith("char") else "trabajo"
+
+    ruta_cfg = encontrar_config()
+    if not ruta_cfg:
+        print("[ERROR] No encontre config.txt.")
+        print("        Debe estar en: %s" % CONFIG_OFICIAL)
+        print("        (o junto a este script, en la misma carpeta)")
+        return 1
+    cfg = parsear_config(ruta_cfg)
+    faltan = [k for k in KEYS if k not in cfg]
+    if faltan:
+        print("[ERROR] A config.txt le faltan claves: %s" % ", ".join(faltan))
+        print("        (%s)" % ruta_cfg)
+        return 1
+
+    url = "http://127.0.0.1:%s/health" % cfg["PUERTO"]
     try:
         urllib.request.urlopen(url, timeout=2)
         print("[AVISO] El modelo YA esta abierto en %s" % url.replace("/health", ""))
@@ -75,14 +103,19 @@ def main():
         return 0
     except Exception:
         pass
+
+    cmd, k = construir_comando(cfg, perfil)
     try:
-        print("Abriendo Qwen APEX-I-MINI (la carga tarda ~1-2 min)...")
-        proc = subprocess.Popen([RUTA_SERVER] + BASE_FLAGS + FLAGS_GANADORAS,
-                                cwd=(os.path.dirname(RUTA_SERVER) or "."))
+        print("Abriendo Qwen APEX-I-MINI — perfil %s (%d expertos) — config: %s"
+              % (perfil.upper(), k, ruta_cfg))
+        print("(la carga tarda ~1-2 min)...")
+        proc = subprocess.Popen(cmd,
+                                cwd=(os.path.dirname(cfg["RUTA_SERVER"]) or "."))
     except Exception as e:
         print("[ERROR] No pude lanzar el server: %s" % e)
-        print("        Revisa RUTA_SERVER en este archivo.")
+        print("        Revisa RUTA_SERVER en config.txt.")
         return 1
+
     t0 = time.time()
     while time.time() - t0 < 600:
         try:
@@ -91,16 +124,18 @@ def main():
         except Exception:
             if proc.poll() is not None:
                 print("[ERROR] El server se cerro solo (codigo %s)." % proc.returncode)
-                print("        Revisa que la ruta del modelo y la VRAM libre sean correctas.")
+                print("        Revisa RUTA_MODELO y la VRAM libre en config.txt.")
                 return 1
             time.sleep(2)
     else:
         print("[ERROR] 10 min sin responder. Cierra esta ventana y revisa VRAM/RAM.")
         proc.terminate()
         return 1
+
     print("")
     print("  ==============================================")
-    print("   MODELO LISTO:  http://127.0.0.1:9931")
+    print("   MODELO LISTO:  http://127.0.0.1:%s" % cfg["PUERTO"])
+    print("   Perfil:        %s (%d expertos)" % (perfil.upper(), k))
     print("   Para hablar:   abre CHATEAR-QWEN.bat")
     print("   Para cerrar:   cierra esta ventana (o Ctrl+C)")
     print("  ==============================================")

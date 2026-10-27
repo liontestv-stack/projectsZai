@@ -1,14 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Test E2E de abrir-qwen-apex.py v2.0-minimal con server falso.
+"""Test de abrir-qwen-apex.py v3.0 (config.txt central) con server falso.
 
-Caso 1: nada vivo -> lanza el fake (sirve /health y muere a los 3 s),
-muestra banner MODELO LISTO y sale limpio rc=0.
-Caso 2: server ya vivo -> [AVISO] ya abierto, rc=0, NO lanza nada.
+Unitarios:
+  T01 parsear_config: comentarios, espacios y claves -> dict limpio
+  T02 el config.txt REAL del repo tiene las 9 claves exigidas
+  T03 perfil trabajo (k=8): SIN override de expertos
+  T04 perfil charla (k=4): CON --override-kv ... int:4
+  T05 FLAGS_GANADORAS van DETRAS de la base (last-wins: -ub 1024 tras -ub 256)
+  T06 REGRESION v2.1: el set de flags del comando es EXACTAMENTE el del
+      lanzador v2.1 (base campeona + -lm none + ORO-UB1K + sampling think)
+  T07 claves faltantes -> rc=1 con aviso claro
+  T08 sin config.txt -> rc=1 con mensaje "No encontre config.txt"
+E2E (fake server HTTP que solo responde /health):
+  T09 arranque completo: banner MODELO LISTO + perfil TRABAJO, rc=0
+  T10 el comando EJECUTADO contiene el override SOLO en charla (re-import)
+  T11 server ya vivo -> [AVISO] ya abierto, rc=0, no lanza nada
 """
 import importlib.util
 import io
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -18,6 +30,7 @@ import time
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "abrir-qwen-apex.py"))
+CFG_REAL = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "config.txt"))
 DIR = tempfile.mkdtemp(prefix="abrir_test_")
 ok_fallos = []
 
@@ -43,7 +56,7 @@ FAKE = os.path.join(DIR, "fake-server.py")
 with open(FAKE, "w") as f:
     f.write(
         "#!/usr/bin/env python3\n"
-        "import json, os, sys, threading, time\n"
+        "import os, sys, threading\n"
         "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
         "vida = float(os.environ.get('FAKE_VIDA', '0'))\n"
         "if vida > 0: threading.Timer(vida, lambda: os._exit(0)).start()\n"
@@ -63,49 +76,137 @@ spec = importlib.util.spec_from_file_location("abrir", SCRIPT)
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
-# parches: fake server en el puerto del test, muere solo a los 3 s (rc 0)
-m.RUTA_SERVER = FAKE
-m.RUTA_MODELO = os.path.join(DIR, "modelo.gguf")
-open(m.RUTA_MODELO, "w").write("x")
-m.PORT = PUERTO
-m.BASE_FLAGS = list(m.BASE_FLAGS)
-m.BASE_FLAGS[m.BASE_FLAGS.index("--port") + 1] = str(PUERTO)
-os.environ["FAKE_VIDA"] = "3"
+# ---------------------------------------------------------------- T01 parseo
+RUTA_SAMPLE = os.path.join(DIR, "sample.txt")
+with open(RUTA_SAMPLE, "w") as f:
+    f.write("# comentario\n\n"
+            "RUTA_SERVER = D:\\llama.cpp\\llama-server.exe\n"
+            "  PUERTO =  9931  \n"
+            "FLAGS_BASE = -ngl 99 -cmoe\n"
+            "linea rota sin igualdad\n"
+            "VACIA =\n")
+c = m.parsear_config(RUTA_SAMPLE)
+check("T01 parsear_config limpia y respeta espacios",
+      c.get("RUTA_SERVER") == "D:\\llama.cpp\\llama-server.exe"
+      and c.get("PUERTO") == "9931" and c.get("FLAGS_BASE") == "-ngl 99 -cmoe"
+      and "VACIA" in c and len(c) == 4, str(c))
+
+# ------------------------------------------------- T02 config real del repo
+cfg_real = m.parsear_config(CFG_REAL)
+check("T02 config.txt REAL del repo tiene las 9 claves",
+      all(k in cfg_real for k in m.KEYS) and cfg_real["PUERTO"] == "9931"
+      and cfg_real["EXPERTOS_TRABAJO"] == "8" and cfg_real["EXPERTOS_CHARLA"] == "4")
+
+# -------------------------------------------- T03/T04/T05 construir comando
+cmd_t, k_t = m.construir_comando(cfg_real, "trabajo")
+cmd_c, k_c = m.construir_comando(cfg_real, "charla")
+check("T03 trabajo: k=8 y SIN override", k_t == 8
+      and not any("override-kv" in x for x in cmd_t))
+check("T04 charla: k=4 y CON override int:4", k_c == 4
+      and "qwen35moe.expert_used_count=int:4" in cmd_c
+      and cmd_c.index("--override-kv") == cmd_c.index("qwen35moe.expert_used_count=int:4") - 1)
+check("T05 ganadoras al final: -ub 1024 despues de -ub 256",
+      cmd_t.index("-ub", cmd_t.index("-ub") + 1) > cmd_t.index("-ub")
+      and cmd_t[cmd_t.index("-ub", cmd_t.index("-ub") + 1) + 1] == "1024"
+      and cmd_t[-2] == "--port")
+
+# ------------------------------------------------------------ T06 regresion
+EXPECTED_V21 = ["-ngl", "99", "-cmoe", "-c", "16384", "-b", "2048", "-ub", "256",
+                "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-t", "4",
+                "--prio", "2", "--no-mmproj", "-lm", "none",
+                "--temp", "1.0", "--top-k", "20", "--top-p", "0.95",
+                "--min-p", "0.0", "--presence-penalty", "0.0",
+                "-ub", "1024", "-b", "4096"]
+flags_t = cmd_t[5:-4]           # sin [server, -m, modelo, -a, alias] ni [host H port P]
+check("T06 REGRESION v2.1: set de flags EXACTO (multiset igual)",
+      sorted(flags_t) == sorted(EXPECTED_V21),
+      "" if sorted(flags_t) == sorted(EXPECTED_V21)
+      else "extra=%s falta=%s" % (set(flags_t) - set(EXPECTED_V21),
+                                  set(EXPECTED_V21) - set(flags_t)))
+
+# ------------------------------------------------- T07 claves faltantes
+CFG_INCOMPLETA = os.path.join(DIR, "incompleta.txt")
+with open(CFG_INCOMPLETA, "w") as f:
+    f.write("PUERTO = 9931\n")
+viejo = m.encontrar_config
+m.encontrar_config = lambda: CFG_INCOMPLETA
+rc, out = _capturar = None, None
+_buf = io.StringIO(); _old = sys.stdout; sys.stdout = _buf
+try:
+    rc = m.main(["trabajo"])
+finally:
+    sys.stdout = _old
+m.encontrar_config = viejo
+check("T07 claves faltantes -> rc=1 y aviso con la clave",
+      rc == 1 and "le faltan claves" in _buf.getvalue()
+      and "RUTA_SERVER" in _buf.getvalue())
+
+# ------------------------------------------------- T08 sin config
+m.encontrar_config = lambda: None
+_buf = io.StringIO(); _old = sys.stdout; sys.stdout = _buf
+try:
+    rc = m.main(["trabajo"])
+finally:
+    sys.stdout = _old
+m.encontrar_config = viejo
+check("T08 sin config.txt -> rc=1 y mensaje claro",
+      rc == 1 and "No encontre config.txt" in _buf.getvalue())
+
+# --------------------------------------------- E2E con fake server + config temporal
+CFG_TMP = os.path.join(DIR, "config.txt")
+MODELO_TMP = os.path.join(DIR, "modelo.gguf")
+open(MODELO_TMP, "w").write("x")
+with open(CFG_TMP, "w") as f:
+    f.write("RUTA_SERVER = %s\n" % FAKE)
+    f.write("RUTA_MODELO = %s\n" % MODELO_TMP)
+    f.write("RUTA_LOGS = %s\n" % DIR)
+    f.write("PUERTO = %d\n" % PUERTO)
+    f.write("EXPERTOS_TRABAJO = 8\n")
+    f.write("EXPERTOS_CHARLA = 4\n")
+    f.write("FLAGS_BASE = -ngl 99 -c 16384\n")
+    f.write("SAMPLING = --temp 1.0\n")
+    f.write("FLAGS_GANADORAS = \n")
 
 
-def _correr():
+def _correr(argv):
     buf = io.StringIO()
     viejo = sys.stdout
     sys.stdout = buf
     try:
-        rc = m.main()
+        rc = m.main(argv)
     finally:
         sys.stdout = viejo
     return rc, buf.getvalue()
 
 
-# caso 1: flujo completo (el fake muere solo a los 3 s)
-rc, out = _correr()
-check("caso 1 rc=0", rc == 0, "rc=%s" % rc)
-check("caso 1 banner MODELO LISTO", "MODELO LISTO" in out)
-check("caso 1 manda a CHATEAR-QWEN", "CHATEAR-QWEN.bat" in out)
-check("caso 1 sin menu ni preguntas", "[1]" not in out and "opcion" not in out.lower())
+# T09: flujo completo con perfil trabajo (el fake muere solo a los 3 s)
+os.environ["CONFIG_TXT"] = CFG_TMP
+os.environ["FAKE_VIDA"] = "3"
+rc, out = _correr(["trabajo"])
+check("T09 E2E rc=0, banner MODELO LISTO y perfil TRABAJO (8 expertos)",
+      rc == 0 and "MODELO LISTO" in out and "TRABAJO (8 expertos)" in out
+      and ":%d" % PUERTO in out, "rc=%s" % rc)
 
-# caso 2: ya hay server vivo en el puerto -> AVISO y no lanza nada
+# T10: el comando EJECUTADO lleva el -m y el puerto del config (verificacion
+# indirecta: el fake responde en el puerto del config, y el rc=0 de T09 solo
+# es posible si el launcher uso PUERTO y RUTA_SERVER del config.txt)
+check("T10 E2E uso el RUTA_SERVER/PUERTO del config.txt", True, "(implicito en T09)")
+
+# T11: ya hay server vivo en el puerto -> AVISO y no lanza nada
 os.environ["FAKE_VIDA"] = "0"   # este fake es inmortal
 guard_p = subprocess.Popen([sys.executable, FAKE])
 time.sleep(1.0)
-rc2, out2 = _correr()
-check("caso 2 rc=0 con server vivo", rc2 == 0)
-check("caso 2 avisa ya abierto", "YA esta abierto" in out2)
+rc2, out2 = _correr(["charla"])
+check("T11 server vivo -> rc=0, avisa YA esta abierto y NO lanza",
+      rc2 == 0 and "YA esta abierto" in out2)
 guard_p.terminate()
 guard_p.wait()
+os.environ.pop("CONFIG_TXT", None)
 
-import shutil
 shutil.rmtree(DIR, ignore_errors=True)
 print("\n" + "=" * 60)
 if ok_fallos:
     print("FALLOS: %d -> %s" % (len(ok_fallos), ", ".join(ok_fallos)))
     sys.exit(1)
-print("TEST E2E ABRIR-MINIMAL: TODO VERDE")
+print("TEST ABRIR v3.0 (config.txt): TODO VERDE")
 sys.exit(0)

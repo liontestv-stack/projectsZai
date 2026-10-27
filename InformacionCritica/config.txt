@@ -1,0 +1,28 @@
+# ============================================================
+#  CONFIG CENTRAL del proyecto  (casa: D:\ZLia\config.txt)
+#  TODA la configuracion vive AQUI. Los programas (abrir,
+#  chatear) leen este archivo. Aqui se edita, en ningun otro.
+#  Formato:  CLAVE = valor    (lineas con # = comentarios)
+# ============================================================
+
+# --- Rutas ---
+RUTA_SERVER = D:\llama.cpp\llama-server.exe
+RUTA_MODELO = D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+RUTA_LOGS = D:\ZLia\faseD-logs
+
+# --- Red ---
+PUERTO = 9931
+
+# --- Expertos (el truco de los cocineros) ---
+# 8 = como vino de fabrica (programar) / 4 = charla casual (~+41% t/s)
+EXPERTOS_TRABAJO = 8
+EXPERTOS_CHARLA = 4
+
+# --- Flags del server ---
+# FLAGS_BASE = base campeona verificada. SAMPLING = preset "think"
+# oficial de la card Qwen3.6. FLAGS_GANADORAS van AL FINAL y el
+# ultimo valor gana (así se pisa -ub/-b de la base).
+# (Las flags PERMITIDAS se auditan contra InformacionCritica\llama-flags-nuevo.txt)
+FLAGS_BASE = -ngl 99 -cmoe -c 16384 -b 2048 -ub 256 -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj -lm none
+SAMPLING = --temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
+FLAGS_GANADORAS = -ub 1024 -b 4096

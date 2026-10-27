@@ -55,8 +55,34 @@ if sys.version_info < (3, 8):
 
 # ------------------------------------------------------------------ constantes
 PORT_DEFAULT = 9931      # dump verbatim: default del server b11856 (v0.7.0)
-CTX_RIG = 16384          # -c del lanzador (mitigacion #23577); cambiar si
-                         # relanzas el server con otro --ctx
+CTX_RIG = 16384          # -c del lanzador; ahora se hereda de config.txt
+
+CONFIG_OFICIAL = r"D:\ZLia\config.txt"   # misma fuente que abrir-qwen-apex.py
+
+
+def _config_central():
+    """Lee config.txt (ruta oficial D:\\ZLia\\config.txt o junto a este
+    script). Devuelve {} si no existe — el cliente usa sus defaults y
+    los --host/--port de la linea de comandos SIEMPRE ganan."""
+    candidatas = [CONFIG_OFICIAL,
+                  os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "config.txt")]
+    for ruta in candidatas:
+        try:
+            if not os.path.exists(ruta):
+                continue
+            cfg = {}
+            with open(ruta, "r", encoding="utf-8", errors="replace") as f:
+                for linea in f:
+                    linea = linea.strip()
+                    if linea and not linea.startswith("#") and "=" in linea:
+                        k, _, v = linea.partition("=")
+                        cfg[k.strip()] = v.strip()
+            if cfg:
+                return cfg
+        except Exception:
+            pass
+    return {}
 
 # Sampling oficial Qwen3.6 (card + generation_config, fetch 2026-10-25;
 # doc config-sampling-qwen36.md §1) — mismo set que inyecta el lanzador,
@@ -447,6 +473,16 @@ def guardar_transcript():
 
 # ------------------------------------------------------------------ main
 def main():
+    global PORT_DEFAULT, CTX_RIG
+    _cfg = _config_central()          # config central (si existe); la CLI gana
+    if _cfg.get("PUERTO", "").isdigit():
+        PORT_DEFAULT = int(_cfg["PUERTO"])
+    _fb = _cfg.get("FLAGS_BASE", "").split()
+    if "-c" in _fb:
+        _i = _fb.index("-c")
+        if _i + 1 < len(_fb) and _fb[_i + 1].isdigit():
+            CTX_RIG = int(_fb[_i + 1])
+
     ap = argparse.ArgumentParser(
         description="Chat token a token con Qwen APEX-I-MINI (llama-server b11856)")
     ap.add_argument("--host", default="127.0.0.1")
