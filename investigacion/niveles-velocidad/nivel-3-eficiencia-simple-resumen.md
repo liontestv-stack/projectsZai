@@ -163,3 +163,14 @@ ngram como spec · afinidad/masks · FIT-C · repack off · KV q5_1 · override 
 - **0.4 El nivel N3 entero, incrustado**: la campaña (N1 → N3 → N2 → N4 → RUTA 0 + N5 y dónde está cada una), los números de referencia del laboratorio (21.53 / 22.49 / 21.57 / 21.39 / k=4 28.85), el libro de muertos (lo que NO se vuelve a medir), lo que ESTA corrida viene a cosechar, y el protocolo de decisión (mediana de 3, bookend, promoción de UNA línea).
 - **0.5 El día**: el recordatorio de la ronda 28 — si la RAM va al 97%, cierra apps antes; el barrido debe medir la receta, no el pagefile.
 - **Sin miedo**: si una pieza no existe (p. ej. fuera de Windows), el dossier pone "no disponible" y sigue — nunca se cae. El hash añade ~1 min al inicio; `--sin-sha256` lo salta y `--sin-prevuelo` vuelve al comportamiento de la v1.0. Las dosis, la medición y el CSV NO cambian nada.
+
+---
+
+## El examen de campo del dossier: primer arranque real, un crash cazado y curado (28-oct-2026, espejo simple del §21)
+
+- **Qué pasó**: al estrenar la v1.1 en tu PC, la auditoría de flags pasó en verde (13 configs, cero prohibidas), pero el dossier del PC se cayó al tropezar con... tus 2 palos de RAM. El barrido murió ANTES de tocar nada: no se midió nada, no hay nada que limpiar ni rescatar.
+- **El bug en cristiano**: una frase del dossier estaba escrita a medias en dos líneas sin paréntesis — Python leyó la primera línea como una orden completa y la segunda como otra orden que recibía 3 datos para 0 huecos → error y fuera. En las pruebas de taller (Linux) esa pieza nunca se ejecutaba porque ahí no hay Windows; en tu PC sí, y con 2 palos justo.
+- **El arreglo**: paréntesis alrededor de la frase completa. Nada más cambió: las 13 dosis, el protocolo y el dossier son idénticos a los de la v1.1.
+- **La vacuna (lo importante)**: la batería trae ahora un **detector de esta familia entera de bugs** que revisa TODOS los scripts en cada corrida (11/11 limpios hoy), y por fin prueba la pieza Windows del dossier con datos falsos realistas (2 palos, 1 palo sin velocidad): 55 → **58 checks, todo verde**. Esta clase de bug no puede volver a colarse sin que la batería grite.
+- **Honestidad**: durante la revisión se sospechó de una segunda pieza (la función math de PowerShell en los comepanes); verificada byte a byte, estaba BIEN — la sospecha era un espejismo del taller, descartado y registrado.
+- **Para ti**: re-copiar `barrido-n3-eficiencia.py` (v1.2) a D:\ZLia y repetir el mismo comando de siempre.

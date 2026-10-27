@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-barrido-n3-eficiencia.py v1.0 — COSECHA del NIVEL 3 (eficiencia simple)
+barrido-n3-eficiencia.py v1.2 — COSECHA del NIVEL 3 (eficiencia simple)
 =======================================================================
 Encargo del Director (28-oct-2026): "dejemos de lado el diagnostico, que
 hacemos" -> el siguiente paso del orden aprobado (Ronda 12: N1 -> N3 -> N2
@@ -118,7 +118,7 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n3-eficiencia v1.1 (2026-10-28, prevuelo completo PC+modelo+nivel)"
+VERSION = "barrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)"
 PROTO = "faseN3-v1"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
@@ -916,9 +916,14 @@ def dossier_pc(con_nvidia=True):
         caps = [int(x.get("Capacity") or 0) for x in palos]
         vels = sorted({str(x.get("ConfiguredClockSpeed")
                            or x.get("Speed") or "?") for x in palos})
-        d["ram_hardware"] = "%d modulos x %s GB a %s MT/s (dual channel si "
-        "son 2)" % (len(palos), fmt(sum(caps) / (1024 ** 3), 1),
-                    "/".join(vels))
+        # HOTFIX campo 28-oct: el literal iba partido en dos statements sin
+        # parentesis -> "son 2)" % (3 args) = TypeError en el rig (2 palos).
+        # Los parentesis restauran la concatenacion y el % sobre el literal
+        # COMPLETO (cazado en la primera corrida real del prevuelo).
+        d["ram_hardware"] = (
+            "%d modulos x %s GB a %s MT/s (dual channel si son 2)"
+            % (len(palos), fmt(sum(caps) / (1024 ** 3), 1),
+               "/".join(vels)))
     pf = _ps_json("Get-CimInstance Win32_PageFileUsage | Select-Object Name,"
                   "AllocatedBaseSize,CurrentUsage,PeakUsage | ConvertTo-Json "
                   "-Compress")

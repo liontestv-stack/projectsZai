@@ -8,6 +8,12 @@ escribe en SU stdout las lineas de log que el barrido usa como certificado
 (restored context checkpoint / forcing full prompt re-processing / warning
 #24055 / system_info USE_GRAPHS REPACK / listening on / loading model).
 
+v1.2 anade: hotfix de campo del dossier_pc (literal partido en dos
+statements crasheaba con 2 palos de RAM, primera corrida real 28-oct) con
+datos realistas del rig (2 palos / 1 palo sin MT/s), y auditoria AST
+permanente de cadenas de formato en TODOS los scripts (la clase del crash
+no vuelve: U22-U24).
+
 Comportamiento del fake (reproduce los DOS mundos del hibrido #21831):
   - SI lleva --cache-reuse  -> linea 'restored context checkpoint' por POST
                                y TTFT PLANO (el cache trabaja)
@@ -339,6 +345,132 @@ check("U21: md_prevuelo pinta las 5 secciones con N/D graceful",
       and "### 0.4" in md_txt and "### 0.5" in md_txt
       and "no disponible" in md_txt
       and "FABRICA" in md_txt)
+
+# ---- v1.2: hotfix de campo (crash del dossier con 2 palos) + auditoria AST -
+def _ps_falsa_ram(n_palos, con_vel=3200):
+    """_ps_json falsa con datos realistas del rig (la rama Windows que el
+    mock original no podia ejecutar en Linux: _ps_json real da None)."""
+    def _f(q, timeout=60):
+        if "Win32_OperatingSystem" in q:
+            return [{"Caption": "Microsoft Windows 11 Pro",
+                     "Version": "10.0.26100", "BuildNumber": "26100",
+                     "OSArchitecture": "64 bits",
+                     "LastBootUpTime": "20261028080000.000000+060"}]
+        if "Win32_Processor" in q:
+            return [{"Name": "CPU del rig", "NumberOfCores": 8,
+                     "NumberOfLogicalProcessors": 16,
+                     "MaxClockSpeed": 3200}]
+        if "Win32_PhysicalMemory" in q:
+            filas = []
+            for _ in range(n_palos):
+                filas.append({"Capacity": 8589934592, "Speed": con_vel,
+                              "ConfiguredClockSpeed": con_vel})
+            return filas
+        if "PageFileUsage" in q:
+            return [{"Name": "D:\\pagefile.sys", "AllocatedBaseSize": 5120,
+                     "CurrentUsage": 1200, "PeakUsage": 4300}]
+        if "LogicalDisk" in q:
+            return [{"DeviceID": "C:", "Size": 476000000000,
+                     "FreeSpace": 100000000000}]
+        if "Get-Process" in q:
+            return [{"Name": "llama-server", "MB": 14600},
+                    {"Name": "chrome", "MB": 2100}]
+        return None
+    return _f
+
+orig_ps = b3._ps_json
+try:
+    b3._ps_json = _ps_falsa_ram(2)          # EL RIG REAL: 2 palos de 8 GB
+    pc2 = b3.dossier_pc(con_nvidia=False)
+finally:
+    b3._ps_json = orig_ps
+check("U22: dossier_pc con 2 palos (rig real) -> ram_hardware sin crash",
+      "2 modulos x 16.0 GB a 3200 MT/s" in (pc2.get("ram_hardware") or "")
+      and "(dual channel si son 2)" in (pc2.get("ram_hardware") or ""),
+      str(pc2.get("ram_hardware")))
+try:
+    b3._ps_json = _ps_falsa_ram(1, con_vel=None)   # 1 palo sin velocidad
+    pc3 = b3.dossier_pc(con_nvidia=False)
+finally:
+    b3._ps_json = orig_ps
+check("U23: dossier_pc con 1 palo sin MT/s -> '?' y sin crash",
+      "1 modulos x 8.0 GB a ? MT/s" in (pc3.get("ram_hardware") or ""),
+      str(pc3.get("ram_hardware")))
+
+def _contar_ph(s):
+    """Numero de placeholders % en una cadena de formato (%% no cuenta;
+    un * en anchura/precision cuenta como arg extra)."""
+    import re as _re
+    n = 0
+    for m2 in _re.finditer(r"%(?:\((?:[^)]*)\))?[-#0 +]*(?:\*|\d+)?"
+                           r"(?:\.(?:\*|\d+))?[hlL]?([diouxXeEfFgGcrsa%])",
+                           s):
+        if m2.group(1) == "%":
+            continue
+        n += 1 + m2.group(0).count("*")
+    return n
+
+def _audit_formatos(ruta):
+    """La clase del crash de campo, convertida en detector: (1) statement
+    "literal" % (...) cuyo resultado se tira (literal partido en 2
+    statements); (2) literal suelto como statement (no docstring); (3)
+    aridad placeholders vs args."""
+    import ast as _ast
+    hall = []
+    with open(ruta, encoding="utf-8") as f:
+        arbol = _ast.parse(f.read(), ruta)
+    docs = set()
+    for nd in _ast.walk(arbol):
+        if isinstance(nd, (_ast.Module, _ast.FunctionDef, _ast.ClassDef)):
+            c = getattr(nd, "body", [])
+            if (c and isinstance(c[0], _ast.Expr)
+                    and isinstance(c[0].value, _ast.Constant)
+                    and isinstance(c[0].value.value, str)):
+                docs.add(id(c[0]))
+    for nd in _ast.walk(arbol):
+        if isinstance(nd, _ast.Expr):
+            v = nd.value
+            if (isinstance(v, _ast.BinOp) and isinstance(v.op, _ast.Mod)
+                    and isinstance(v.left, _ast.Constant)
+                    and isinstance(v.left.value, str)):
+                hall.append((nd.lineno, "formato orfano (resultado tirado)"))
+            elif (id(nd) not in docs and isinstance(v, _ast.Constant)
+                  and isinstance(v.value, (str, int, float))):
+                hall.append((nd.lineno, "literal suelto como statement"))
+        elif (isinstance(nd, _ast.BinOp) and isinstance(nd.op, _ast.Mod)
+              and isinstance(nd.left, _ast.Constant)
+              and isinstance(nd.left.value, str)):
+            fs = nd.left.value
+            nf = _contar_ph(fs)
+            der = nd.right
+            if "%(" in fs:
+                if isinstance(der, _ast.Tuple):
+                    hall.append((nd.lineno, "mapping %(...)s con tupla"))
+                continue
+            if isinstance(der, _ast.Tuple):
+                if any(isinstance(e, _ast.Starred) for e in der.elts):
+                    continue
+                na = len(der.elts)
+            elif isinstance(der, (_ast.Dict, _ast.Call)):
+                continue
+            else:
+                na = 1
+            if nf != na:
+                hall.append((nd.lineno, "aridad %d vs %d args: %r"
+                             % (nf, na, fs[:60])))
+    return hall
+
+import glob as _glob
+_hallazgos = []
+for _ruta in sorted(_glob.glob(os.path.join(RAIZ, "..", "InformacionCritica",
+                                           "scripts", "*.py"))):
+    for _ln, _msg in _audit_formatos(_ruta):
+        _hallazgos.append("%s:%d %s" % (os.path.basename(_ruta), _ln, _msg))
+_fuente = open(SCRIPT, encoding="utf-8").read()
+check("U24: auditoria AST de formatos en todos los scripts = 0 hallazgos",
+      not _hallazgos
+      and "[math]::Round(" in _fuente,
+      str(_hallazgos[:3]))
 
 # =========================== 2. E2E corrida completa =========================
 print("--- E2E CORRIDA COMPLETA (13 configs) ---")
