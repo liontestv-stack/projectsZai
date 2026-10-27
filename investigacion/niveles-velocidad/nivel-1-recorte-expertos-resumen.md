@@ -226,3 +226,12 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 - **El mecánico ahora lo dice en el veredicto.** Si mides ~21: "estás EN los días buenos — coincide con tu recuerdo". Si mides 17-20.5: "día lento de los que el lab también midió; el día bueno vuelve a ~21 solo (menos apps abiertas, GPU fría)". Si mide menos de 17: "algo del día frena de verdad" y te señala al culpable (RAM, GPU caliente, plan de energía).
 - **Cinco bugs cazados y arreglados en esta refinada**: (1) si cambiaste el puerto en config.txt después de abrir, ya no se rinde — te avisa y mide el server vivo; (2) los procesos zombis de sesiones viejas ya no engañan (compara todos y se queda con el que coincide); (3) las rutas en mayúsculas/minúsculas ya no dan falsas alarmas de "receta cambiada"; (4) si el programa del server se llama distinto, lo encuentra igual; (5) la consola ya no puede romper el informe por un acento. Y una lección repetida: un test de la batería era flojo (un `or` que lo validaba casi todo) — endurecido. **Un test débil valida el bug.**
 - **Mismo uso que antes**: abre el modelo con su .bat → doble click en DIAGNOSTICO-VELOCIDAD.bat → no chatees ese minuto → lee el veredicto (queda el informe guardado).
+
+---
+
+## El mecánico en el campo: primera corrida real (28-oct-2026, espejo simple del §31)
+
+- **Corriste el diagnóstico una vez y fue su examen de campo: aprobado sin un solo crash.** El número: **17.29 t/s con 8 cocineros**. Suena bajo tu 21 recordado, pero es exactamente lo que el laboratorio predijo: **día lento**, de los que el lab también midió (17.36-17.80 con la MISMA receta otro día). **La receta va bien.**
+- **El culpable del día quedó pillado con número: la RAM.** Solo 0.40 GB libres de 16 (97% en uso). Con el modelo ocupando 14.27 GB de esos 16, eso es jugar con fuego: si Windows empieza a intercambiar (pagefile), TODO se frena. Este es el freno del día, no la receta.
+- **Dos buenas noticias del mismo informe:** la GPU está fresca y tranquila (50°C, sin señales de asfixia) y ya tienes el plan de energía en MÁXIMO RENDIMIENTO — uno de los frenos posibles queda descartado para siempre.
+- **Lo que sigue tiene sentido redondo:** el barrido N3 recién construido trae una familia de ajustes hecha JUSTO para esto — liberar RAM (uno libera ~7.7 GB, otro ~1.5-1.8 GB). Regla antes de correrlo: **cierra el navegador y las apps pesadas**, para que el barrido mida la receta y no el día. Si la medición se hace con la RAM al 97%, el resultado sale contaminado por el mismo culpable que ya encontramos.
