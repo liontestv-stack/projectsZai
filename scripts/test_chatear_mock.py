@@ -4,8 +4,10 @@
 
 Ejercita: /health 503->ok, thinking separado (reasoning_content), thinking
 inline <think> PARTIDO entre chunks (retencion de prefijos), usage final
-(ctx real), metricas cliente, /temp 0 rechazado (NO greedy), /stats,
-/guardar y /salir. Verifica ademas que en pipe NO hay codigos ANSI.
+(ctx real), metricas cliente, /temp 0 rechazado (NO greedy), /modo N
+(etiqueta turnos, /modo 0 rechazado), /stats agrupa tok/s por modo,
+/guardar con linea "Por modo" y /salir. Verifica ademas que en pipe NO
+hay codigos ANSI.
 """
 import json
 import os
@@ -82,7 +84,8 @@ def main():
     os.makedirs(cwd, exist_ok=True)
     for f in os.listdir(cwd):             # limpiar restos de corridas previas
         os.remove(os.path.join(cwd, f))
-    entrada = "hola\notra\n/temp 0\n/stats\n/guardar\n/salir\n"
+    entrada = ("hola\n/modo 4\notra\n/temp 0\n/modo 0\n"
+               "/stats\n/guardar\n/salir\n")
     p = subprocess.run(
         [sys.executable, CLIENTE, "--port", str(PORT)],
         input=entrada.encode(), capture_output=True, timeout=60, cwd=cwd)
@@ -108,6 +111,11 @@ def main():
     check("think inline gris", "2+2=4" in out)
     check("respuesta tras tag partido", "Son 4. ¡Correcto!" in out)
     check("NO greedy rechazado", "NO greedy" in out)
+    check("/modo 4 aceptado", "modo: 4 expertos" in out)
+    check("/modo 0 rechazado", "numero de expertos" in out)
+    check("metricas etiquetadas modo 4", "modo 4  ·" in out)
+    check("stats agrupa modo 4", "modo 4: 1 turno ·" in out)
+    check("stats agrupa sin modo", "(sin modo): 1 turno ·" in out)
     check("stats 2 turnos", "turnos 2" in out)
     check("historial SIN thinking",
           HITOS["cuerpos"][1]["messages"][-2]["content"] == "La respuesta es 4.")
@@ -124,6 +132,7 @@ def main():
         check("transcript sin thinking", "<think>" not in texto and
               "2+2=4" not in texto)
         check("transcript con respuesta", "La respuesta es 4." in texto)
+        check("transcript con modo", "modo 4" in texto and "Por modo:" in texto)
 
     print()
     if fallos:

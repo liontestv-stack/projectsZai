@@ -13,6 +13,10 @@ QUE HACE:
     reasoning separado (delta.reasoning_content) y tags <think> inline.
   · Metricas POR TURNO: tokens, tok/s de generacion, TTFT (tiempo al 1er
     token), prefill ~aprox, y CTX usada del server vs el -c del rig.
+  · t/s EN VIVO (v1.1): mientras genera, el titulo de la ventana muestra
+    el tok/s del momento; al cerrar el turno queda el del turno completo.
+  · /modo N (v1.1): etiqueta los turnos con los expertos del server abierto
+    (8 trabajo / 4 charla). /stats y /guardar comparan tok/s POR MODO.
   · Metricas acumuladas de sesion: /stats (turnos, tokens, tok/s medio).
 
 METRICAS — de donde salen (nada inventado):
@@ -34,7 +38,7 @@ HISTORIAL: multi-turno en memoria; la respuesta se guarda SIN thinking
 (limpio) — el server b11856 gestiona el preserve del trace (--reasoning-
 preserve ya ON en el build, dump verbatim). /reset borra la conversacion.
 
-COMANDOS: /ayuda /reset /sistema /preset /temp /stats /guardar /salir
+COMANDOS: /ayuda /reset /sistema /preset /temp /modo /stats /guardar /salir
 REQUISITOS: Python 3.8+ solo stdlib. Server abierto en otra ventana.
 Rutas y puerto sobreescribibles: CLI --host/--port (default 127.0.0.1:9931).
 """
@@ -103,6 +107,7 @@ ESTADO = {
     "messages": [],       # [{role, content}] SIN thinking del assistant
     "system": None,       # system prompt opcional (/sistema)
     "preset": "think",
+    "modo": None,         # expertos del server abierto (/modo 8|4) — etiqueta
     "temp_override": None,
     "turnos": [],         # resumenes de metricas por turno (para /guardar)
     "acum": {"turnos": 0, "tokens": 0, "t_gen": 0.0, "mejor": 0.0},
@@ -138,6 +143,21 @@ def activar_color():
                 C.on = True
     except Exception:
         pass                          # consola sin VT: sin color, sin fallo
+
+
+def titulo(s):
+    """Titulo de la ventana de consola (Windows nativo / OSC en POSIX).
+    Silencioso fuera de TTY: en tests y pipes no toca nada."""
+    if not sys.stdout.isatty():
+        return
+    try:
+        if os.name == "nt":
+            ctypes.windll.kernel32.SetConsoleTitleW(s)
+        else:
+            sys.stdout.write("\x1b]2;{}\x07".format(s))
+            sys.stdout.flush()
+    except Exception:
+        pass                          # sin titulo: nunca un fallo
 
 
 # ------------------------------------------------------------------ servidor
@@ -273,11 +293,27 @@ def responder_turno(host, port):
     canal = CanalThinking()
     emitir, cerrar = impresor_turno()
     m = {"n_tok": 0, "ttft": None, "t_gen": 0.0, "total": 0.0,
-         "prompt_tokens": None, "completion_tokens": None, "cortado": False}
+         "prompt_tokens": None, "completion_tokens": None, "cortado": False,
+         "modo": ESTADO["modo"]}
     t0 = time.perf_counter()
-    t_1er = None
+    vivo = {"t_1er": None, "t_ult": t0}   # tok/s en vivo para el titulo
+    sufijo = " · modo {}".format(ESTADO["modo"]) if ESTADO["modo"] else ""
+
+    def titulo_vivo():
+        """Contador de tok/s en el titulo (cada 0.5s, con >=4 tokens)."""
+        ahora = time.perf_counter()
+        if (vivo["t_1er"] is None or m["n_tok"] < 4
+                or ahora - vivo["t_ult"] < 0.5):
+            return
+        vivo["t_ult"] = ahora
+        gen = ahora - vivo["t_1er"]
+        if gen > 0:
+            titulo("Qwen · {:.1f} tok/s{}".format(
+                m["n_tok"] / gen, sufijo))
+
     try:
         for ev in stream_chat(host, port, cuerpo):
+            titulo_vivo()
             if ev.get("usage"):
                 u = ev["usage"]
                 m["prompt_tokens"] = u.get("prompt_tokens")
@@ -288,14 +324,14 @@ def responder_turno(host, port):
                 continue
             d = choices[0].get("delta") or {}
             if d.get("reasoning_content"):    # thinking separado (server)
-                if t_1er is None:
-                    t_1er = time.perf_counter() - t0
+                if vivo["t_1er"] is None:
+                    vivo["t_1er"] = time.perf_counter()
                 m["n_tok"] += 1
                 emitir("think", d["reasoning_content"])
             texto = d.get("content")
             if texto:
-                if t_1er is None:
-                    t_1er = time.perf_counter() - t0
+                if vivo["t_1er"] is None:
+                    vivo["t_1er"] = time.perf_counter()
                 m["n_tok"] += 1
                 for c, t in canal.alimentar(texto):
                     emitir(c, t)
@@ -313,9 +349,12 @@ def responder_turno(host, port):
         cerrar()
 
     m["total"] = time.perf_counter() - t0
-    if t_1er is not None:
-        m["ttft"] = t_1er
-        m["t_gen"] = m["total"] - t_1er
+    if vivo["t_1er"] is not None:
+        m["ttft"] = vivo["t_1er"] - t0
+        m["t_gen"] = m["total"] - m["ttft"]
+    ts_fin = tok_s(m)
+    titulo("Qwen · {} tok/s{}".format(
+        "{:.1f}".format(ts_fin) if ts_fin else "n/d", sufijo))
     # respuesta SIN thinking (historial limpio; el server gestiona preserve)
     m["respuesta"] = canal.out_acumulado if not m["cortado"] else None
     return m
@@ -328,6 +367,8 @@ def tok_s(m):
 
 def linea_metricas(m):
     partes = []
+    if m.get("modo") is not None:
+        partes.append("modo {}".format(m["modo"]))
     if m["completion_tokens"] is not None:
         partes.append("{:,} tok".format(m["completion_tokens"]))
     else:
@@ -365,6 +406,8 @@ def registrar_turno(m):
     ESTADO["acum"]["mejor"] = max(ESTADO["acum"]["mejor"], ts)
     ESTADO["turnos"].append({
         "hora": datetime.now().strftime("%H:%M:%S"),
+        "ts": ts,
+        "modo": m.get("modo"),
         "metricas": linea_metricas(m),
     })
 
@@ -376,7 +419,9 @@ AYUDA = """  /ayuda                    esta ayuda
   /preset think|coding|fast sampling oficial Qwen3.6 por request (§3.2)
   /temp N                   temperature ad-hoc (/temp solo: volver al preset;
                             NO greedy: temp 0 rechazado — card Qwen3.6)
-  /stats                    metricas acumuladas de la sesion
+  /modo N                   etiqueta los turnos con los expertos del server
+                            abierto (/modo 4 tras abrir CHARLA; /modo solo: quita)
+  /stats                    metricas acumuladas (agrupa tok/s por /modo)
   /guardar                  transcript a chat-qwen-FECHA.md
   /salir                    cerrar"""
 
@@ -431,6 +476,19 @@ def ejecutar_comando(linea, host, port):
         ESTADO["temp_override"] = min(v, 2.0)
         print(pintar(VER, "  temperature {} (por request)".format(
             ESTADO["temp_override"])))
+    elif cmd == "/modo":
+        if not resto:
+            ESTADO["modo"] = None
+            print(pintar(VER, "  modo: sin etiqueta (los turnos dejan "
+                         "de agruparse)."))
+        elif resto.isdigit() and int(resto) > 0:
+            ESTADO["modo"] = int(resto)
+            print(pintar(VER, "  modo: {} expertos — etiqueta los turnos "
+                         "siguientes (para /stats y /guardar).".format(
+                             ESTADO["modo"])))
+        else:
+            print(pintar(ROJ, "  /modo N — numero de expertos del server "
+                         "abierto (ej: /modo 8, /modo 4)."))
     elif cmd == "/stats":
         a = ESTADO["acum"]
         medio = a["tokens"] / a["t_gen"] if a["t_gen"] > 0 else 0.0
@@ -438,6 +496,16 @@ def ejecutar_comando(linea, host, port):
                      "mejor turno {:.1f} tok/s · tiempo gen {:.1f}s".format(
                          a["turnos"], a["tokens"], medio,
                          a["mejor"], a["t_gen"])))
+        grupos = {}
+        for t in ESTADO["turnos"]:
+            grupos.setdefault(t.get("modo"), []).append(t["ts"])
+        for modo, lista in sorted(grupos.items(),
+                                  key=lambda kv: (kv[0] is None, kv[0] or 0)):
+            et = "modo {}".format(modo) if modo is not None else "(sin modo)"
+            print(pintar(AMA, "  {}: {} turno{} · {:.1f} tok/s medio "
+                         "(max {:.1f})".format(
+                             et, len(lista), "" if len(lista) == 1 else "s",
+                             sum(lista) / len(lista), max(lista))))
     elif cmd == "/guardar":
         guardar_transcript()
     else:
@@ -468,6 +536,17 @@ def guardar_transcript():
         medio = a["tokens"] / a["t_gen"] if a["t_gen"] > 0 else 0.0
         f.write("---\n\nSesion: {} turnos · ~{} tok · {:.1f} tok/s medio\n"
                 .format(a["turnos"], a["tokens"], medio))
+        modos = {}
+        for turno in ESTADO["turnos"]:
+            modos.setdefault(turno.get("modo"), []).append(turno["ts"])
+        por_modo = ["modo {} {:.1f} tok/s (n={})".format(
+                        k, sum(v) / len(v), len(v))
+                    for k, v in sorted(modos.items(),
+                                       key=lambda kv: (kv[0] is None,
+                                                       kv[0] or 0))
+                    if k is not None]
+        if por_modo:
+            f.write("Por modo: {}\n".format(" | ".join(por_modo)))
     print(pintar(VER, "  transcript guardado: {}".format(nombre)))
 
 
@@ -515,7 +594,8 @@ def main():
         url_base(args.host, args.port))))
     print(pintar(CIA, "  sampling: " + muestrear_descripcion(ESTADO["preset"])))
     print("=" * 70)
-    print(pintar(GRA, "  (thinking en gris; /ayuda comandos; Ctrl+C corta el turno)"))
+    print(pintar(GRA, "  (thinking en gris; tok/s bajo cada respuesta y en el "
+                     "titulo; /modo 8|4 etiqueta que .bat abriste; Ctrl+C corta)"))
     print()
 
     while True:

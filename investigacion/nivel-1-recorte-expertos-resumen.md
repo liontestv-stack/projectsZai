@@ -188,3 +188,13 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 - **CHARLA pega una nota en la puerta de la cocina**: "hoy, 4 cocineros por plato" (`--override-kv ...=int:4`). TRABAJO no pega nada: 8 es lo que ya dice el manual de fábrica — no se ordena lo que ya viene ordenado.
 - **La nota se lee UNA sola vez al abrir la cocina**, no por mensaje. Por eso cambiar de modo = cerrar la ventana y abrir el otro .bat (~1 min).
 - **El número vive en config.txt**: ¿quieres charla con 5 cocineros mañana? Editas UNA línea (`EXPERTOS_CHARLA = 5`) y los dos botones obedecen igual — jamás tienes que tocar los .bat.
+
+---
+
+## Juega con la escalera tú mismo (27-oct-2026, espejo simple del §27)
+
+- **Ya lo tenías**: bajo cada respuesta, el chat de la casa imprime una línea con **tok/s** — ese es el número del experimento (la velocidad a la que ESCRIBE, no el "1er tok" que es el arranque).
+- **Nuevo**: el **t/s en vivo en el título de la ventana** mientras escribe, y el comando **/modo 8** o **/modo 4** para etiquetar qué botón abriste — /stats te compara los modos lado a lado ("modo 4: 33.9 tok/s medio") y /guardar lo deja todo en el transcript.
+- **Juego limpio (5 reglas)**: misma pregunta · respuestas de 200 palabras · descarta la primera (GPU fría) · compara solo el "tok/s" de escritura · etiqueta con /modo y /guardar al cerrar cada sesión.
+- **Para bajar a 6, 5 o 3 expertos**: edita `EXPERTOS_CHARLA = K` en config.txt y abre CHARLA. Lo ya medido: k=4 (+41%) es la dosis buena; k=3 ya falla cuentas y k=2 es sopa de letras.
+- **Honestidad**: esto es tu medición informal; el barrido formal (BARRIDO-N1.bat, ~50-65 min) sigue siendo el juez de N1.
