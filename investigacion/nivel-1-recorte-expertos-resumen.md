@@ -179,3 +179,12 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 - **¿Por qué funciona? (el restaurante)**: el modelo tiene 256 cocineros y por cada palabra solo consulta a 8 (elegidos por el maître). Pedirle que consulte 4 = mitad de cocina por palabra = platos más rápido. Los 256 siguen en la cocina (RAM/VRAM casi no cambian — lo que se ahorra es trabajo, no memoria). El modelo aprendió a pensar con 8 opiniones: las cuentas y el código lo notan primero, la charla casi nunca — por eso charla=4 y programar=8.
 - **¿Es un éxito si aguanta? SÍ** — es literalmente el objetivo del nivel 1 (velocidad arriba con calidad intacta). Ya casi lo tenemos: k=4 sacó 3/3 en el examen automático; falta la re-corrida v1.2.1 (~50-65 min) y el sanity manual de 20 prompts, que ahora hace de test del modo dual (chat y herramientas en k=4; código también en k=4, para decidir si aguanta o exige 8).
 - **Cómo se cambia de perfil**: este build fija los expertos AL ARRANCAR (no se puede cambiar por mensaje). Opción recomendada: dos .bat (uno con override k=4, otro sin él) — cambiar de tarea = cerrar y reabrir (~1 min). Después, si apetece, llama-swap para automatizarlo (ya investigado, overhead <1%). Un parche para cambiarlo "en caliente" queda registrado como idea futura, fuera de la campaña.
+
+---
+
+## Los dos botones negros (27-oct-2026, espejo simple del §26)
+
+- **Los dos .bat abren el MISMO restaurante**: mismo modelo, mismos 256 cocineros, mismas flags. Solo se diferencian en UNA palabra que le pasan al abridor: `trabajo` o `charla`.
+- **CHARLA pega una nota en la puerta de la cocina**: "hoy, 4 cocineros por plato" (`--override-kv ...=int:4`). TRABAJO no pega nada: 8 es lo que ya dice el manual de fábrica — no se ordena lo que ya viene ordenado.
+- **La nota se lee UNA sola vez al abrir la cocina**, no por mensaje. Por eso cambiar de modo = cerrar la ventana y abrir el otro .bat (~1 min).
+- **El número vive en config.txt**: ¿quieres charla con 5 cocineros mañana? Editas UNA línea (`EXPERTOS_CHARLA = 5`) y los dos botones obedecen igual — jamás tienes que tocar los .bat.

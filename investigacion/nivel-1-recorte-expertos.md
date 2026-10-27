@@ -593,3 +593,15 @@ La v1.2 corrió COMPLETA en el rig real: 15/15 configs medidas sin crash, CSV+JS
    - **Opción C — parche dinámico en llama.cpp (futura, FUERA de la campaña):** hacer expert_used_count cambiable por petición (campo en el JSON). Proyecto C++ aparte; se registra como idea, no como dosis.
 
 **5. Orden de trabajo confirmado (la idea NO reordena nada):** (1) re-corrida v1.2.1; (2) sanity manual 20 prompts con protocolo dual (chat+tools en k=4, código en k=4 para decidir); (3) si k=4 aguanta lo suyo, se materializan los dos .bat (Opción A) como entregable práctico de N1 — el "éxito" se declara con esas dos piezas, y N1 queda cerrado con modo dual operativo antes de pasar al N3.
+
+## 26. ANEXO SS26 — CÓMO FUNCIONA EL MODO DUAL EN PRÁCTICA (pregunta del Director, ronda 21, 27-oct-2026)
+
+> Pregunta: *"¿cómo funciona que abrir qwen abra 8 expertos pero el archivo de abrir charla solo 4?"* — tras la ronda 20 que materializó config.txt + los dos .bat. Respuesta SIN cambios técnicos: es la explicación de la cadena ya existente, registrada para que quede en el repo.
+
+**La cadena completa, de la ventana negra al server (5 pasos):**
+
+1. **Los dos .bat son gemelos.** Ninguno de los dos sabe nada de expertos: se limitan a abrir el MISMO script (`abrir-qwen-apex.py` v3.0) con una PALABRA distinta — `ABRIR-QWEN.bat` pasa `trabajo`, `ABRIR-QWEN-CHARLA.bat` pasa `charla`. Esa palabra es la única diferencia de texto entre los dos archivos.
+2. **El script consulta config.txt (fuente única, ronda 20)** y toma el número según la palabra: `trabajo` → `EXPERTOS_TRABAJO = 8`; `charla` → `EXPERTOS_CHARLA = 4`.
+3. **La diferencia física es UNA sola pieza en el comando de arranque.** Con `charla`, el script añade al final: `--override-kv qwen35moe.expert_used_count=int:4` ("donde el manual del modelo diga 8, usa 4"). Con `trabajo`, NO añade nada — 8 es el default de fábrica del modelo: no hay que ordenar lo que ya viene ordenado. Todo lo demás es IDÉNTICO en los dos: mismo .gguf, mismas FLAGS_BASE, mismo SAMPLING, mismas FLAGS_GANADORAS (y FLAGS_GANADORAS van al final en ambos — el último valor gana).
+4. **La nota se lee UNA vez, al abrir la cocina.** `--override-kv` es flag de CARGA (SS25.4): el server la procesa cuando carga el modelo, no por mensaje. Por eso no se puede cambiar de 8 a 4 a mitad de conversación: cambiar de perfil = cerrar la ventana y abrir el otro .bat (~1 min de recarga).
+5. **El pago del config central:** si mañana se quiere charla con 5 (o trabajo con 6), NO se toca ningún .bat — se edita `EXPERTOS_CHARLA = 5` en config.txt y los dos botones obedecen igual. El número vive en UN archivo; no está escondido dentro de dos.
