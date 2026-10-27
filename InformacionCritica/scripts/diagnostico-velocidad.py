@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-diagnostico-velocidad.py v1.0 — el mecanico: ¿va a los t/s que debe?
+diagnostico-velocidad.py v1.1 — el mecanico: ¿va a los t/s que debe?
 ====================================================================
 Pregunta del Director (ronda 25): "crea un nuevo .py que sea diagnostico,
 deberia ir a mas t/s con la receta completa".
@@ -40,6 +40,33 @@ Salida: consola + informe en RUTA_LOGS (default D:\ZLia\faseD-logs):
 Requisitos: Python 3.8+ solo stdlib. Las piezas de Windows (PowerShell,
 GlobalMemoryStatusEx, powercfg, nvidia-smi) se saltan solas con nota si no
 estan disponibles — el diagnostico NUNCA muere por una pieza ausente.
+
+v1.1 (ronda 26, pedido del Director: "refinalo corrigue bugs, recuerdo que
+a solo flags iba a 21 t/s minimo 8 cocineros"):
+  - EL RECUERDO DEL DIRECTOR AHORA VIVE EN EL VEREDICTO, y es DATO
+    CERTIFICADO: el sweep del 25-oct (informe-velocidad-sweep.md §11.1)
+    midio la familia de flags SOLA a BASE 20.85 y LMNONE 21.50 (la receta de
+    HOY lleva -lm none => su numero del sweep es 21.50), y ORO-UB1K 21.53
+    (barrido-30). Ese "21 minimo" era el TECHO de los dias buenos, no el
+    suelo (suelo certificado: 17.36, D-EXP10-CTRL). El veredicto NORMAL-K8
+    lo dice ahora y separa dias buenos (>=20.5) de dias lentos dentro del
+    rango.
+  - BUGS corregidos: (a) si config.txt dice un puerto y el server vivo corre
+    en OTRO (puerto editado despues de abrir), el diagnostico se negaba a
+    diagnosticar ("No hay server") — ahora lee el puerto del comando vivo,
+    lo comprueba con /health y diagnostica contra el VIVO con un AVISO;
+    (b) con VARIOS procesos llama-server.exe (zombie de una sesion anterior)
+    se comparaba solo el primero — ahora se comparan TODOS y gana el que
+    coincide; (c) rutas de Windows con distinto CASE (D:\ vs d:\) daban "sin
+    match" falso — las rutas (exe y modelo) se normalizan antes de comparar;
+    las FLAGS no se tocan (son case-sensitivas); (d) si el exe no se llama
+    llama-server.exe (RUTA_SERVER con otro nombre), la busqueda del proceso
+    se repite con ese nombre; (e) salida blindada contra la codepage de la
+    consola de Windows (errors=replace): un caracter no imprimible NUNCA
+    mata el informe a medio escribir.
+  - Bateria: el T06 tenia un `or` que volvia valida casi cualquier cosa —
+    endurecido a igualdad exacta. Nuevos: T12d-f (recuerdo en veredicto),
+    T15 (puerto del vivo), T16 (CASE de rutas), T17 (multi-proceso).
 """
 import json
 import os
@@ -61,9 +88,19 @@ KEYS = ("RUTA_SERVER", "RUTA_MODELO", "RUTA_LOGS", "PUERTO",
 HOST_DEF = "127.0.0.1"
 
 # --- rangos [M] del laboratorio (barrido-30 + faseD v1.2 real, ruido +/-0.5) -
-BAJO_DESDE = 16.9      # < suelo k=8 (17.36) - ruido  -> va mas lento de lo due
+BAJO_DESDE = 16.9      # < suelo k=8 (17.36) - ruido  -> va mas lento de lo que debe
 NORMAL_HASTA = 22.0    # <= techo k=8 (21.53) + ruido -> en rango k=8
 K4_DESDE = 24.0        # >= banda k=4 (28.85/29.13 con banda generosa)
+
+# --- referencias [M] CERTIFICADAS de la casa (todas medidas, cero invento) --
+SWEEP_BASE = 20.85     # sweep 25-oct §11.1 #6: familia de flags SOLA (sin -lm none)
+SWEEP_LMNONE = 21.50   # sweep 25-oct §11.1 #1: LA RECETA DE HOY (base + -lm none)
+ORO_UB1K = 21.53       # barrido-30 id 32: receta + FLAGS_GANADORAS
+FASED_FLOOR = 17.36    # faseD v1.2 D-EXP10-CTRL: suelo certificado k=8
+FASED_ANCLA = 17.80    # faseD v1.2 D-ANCLA
+DIA_BUENO_DESDE = 20.5  # >= esto = los dias ~21 certificados. El recuerdo del
+# Director ("a solo flags iba a 21 t/s minimo, 8 cocineros") ES ese techo:
+# LMNONE 21.50 [M] — el 21 es el TECHO de la familia, no el suelo.
 
 # GUID del plan "Equilibrado" de Windows (documentado por Microsoft; se busca
 # el GUID, no el nombre, para que funcione en Windows en cualquier idioma).
@@ -157,14 +194,15 @@ def construir_esperado(cfg, perfil):
 
 
 # ------------------- certificado de la receta viva (Win) ---------------------
-def cmdline_viva():
-    """Linea de comandos REAL del/los proceso(s) llama-server.exe via
-    PowerShell (Get-CimInstance). Devuelve (lista_de_lineas, nota) —
-    (None, nota) si no esta disponible (no-Windows / PowerShell fallo)."""
+def _cmdline_por_nombre(nombre_proceso):
+    """Linea de comandos de los procesos con ESE nombre via PowerShell
+    (Get-CimInstance). Devuelve (lista_de_lineas, nota); (None, nota) si no
+    hay procesos o la pieza no esta disponible (no-Windows / PowerShell
+    fallo). NUNCA lanza excepciones hacia arriba."""
     if os.name != "nt":
         return None, "certificado de linea de comandos solo en Windows"
-    ps = ("Get-CimInstance Win32_Process -Filter \"Name='llama-server.exe'\""
-          " | Select-Object -ExpandProperty CommandLine")
+    ps = ("Get-CimInstance Win32_Process -Filter \"Name='%s'\""
+          " | Select-Object -ExpandProperty CommandLine" % nombre_proceso)
     try:
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                            capture_output=True, text=True, timeout=30)
@@ -174,8 +212,17 @@ def cmdline_viva():
         return None, "PowerShell devolvio error %s" % r.returncode
     lineas = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()]
     if not lineas:
-        return None, "ningun proceso llama-server.exe visible (¿otra ventana?)"
-    return lineas, "%d proceso(s) llama-server.exe encontrados" % len(lineas)
+        return None, ("ningun proceso %s visible (¿otra ventana?)"
+                      % nombre_proceso)
+    return lineas, "%d proceso(s) %s encontrados" % (len(lineas),
+                                                     nombre_proceso)
+
+
+def cmdline_viva():
+    """Linea de comandos REAL del/los proceso(s) llama-server.exe. Wrapper SIN
+    argumentos (los tests la sustituyen con lambdas); la busqueda por otro
+    nombre de exe vive en certificar_receta."""
+    return _cmdline_por_nombre("llama-server.exe")
 
 
 def _tokens(linea):
@@ -208,6 +255,52 @@ def k_de_cmdline(tokens):
     return 8
 
 
+def puerto_de_tokens(tokens):
+    """El puerto del comando vivo (el token que sigue a --port). None si la
+    linea no lo declara."""
+    for i, t in enumerate(tokens):
+        if t == "--port" and i + 1 < len(tokens):
+            return tokens[i + 1]
+    return None
+
+
+def _normcase_ruta(p):
+    """Normaliza una RUTA para compararla: en Windows el caso no importa
+    (D:\\ZLia y d:\\zlia son la misma) y el comando vivo llega con el caso
+    que sea. En POSIX solo pasa a minusculas, para que los tests con lineas
+    falsas se comporten igual que en el rig."""
+    try:
+        p = os.path.normcase(p)
+    except Exception:
+        pass
+    return p.lower()
+
+
+def normalizar_tokens(tokens):
+    """Copia de los tokens con SOLO las rutas normalizadas (posicion 0 = exe,
+    y el token que sigue a -m = modelo). Las FLAGS NO se tocan: son
+    case-sensitivas y ahi vive el last-wins de -ub/-b."""
+    t2 = list(tokens)
+    if t2:
+        t2[0] = _normcase_ruta(t2[0])
+    for i, t in enumerate(t2):
+        if t == "-m" and i + 1 < len(t2):
+            t2[i + 1] = _normcase_ruta(t2[i + 1])
+    return t2
+
+
+def health_ok(puerto, timeout=4):
+    """¿Responde /health en ese puerto? (un 503 de carga cuenta como no
+    listo, que es lo honesto mientras el modelo entra)."""
+    try:
+        with urllib.request.urlopen(
+                "http://%s:%s/health" % (HOST_DEF, puerto),
+                timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def diferenciar_receta(vivo, esperado):
     """Compara DOS listas de tokens como multiset (orden y repeticiones
     importan: -ub 256 ... -ub 1024 es distinto de solo uno). Devuelve
@@ -219,37 +312,56 @@ def diferenciar_receta(vivo, esperado):
     return faltan, sobran
 
 
-def certificar_receta(cfg):
+def certificar_receta(cfg, lineas=None):
     """Estacion 1 completa. Devuelve dict con: k_vivo, match ('trabajo' |
-    'charla' | None), faltan, sobran, nota. Nunca lanza excepciones."""
+    'charla' | None), faltan, sobran, nota. Nunca lanza excepciones.
+    lineas: lineas de comandos vivas ya leidas (main/tests); None = leer aqui.
+    Con VARIOS procesos vivos (zombies incluidos) se comparan TODOS y gana
+    el de menos diferencias; el match exacto corta al instante."""
     res = {"k_vivo": None, "match": None, "k_esperado": None,
            "faltan": [], "sobran": [], "nota": ""}
-    lineas, nota = cmdline_viva()
-    res["nota"] = nota
+    if lineas is None:
+        lineas, nota = cmdline_viva()
+        res["nota"] = nota
+    else:
+        res["nota"] = "%d linea(s) de comando inyectadas" % len(lineas)
+    if not lineas:
+        # Ultima chance honesta: el exe puede no llamarse llama-server.exe
+        nombre = os.path.basename((cfg.get("RUTA_SERVER") or "").strip())
+        if nombre and nombre.lower() != "llama-server.exe" and os.name == "nt":
+            lineas, nota = _cmdline_por_nombre(nombre)
+            res["nota"] = "%s (buscado por RUTA_SERVER: %s)" % (nota, nombre)
     if not lineas:
         return res
-    vivas = [l for l in lineas if " -m " in " " + l + " " or " -m" in l]
-    if not vivas:
-        vivas = lineas
-    vivo_tokens = _tokens(vivas[0])
-    res["k_vivo"] = k_de_cmdline(vivo_tokens)
-    mejor = None
+    esperadas = []
     for nombre in ("trabajo", "charla"):
         try:
             esp, _k = construir_esperado(cfg, nombre)
         except Exception:
             continue
-        faltan, sobran = diferenciar_receta(vivo_tokens, esp)
-        total = len(faltan) + len(sobran)
-        if total == 0:
-            mejor = {"match": nombre, "k_esperado": _k, "faltan": [],
-                     "sobran": []}
-            break
-        if mejor is None or total < mejor.get("_total", 10 ** 9):
-            mejor = {"match": None, "k_esperado": _k, "faltan": faltan,
-                     "sobran": sobran, "_total": total}
+        esperadas.append((nombre, _k, normalizar_tokens(esp)))
+    if not esperadas:
+        return res
+    mejor = None
+    for linea in lineas:
+        vivo = normalizar_tokens(_tokens(linea))
+        k_vivo = k_de_cmdline(vivo)
+        for nombre, _k, esp in esperadas:
+            faltan, sobran = diferenciar_receta(vivo, esp)
+            total = len(faltan) + len(sobran)
+            if total == 0:
+                res["match"] = nombre
+                res["k_vivo"] = k_vivo
+                res["k_esperado"] = _k
+                res["faltan"] = []
+                res["sobran"] = []
+                return res
+            if mejor is None or total < mejor["_total"]:
+                mejor = {"k_vivo": k_vivo, "k_esperado": _k,
+                         "faltan": faltan, "sobran": sobran,
+                         "_total": total}
     if mejor:
-        res["match"] = mejor["match"]
+        res["k_vivo"] = mejor["k_vivo"]
         res["k_esperado"] = mejor["k_esperado"]
         res["faltan"] = mejor["faltan"]
         res["sobran"] = mejor["sobran"]
@@ -440,17 +552,36 @@ def veredicto(med, cert, ram, gpu, plan):
     L = []
     L.append("VEREDICTO: %s — %s" % (etiqueta, explicacion))
     if etiqueta == "NORMAL-K8":
-        L.append("  -> A tu pregunta '¿deberia ir a mas?': NO con 8 expertos. "
-                 "Este es el techo fisico del rig en k=8. Para MAS t/s: "
-                 "CHARLA (4 expertos, banda 24-30 [M]) — es la dosis buena "
-                 "para chatear (SS23/SS28).")
+        L.append("  -> A tu pregunta '¿deberia ir a mas?': NO con 8 cocineros. "
+                 "El techo fisico del rig con flags es ~21.5 [M]: sweep "
+                 "25-oct BASE %.2f y LMNONE %.2f (la receta de HOY lleva "
+                 "-lm none) + ORO-UB1K %.2f. Para MAS t/s: CHARLA (4 "
+                 "expertos, banda 24-30 [M])."
+                 % (SWEEP_BASE, SWEEP_LMNONE, ORO_UB1K))
+        L.append("  -> Tu recuerdo ('a solo flags iba a 21 minimo con 8 "
+                 "cocineros') ES dato certificado: %.2f [M] es el numero del "
+                 "sweep para esta receta. Ese 21 era el TECHO de los dias "
+                 "buenos, no el suelo (suelo certificado: %.2f [M])."
+                 % (SWEEP_LMNONE, FASED_FLOOR))
+        if dec is not None and dec >= DIA_BUENO_DESDE:
+            L.append("  -> Estas EN los dias buenos (~21): coincide con tu "
+                     "recuerdo. Receta completa, maquina rindiendo lo suyo.")
+        else:
+            L.append("  -> Dentro del lab pero por debajo de tu 21: dia lento "
+                     "de los que el lab tambien midio (%.2f-%.2f [M] con la "
+                     "MISMA receta otro dia). Culpables del dia, abajo. El "
+                     "dia bueno vuelve a ~21 solo (menos apps, GPU fria)."
+                     % (FASED_FLOOR, FASED_ANCLA))
         L.append("  -> El numero del CHAT sale mas bajo que este porque es "
                  "reloj de pared (cuenta pausas del dia); el de aqui es el "
                  "reloj interno del server, medido como en el laboratorio.")
     elif etiqueta == "BAJO":
-        L.append("  -> Con la receta completa el lab midio NUNCA menos de "
-                 "17.36 [M]: si esto mide menos, el freno es del DIA, "
-                 "no de la receta (ver culpables abajo).")
+        L.append("  -> Con la receta completa el lab NUNCA midio menos de "
+                 "%.2f [M]: si esto mide menos, el freno es del DIA, no de "
+                 "la receta (ver culpables abajo)." % FASED_FLOOR)
+        L.append("  -> Tu 21 recordado era el TECHO del sweep (LMNONE %.2f "
+                 "[M]), no el piso: contra ese techo, hoy falta dia o hay "
+                 "culpable (arriba)." % SWEEP_LMNONE)
     elif etiqueta == "HUELE-K4":
         L.append("  -> Si abriste CHARLA: todo correcto. Si abriste TRABAJO "
                  "y mide esto: mejor que el lab — anotalo (seria noticia).")
@@ -488,7 +619,7 @@ def escribir_informe(cfg, ruta_cfg, cert, med, ram, gpu, plan, lineas_final):
     P = []
     P.append("# DIAGNOSTICO DE VELOCIDAD — %s" % est)
     P.append("")
-    P.append("diagnostico-velocidad v1.0 · config: %s · pregunta: '¿deberia "
+    P.append("diagnostico-velocidad v1.1 · config: %s · pregunta: '¿deberia "
              "ir a mas t/s con la receta completa?'" % ruta_cfg)
     P.append("")
     P.append("## Estacion 1 — receta viva (certificado)")
@@ -531,9 +662,15 @@ def escribir_informe(cfg, ruta_cfg, cert, med, ram, gpu, plan, lineas_final):
     P.append("")
     P.extend(lineas_final)
     P.append("")
-    P.append("Referencias [M] del laboratorio: k=8 suelo 17.36 (D-EXP10-CTRL) "
-             "ancla 17.80 D-EXP8 20.51 · ORO-UB1K 21.53 · k=4: D-EXP4 28.85 "
-             "D-EXP4-UB1K 29.13 · ruido +/-0.5 (SS8). Zona gris 22.0-24.0.")
+    P.append("Referencias [M] certificadas: sweep 25-oct BASE %.2f / LMNONE "
+             "%.2f (la receta de HOY: base + -lm none) · faseD v1.2 suelo "
+             "%.2f (D-EXP10-CTRL), ancla %.2f, D-EXP8 20.51 · ORO-UB1K %.2f "
+             "· k=4: D-EXP4 28.85, D-EXP4-UB1K 29.13 · ruido +/-0.5 (SS8). "
+             "Zona gris 22.0-24.0. Recuerdo del Director ('a solo flags iba "
+             "a 21 minimo con 8 cocineros') = LMNONE %.2f — el 21 es el "
+             "TECHO certificado de la familia, no el suelo."
+             % (SWEEP_BASE, SWEEP_LMNONE, FASED_FLOOR, FASED_ANCLA,
+                ORO_UB1K, SWEEP_LMNONE))
     try:
         with open(ruta, "w", encoding="utf-8") as f:
             f.write("\n".join(P) + "\n")
@@ -543,10 +680,23 @@ def escribir_informe(cfg, ruta_cfg, cert, med, ram, gpu, plan, lineas_final):
 
 
 # --------------------------------- main --------------------------------------
+def _blindar_salida():
+    """La consola de Windows no debe matar el informe por un caracter que su
+    codepage no conozca (redirigido con cp850: UnicodeEncodeError a mitad de
+    veredicto). Se conserva la codificacion; solo se vuelve tolerante."""
+    for s in (sys.stdout, sys.stderr):
+        try:
+            if s is not None and hasattr(s, "reconfigure"):
+                s.reconfigure(errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
+    _blindar_salida()
     print(cia("=" * 70))
-    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.0"))
+    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.1"))
     print(cia("  ¿va a los t/s que debe con la receta completa?"))
     print(cia("=" * 70))
 
@@ -563,18 +713,33 @@ def main(argv=None):
     puerto = cfg.get("PUERTO", "9931")
 
     print("\n[1/4] CERTIFICADO DE LA RECETA VIVA")
-    try:
-        with urllib.request.urlopen(
-                "http://%s:%s/health" % (HOST_DEF, puerto), timeout=4) as r:
-            vivo = r.status == 200
-    except Exception:
-        vivo = False
-    if not vivo:
-        print(rojo("  No hay server en el puerto %s." % puerto))
-        print("  Abre primero el modelo: doble click en ABRIR-QWEN.bat")
-        print("  (este diagnostico mide el server VIVO; no abre otro).")
+    lineas_vivas, _nota_cmd = cmdline_viva()
+    puerto_vivo = None
+    if health_ok(puerto):
+        puerto_vivo = puerto
+    else:
+        for l in (lineas_vivas or []):
+            p = puerto_de_tokens(_tokens(l))
+            if p and p != puerto and health_ok(p):
+                puerto_vivo = p
+                print(ambar(
+                    "  AVISO: config.txt dice puerto %s pero el server vivo "
+                    "responde en el %s (¿editaste el puerto despues de "
+                    "abrir?). Se diagnostica contra el VIVO." % (puerto, p)))
+                break
+    if not puerto_vivo:
+        print(rojo("  No hay server que responda en el puerto %s." % puerto))
+        if lineas_vivas:
+            print("  Hay proceso llama-server abierto pero no contesta: puede")
+            print("  estar aun cargando (~1-2 min). Espera el cartel MODELO")
+            print("  LISTO y vuelve a lanzar el diagnostico.")
+        else:
+            print("  Abre primero el modelo: doble click en ABRIR-QWEN.bat")
+            print("  (este diagnostico mide el server VIVO; no abre otro).")
         return 1
-    cert = certificar_receta(cfg)
+    if puerto_vivo != puerto:
+        puerto = puerto_vivo
+    cert = certificar_receta(cfg, lineas=lineas_vivas)
     if cert["match"]:
         print(verde("  RECETA VIVA = ORIGINAL '%s' (piezas exactas desde "
                     "config.txt). k vivo: %s" % (cert["match"],

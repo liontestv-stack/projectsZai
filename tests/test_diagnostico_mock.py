@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Test de diagnostico-velocidad.py v1.0 con server falso.
+r"""Test de diagnostico-velocidad.py v1.1 con server falso.
 
 Unitarios:
   T01 parsear_config: comentarios, espacios y claves -> dict limpio
@@ -8,7 +8,7 @@ Unitarios:
   T03 construir_esperado trabajo (k=8): SIN override
   T04 construir_esperado charla (k=4): CON override int:4
   T05 clasificar_decode: BAJO / NORMAL-K8 / GRIS / HUELE-K4 / SIN-DATO
-  T06 _tokens respeta comillas (ruta con espacios)
+  T06 _tokens respeta comillas (igualdad EXACTA de la lista - v1.1: sin `or`)
   T07 k_de_cmdline: override int:4 -> 4, int:5 -> 5, sin override -> 8
   T08 diferenciar_receta: multiset (orden de -ub/-b no engana)
   T09 certificar_receta: vivo=trabajo MATCH, vivo=charla MATCH con k, vivo
@@ -17,6 +17,13 @@ Unitarios:
   T11 culpritos: RAM al limite / GPU caliente / throttle / plan Equilibrado
   T12 veredicto: NORMAL-K8 responde "¿deberia ir a mas?"; HUELE-K4 apunta a
       CHARLA; OJO si k vivo != k esperado
+  T12d NORMAL-K8 cita el RECUERDO certificado del Director (21 = TECHO sweep)
+  T12e dia lento dentro del rango cita el suelo del lab (17.36)
+  T12f BAJO: el freno es del DIA + el 21 era techo, no piso
+  T12g dia bueno (>=20.5) reconoce los dias buenos del recuerdo
+  T15 puerto_de_tokens: encuentra --port del vivo; None si no hay
+  T16 rutas con distinto CASE (D:\ vs d:\) siguen dando MATCH (v1.1)
+  T17 con DOS procesos vivos (zombie primero) se queda el que coincide (v1.1)
 E2E (fake server HTTP: /health + POST /completion con timings enlatados):
   T13 corrida completa: rc=0, informe md escrito con el veredicto NORMAL-K8
   T14 sin server: rc=1 con mensaje claro "No hay server"
@@ -96,10 +103,11 @@ check("T05 clasificar_decode: los 5 veredictos",
 # ---------------------------------------------------------------- T06 tokens
 linea = r'"C:\llama server\llama-server.exe" -m "C:\mis modelos\m.gguf" -ngl 99'
 tk = m._tokens(linea)
-check("T06 _tokens respeta comillas",
-      tk[0] == r"C:\llama server\llama-server.exe"
-      and tk[2] == r"C:\mis modelos\m.gguf" and tk[-1] == "99" or
-      tk[-1] == "99", str(tk))
+# v1.1: igualdad EXACTA (la version anterior tenia un `or tk[-1]=="99"` que
+# volvia valida casi cualquier salida rota de _tokens)
+check("T06 _tokens respeta comillas (igualdad exacta)",
+      tk == [r"C:\llama server\llama-server.exe", "-m",
+             r"C:\mis modelos\m.gguf", "-ngl", "99"], str(tk))
 
 # -------------------------------------------------------------- T07 k vivo
 check("T07 k_de_cmdline: 4 / 5 / 8 / None",
@@ -142,6 +150,38 @@ finally:
 check("T09 certificar: trabajo MATCH / charla MATCH / flag extra sin match",
       t09a and t09b and t09c,
       "t09a=%s t09b=%s t09c=%s" % (t09a, t09b, t09c))
+
+# ------------------------------------- T16 CASE de rutas (bug v1.0, fix v1.1)
+vivo_lw = list(cmd_t)
+vivo_lw[0] = vivo_lw[0].lower()
+_im = vivo_lw.index("-m")
+vivo_lw[_im + 1] = vivo_lw[_im + 1].lower()
+try:
+    m.cmdline_viva = lambda: ([" ".join(vivo_lw)], "test")
+    r16 = m.certificar_receta(cfg_real)
+    t16 = (r16["match"] == "trabajo" and not r16["faltan"]
+           and not r16["sobran"])
+finally:
+    m.cmdline_viva = orig
+check("T16 rutas con distinto CASE siguen dando MATCH (D:\\ vs d:\\)",
+      t16, "match=%s faltan=%s sobran=%s" % (r16["match"],
+                                             r16["faltan"], r16["sobran"]))
+
+# --------------------------------- T17 multi-proceso (bug v1.0, fix v1.1)
+try:
+    m.cmdline_viva = lambda: ([vivo_raro, vivo_t], "test")
+    r17 = m.certificar_receta(cfg_real)
+    t17 = (r17["match"] == "trabajo" and not r17["faltan"]
+           and not r17["sobran"] and r17["k_vivo"] == 8)
+finally:
+    m.cmdline_viva = orig
+check("T17 con DOS procesos vivos (zombie primero) gana el que coincide",
+      t17, "match=%s k=%s" % (r17["match"], r17["k_vivo"]))
+
+# ------------------------------------------------------------ T15 puerto vivo
+check("T15 puerto_de_tokens: --port del vivo / None si falta",
+      m.puerto_de_tokens(["server", "--port", "9931"]) == "9931"
+      and m.puerto_de_tokens(["server", "-ngl", "99"]) is None)
 
 # ------------------------------------------------------------ T10 gpu csv
 g = m.parsear_gpu_csv("71, 5, 2218, 4096, 1650, 1950, 55, 75\n")
@@ -187,6 +227,24 @@ cert_raro = {"k_vivo": 5, "match": "charla", "k_esperado": 4,
 L = m.veredicto(med_k4, cert_raro, None, None, None)
 check("T12c OJO si k vivo != k esperado del config",
       any("OJO" in l and "k=5" in l for l in L), str(L))
+
+# --------------------------------- T12d-f el recuerdo del Director en v1.1
+L = m.veredicto(med, cert_ok, None, None, None)  # med decode 19.0 -> NORMAL-K8
+check("T12d NORMAL-K8 cita el recuerdo certificado (21 = TECHO del sweep)",
+      any("recuerdo" in l and "TECHO" in l and "21" in l for l in L), str(L))
+med_lento = {"decode": 18.0, "prefill": 300.0, "detalle": []}
+L = m.veredicto(med_lento, cert_ok, None, None, None)
+check("T12e dia lento dentro del rango cita el suelo del lab (17.36)",
+      any("dia lento" in l and "17.36" in l for l in L), str(L))
+med_bajo = {"decode": 14.0, "prefill": 300.0, "detalle": []}
+L = m.veredicto(med_bajo, cert_ok, None, None, None)
+check("T12f BAJO: freno del DIA + tu 21 era TECHO del sweep, no piso",
+      any("freno es del DIA" in l for l in L)
+      and any("TECHO del sweep" in l for l in L), str(L))
+med_bueno = {"decode": 21.2, "prefill": 300.0, "detalle": []}
+L = m.veredicto(med_bueno, cert_ok, None, None, None)
+check("T12g dia bueno (>=20.5) reconoce los dias buenos del recuerdo",
+      any("dias buenos" in l for l in L), str(L))
 
 # ---------------------------------------------------------------- E2E T13
 PUERTO = _libre()
