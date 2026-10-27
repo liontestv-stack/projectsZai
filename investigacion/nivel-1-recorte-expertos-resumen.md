@@ -170,3 +170,12 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 - **Autenticador obligatorio**: línea de log `llm_load_print_meta: n_expert_used = N`.
 - **Reglas**: k≥4 como zona segura; tool-calling en el sanity siempre; cache MEC nunca sin su control D-MEC-0; offload mínimo, nunca global.
 - 📄 Detalle completo, fuentes y auditoría: [`nivel-1-recorte-expertos.md`](nivel-1-recorte-expertos.md)
+
+---
+
+## Idea del Director: modo dual de expertos (27-oct-2026, espejo simple del §25)
+
+- **La idea**: dos perfiles de arranque — **TRABAJO** (programar: el equipo completo de 8 cocineros, es decir, no tocar nada) y **CHARLA** (4 cocineros: ~+41% de velocidad ya medida con el examen perfecto 3/3).
+- **¿Por qué funciona? (el restaurante)**: el modelo tiene 256 cocineros y por cada palabra solo consulta a 8 (elegidos por el maître). Pedirle que consulte 4 = mitad de cocina por palabra = platos más rápido. Los 256 siguen en la cocina (RAM/VRAM casi no cambian — lo que se ahorra es trabajo, no memoria). El modelo aprendió a pensar con 8 opiniones: las cuentas y el código lo notan primero, la charla casi nunca — por eso charla=4 y programar=8.
+- **¿Es un éxito si aguanta? SÍ** — es literalmente el objetivo del nivel 1 (velocidad arriba con calidad intacta). Ya casi lo tenemos: k=4 sacó 3/3 en el examen automático; falta la re-corrida v1.2.1 (~50-65 min) y el sanity manual de 20 prompts, que ahora hace de test del modo dual (chat y herramientas en k=4; código también en k=4, para decidir si aguanta o exige 8).
+- **Cómo se cambia de perfil**: este build fija los expertos AL ARRANCAR (no se puede cambiar por mensaje). Opción recomendada: dos .bat (uno con override k=4, otro sin él) — cambiar de tarea = cerrar y reabrir (~1 min). Después, si apetece, llama-swap para automatizarlo (ya investigado, overhead <1%). Un parche para cambiarlo "en caliente" queda registrado como idea futura, fuera de la campaña.
