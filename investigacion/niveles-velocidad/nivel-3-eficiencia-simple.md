@@ -371,3 +371,62 @@ Auditoría del Director aplicada a este nivel: re-verificación independiente de
 - **Protocolo SIN cambios**: combo ganadores + curl protocol + `-ctxcp 4` + traducción `-lm` obligatoria tras RUTA 0.
 
 *Referencias de esta auditoría: github issues #21831 (con análisis asg-3d), #20225, #25345, #23268, #9964, #24055; github discussion #20574; particula.tech (blog completo); reddit 1qzitx1, 1sprdm8; xhinker Medium (MTP bug); vLLM issue #38182; thc1006/qwen3.6-speculative-decoding-rtx3090 y unsloth discussion #14; benchmark MXFP4 24GB (comentario público); openclawdc flags-explained y moe-offload-flags; Doctor-Shotgun HF blog; manpages.debian.org llama-server.1; notas oficiales v0.7.0; discusión #25198.*
+
+---
+
+## 19. ANEXO — Undécima ronda: el instrumento de la cosecha materializado (2026-10-28)
+
+Contexto: el Director aparca el diagnóstico de velocidad de las rondas 25-26 ("dejemos de lado el diagnostico, que hacemos") y LAIA pasa al siguiente paso del orden aprobado (Ronda 12: N1 → N3 → N2 → N4): materializar el instrumento que cosecha lo que ESTE documento declara pendiente desde SS8.1 y SS13 ("estado de las rondas": (1) combo ganadores juntos, (2) `--cache-reuse 256` + `-ctxcp 4` + validación de checkpoints con el curl protocol). El diagnóstico NO se borra: queda listo en el repo para cuando se quiera correr.
+
+### 19.1 El instrumento y su decisión de diseño más importante
+
+- NUEVO `InformacionCritica/scripts/barrido-n3-eficiencia.py` v1.0 (proto `faseN3-v1`): **13 configs**, cada una = RECETA DIARIA (config.txt `FLAGS_BASE` + `FLAGS_GANADORAS` = ORO-UB1K, auditoría R24) + `-lv 4` (para que el log deje los certificados de cache) + diff propio. Mismo esqueleto del barrido N1 (SS8 verbatim, CSV reanudable, informe automático), con los instrumentos nuevos de certificado del N3.
+- **La ancla de esta sesión ES la receta diaria.** No se compara contra el ancla de laboratorio (barrido-30, base sin UB1K): si una dosis no le gana a lo que el Director USA HOY, no entra en config.txt. Es la aplicación directa de la regla thc1006 (SS13: "baseline matcheado DENTRO de cada corrida, nunca contra el ancla de otra sesión").
+
+### 19.2 La escalera (13 configs, traducción ejecutable de §8.1/§11.7/§13)
+
+| id | config | diff | Qué cosecha / certificado |
+|---|---|---|---|
+| 1 | N3-ANCLA | — | control de sesión = vida real del Director; sin reuse el híbrido puede mostrar "forcing full re-processing" (#21831): comportamiento de HOY, no fallo del barrido |
+| 2 | N3-CRAM512 | `--cache-ram 512` | la dosis medida segura [M ORO-CRAM512 21.57, −7.7 GB]; certificado = RAM libre/proceso sube |
+| 3 | N3-CTXCP4 | `-ctxcp 4` | checkpoints 32→4, ~63 MB/checkpoint GDN → libera ~1.5-1.8 GB [T §10.2/§12]; certificado = WorkingSet del proceso |
+| 4 | N3-CMS1024 | `-cms 1024` | cadencia de checkpoints para chat continuo (default 8192, §10.1) |
+| 5 | N3-REUSE | `--cache-reuse 256` | LA JOYA (§3): certificado triple = warning de arranque (#24055) + líneas de log + TTFT plano del repro |
+| 6 | N3-SHIFT | `--context-shift --cache-reuse 256` | familia ORO-SHIFT verbatim [M 21.39 sin coste]; para conversaciones largas |
+| 7 | N3-NP2 | `-np 2` | +14% agregado [M §4] con concurrencia; ctx 16384 → 8192/slot; SOLO sin spec (§11.4) |
+| 8 | N3-NCM37C4-UB | `-ncmoe 37 -c 4096 -ctk q4_0 -ctv q4_0` | colocación campeona [M 22.49 SIN UB1K] APILADA con la receta diaria: PRIMER dato del stack UB1K×NCM (pendiente SS13-1) |
+| 9 | N3-COMBO-R | cram512 ⊕ ctxcp4 ⊕ cms1024 ⊕ reuse ⊕ shift | combo RAM seguro sobre la vida real, sin tocar colocación: la candidata natural a config.txt |
+| 10 | N3-COMBO-T | NCM37C4 ⊕ cram512 ⊕ ctxcp8 ⊕ cms1024 ⊕ reuse ⊕ shift | combo ganadores SS8.1/§11.7 completo (expectativa decode ~22.5-23.5 [T]); control de sesión = id 8 |
+| 11 | N3-NP2-C | np2 ⊕ cram512 ⊕ ctxcp8 ⊕ cms1024 ⊕ reuse ⊕ shift | combo slots §11.7 sin NCM (8192 ctx/slot); para 2 sesiones a la vez |
+| 12 | N3-NOCACHE | `--no-cache-prompt` | control del A/B cache (§14): DEBE crecer el TTFT; separa el efecto cache del efecto decode |
+| 13 | N3-ANCLA-FIN | — | bookend (lección v1.2.1 del N1): deriva de sesión ±5% |
+
+Bloques CLI: `--solo ancla,ram,cache,slots,ncm,combo,ctrl,anclafin`; `--quick` = ids 1,5,9,10,13 (~18 min); corrida completa ~35-45 min.
+
+### 19.3 Los instrumentos nuevos (cada dosis con su testamento)
+
+- **Repro TTFT (el curl protocol materializado, §3.3/§13):** conversación de 6 turnos crecientes con prefijo ESTABLE (lo inmutable arriba, regla §3.2), `stream:true`, TTFT = tiempo al primer chunk (proxy del `time_starttransfer`). Criterio honesto: crecimiento t2→tfin ≤ +50% = PLANO; ≥ +100% = CRECE; entre medias GRIS; el turno 1 (frío) se descarta. `N3-NOCACHE` es el control que DEBE crecer — si no crece, el medidor está roto.
+- **Certificado de cache por líneas de log (§3.3/§10.3/§14):** `"cache_reuse is not supported"` en el arranque → NO-SOPORTADO (#24055, la vía queda condicionada a build/colocación); `"restored context checkpoint"` sin forcing → SANO; `"forcing full prompt re-processing"` sin restored → ROTO (#21831, el híbrido re-paga); ambos → MIXTO. Nada de fe: el log manda.
+- **RAM (los certificados de CRAM512 y CTXCP4):** RAM libre del sistema vía GlobalMemoryStatusEx + WorkingSet del proceso vía Get-CimInstance, antes/después de la medición. Piezas se saltan solas fuera de Windows (nunca mueren; en la batería se registran las columnas igual).
+- **Probe de concurrencia:** 2 POST simultáneos (hilos) → tokens agregados/s. El +14% [M §4] de `-np 2` SOLO existe con concurrencia real: sin este probe el knob sería fe.
+- **Grep gratis del arranque:** `system_info:` con `USE_GRAPHS = 1 | REPACK = 1` (§11.6) — autentica que el build activo tiene CUDA graphs y repack (+5% medido [M]).
+- **Lo que NO se re-mide:** el libro de muertos de §7/§12/§17 (ngram spec acceptance 0.00-0.16, afinidad −9..−38%, FIT-C −38%, repack off −5%, KV q5_1 0%, POLL ruido, TB8 muerto). Re-medir muertos es perder tiempo de GPU.
+
+### 19.4 Protocolo, auditoría y promoción
+
+- SS8 verbatim (4 pasadas × 256 tok, descarta la 1ª, temp 0, seed 424242, pausas térmicas 60 s cada 8, CSV reanudable, ruido ±0.3-0.5) + regla thc1006 v4 (9.4 pp): las celdas que GANEN se confirman con mediana de 3 antes de proclamar la ganancia; deltas <5pp no se persiguen.
+- Auditoría de flags verbatim contra el dump ANTES de arrancar (FATAL si falta uno) — `DUMP_REQUERIDOS` ampliado con los 12 tokens N3 (`--cache-reuse`, `-cram,`, `--cache-ram`, `-ctxcp,`, `--ctx-checkpoints`, `-cms,`, `--checkpoint-min-step`, `--context-shift`, `-np,`, `--parallel`, `--cache-prompt`, `--no-cache-prompt`, `-kvu,`, `--kv-unified`), todos verificados verbatim en `llama-flags-nuevo.txt` (dump b11856) el 28-oct-2026. Valores legales nuevos: `-ctxcp/-cms/--cache-ram/--cache-reuse/-np` con entero. PROHIBIDAS intactas (aquí NO hay spec).
+- Guardarrails heredados del N1: puerto ocupado = FATAL (`--si` lo mata), identidad del server por log (nunca un fantasma), fit abortado vs declinado (lección v1.2.1), VRAM >3700 MiB = aviso sysmem, sanity auto de 3 pares (humo-detector).
+- **PROMOCIÓN con certificado:** el informe (`faseN3-INFORME.md`) emite las candidatas a config.txt con su evidencia (el protocolo de decisión automático evalúa bookend, familia RAM, familia cache, slots, NCM apilada y combos). La promoción formal = el Director edita UNA línea de `FLAGS_BASE` (pago del config central, ronda 20). Si la cache sale NO-SOPORTADO o ROTO en b11856: queda registrado como **MOTIVO DE RUTA 0** (build nuevo con cpent/fix), no como fracaso de la idea.
+
+### 19.5 Verificación (batería de la casa)
+
+- NUEVO `tests/test_barrido_n3_mock.py` — **40 checks TODO VERDE** (13 unitarios + 27 E2E). El fake llama-server (ThreadingHTTPServer, mismo patrón test_barrido_mock) reproduce los DOS mundos del híbrido: con `--cache-reuse` imprime "restored context checkpoint" y TTFT plano; sin cache imprime "forcing full prompt re-processing" y TTFT crece; `--no-cache-prompt` calla y TTFT crece. Cubre: corrida completa 13/13 válida, certificados por config (SANO solo en 5/6/9/10/11), forcing contado en el ancla, sanity 3/3, repro/agg/RAM en CSV+JSON, informe con bookend estable / joya certificada / COMBO-R candidata #1 / control NOCACHE crece, resume 2ª corrida salta las 13, `--solo ram` = 3, `--quick` = 5, `--sin-ttft` vacío, warning #24055 → NO-SOPORTADO + "RUTA 0 gana un motivo" en el informe, puerto ocupado FATAL, server inexistente FATAL, dump podrido FATAL.
+- Regresión: `py_compile` OK en todos los .py de scripts/ y tests/; test_abrir_mock 11/11, test_chatear_mock E2E, test_barrido_mock, test_diagnostico_mock TODO VERDE; test_faseD_n1 SIN TOCAR (batería lenta, verde en ronda 23). Cero cambios en configs/config.txt, .bat, lanzador, cliente, barrido N1 o diagnóstico.
+
+### 19.6 Para el rig (uso)
+
+- Copiar `barrido-n3-eficiencia.py` a `D:\ZLia\`, cerrar el server, `py barrido-n3-eficiencia.py` (~35-45 min) o `--quick` (~18 min); NO chatear durante la corrida. Al final: pasar `faseN3-INFORME.md` + `faseN3-resultados.csv` (+ `logs-config/` si se pide) al análisis.
+- Duración estimada por config ~2.5-3 min (carga ~35 s + medición SS8 + sanity + repro de 6 turnos + probe). Con `--sin-ttft` se recorta el repro si algún día solo interesa decode.
+
+*Referencias de esta ronda: todo el bloque cache de este documento (§3, §10, §11.6-11.7, §12, §13, §14, §18); config.txt ronda 20; auditoría R24 de la receta diaria; thc1006 v4 (varianza 9.4 pp); issues #21831/#24055/#25345; discusión #20574; particula.tech (protocolo curl).*

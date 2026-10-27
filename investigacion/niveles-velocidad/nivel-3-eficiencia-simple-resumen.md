@@ -130,6 +130,16 @@ ngram como spec · afinidad/masks · FIT-C · repack off · KV q5_1 · override 
 - Benchmark ajeno con nuestro modelo exacto replica la forma n2 > n3 > n4 de la aceptación (independiente del estudio v4).
 - Protocolos SIN cambios: combo ganadores + curl protocol + `-ctxcp 4` + traducción `-lm` tras RUTA 0.
 
+## 19. Anexo ronda 11: el instrumento de la cosecha (§19)
+
+- Nace `barrido-n3-eficiencia.py`: mide TODO lo que queda vivo de este nivel en UNA corrida (~35-45 min, o `--quick` ~18 min), con el método de la casa (escalera + control + certificado + informe).
+- **La medida de referencia ya no es el laboratorio: es tu receta diaria.** El ancla de la sesión es lo que ABRIR-QWEN lanza hoy; si una dosis no le gana a eso, no entra en config.txt.
+- La escalera (13 configs): RAM (cache-ram 512, ctxcp 4, cms 1024) · cache (reuse 256 solo y con shift — la joya) · 2 meseros (-np 2) · NCM37C4 apilada con UB1K (primer dato de ese combo) · 3 combos · 2 controles (sin cache y bookend).
+- Cada dosis trae su testamento: la cache se certifica con **líneas del log** (restored vs forcing) + **TTFT plano en una conversación que crece**; la RAM con lo libre antes/después; los 2 meseros con dos pedidos a la vez.
+- Control honesto incluido: una config **SIN cache que DEBE ir lenta** — si no va lenta, el medidor está roto, no la idea.
+- Si la cache no se deja activar en este build (#24055), queda registrado como **motivo para RUTA 0** (build nuevo), no como fracaso.
+- Las candidatas que certifiquen se promueven editando UNA línea de config.txt (eso ya se sabe pagar).
+
 ---
 
 ## Cheatsheet operativa del nivel 3
