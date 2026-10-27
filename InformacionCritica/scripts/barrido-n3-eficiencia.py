@@ -83,6 +83,19 @@ Uso:
   py barrido-n3-eficiencia.py --solo ancla,cache,combo,anclafin
   py barrido-n3-eficiencia.py --sin-ttft  -> salta el repro de turnos
   py barrido-n3-eficiencia.py --si        -> mata un server vivo y sigue
+  py barrido-n3-eficiencia.py --sin-prevuelo  -> omite el dossier PC/modelo/nivel
+  py barrido-n3-eficiencia.py --sin-sha256    -> prevuelo sin el hash del modelo
+
+PREVUELO COMPLETO (v1.1, pedido Director 'todo lo que haya que saber sobre mi
+PC, el modelo y el nivel antes de comenzar'): antes de medir ANY config, el
+barrido escribe en el informe la seccion 0 con (0.1) el hardware del dia (SO,
+CPU, RAM por modulo, pagefile, discos, GPU + driver, plan de energia, uptime,
+top procesos de RAM), (0.2) la identidad certificada del modelo (bytes, SHA256,
+metadatos GGUF: arch, expertos de fabrica, contexto, blocks, nextn/MTP) y la
+version/pin del server, (0.3) la receta viva + auditoria de flags, (0.4) el
+estado del nivel N3 (referencias [M], libro de muertos, pendientes que cosecha,
+protocolo de decision) y la campana completa, (0.5) el dia (recordatorio R28:
+RAM al 97%). Todo NO-FATAL (piezas Windows ausentes -> nota, nunca crash).
 
 PROMOCION: el informe emite "candidatas a config.txt" con su certificado;
 la promocion formal la aprueba el Director editando UNA linea de config.txt
@@ -92,9 +105,11 @@ en b11856, el motivo de RUTA 0 (build nuevo) queda registrado con el dato.
 import argparse
 import csv
 import datetime
+import hashlib
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import threading
@@ -103,7 +118,7 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n3-eficiencia v1.0 (2026-10-28)"
+VERSION = "barrido-n3-eficiencia v1.1 (2026-10-28, prevuelo completo PC+modelo+nivel)"
 PROTO = "faseN3-v1"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
@@ -713,6 +728,453 @@ def ram_proceso_mib(pid):
         return round(int(txt) / (1024 * 1024), 1) if txt.isdigit() else None
     except Exception:
         return None
+
+
+# ------------- prevuelo completo: PC + modelo + nivel (Ronda 29) -------------
+# Pedido Director: "hazlo completo con todo lo que va a necesitar saber sobre
+# mi pc, el modelo y todo sobre el nivel en el que estamos antes de comenzar".
+# TODO no-fatal: si una pieza no existe (fuera de Windows, sin nvidia-smi),
+# queda la nota "(no disponible)" y el barrido sigue.
+
+_CLAVES_GGUF = (   # filtro post-parseo (substring/fin): lo que va al informe
+    "general.architecture", "general.name", "general.size_label",
+    "general.file_type", "general.quantization_imatrix",
+    ".expert_count", ".expert_used_count", ".expert_feed_forward_length",
+    ".context_length", ".block_count", ".embedding_length",
+    ".attention.head_count", ".attention.key_length",
+    "nextn", "shared_expert", "tokenizer.ggml.model",
+)
+_TAM_GGUF = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1,
+             10: 8, 11: 8, 12: 8}
+_FMT_GGUF = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i",
+             6: "<f", 7: "<?", 10: "<Q", 11: "<q", 12: "<d"}
+
+
+class _Lector:
+    """Lector con buffer de 1 MiB (leccion del parser N1 ronda 14): evita un
+    syscall por campo en cabeceras grandes (tokenizer = decenas de miles de
+    strings) y salta sin materializar con seek relativo."""
+
+    def __init__(self, f, tam=1 << 20):
+        self.f, self.tam = f, tam
+        self.buf = b""
+        self.pos = 0
+
+    def _llenar(self, n):
+        while len(self.buf) - self.pos < n:
+            chunk = self.f.read(max(self.tam, n))
+            if not chunk:
+                raise EOFError("GGUF truncado")
+            resto = self.buf[self.pos:] + chunk
+            self.buf, self.pos = resto, 0
+
+    def leer(self, n):
+        self._llenar(n)
+        d = self.buf[self.pos:self.pos + n]
+        self.pos += n
+        return d
+
+    def u32(self):
+        return struct.unpack("<I", self.leer(4))[0]
+
+    def u64(self):
+        return struct.unpack("<Q", self.leer(8))[0]
+
+    def cadena(self):
+        n = self.u64()
+        return self.leer(n).decode("utf-8", errors="replace")
+
+    def saltar(self, n):
+        disp = len(self.buf) - self.pos
+        if n <= disp:
+            self.pos += n
+            return
+        n -= disp
+        self.buf, self.pos = b"", 0
+        self.f.seek(n, 1)
+
+
+def gguf_metadatos(ruta):
+    """Lee SOLO la cabecera GGUF (kvs; cero tensores) y devuelve
+    (metadatos_filtrados, None) o (None, error). Las claves de interes
+    (_CLAVES_GGUF) incluyen nextn (MTP preserved) y expert_used_count de
+    fabrica. Nunca es fatal."""
+    try:
+        with open(ruta, "rb") as f:
+            le = _Lector(f)
+            if le.leer(4) != b"GGUF":
+                return None, "no es GGUF (magic distinto)"
+            version = le.u32()
+            le.u64()                       # tensor_count (no lo recorremos)
+            n_kv = le.u64()
+            crudos = {}
+            for _ in range(n_kv):
+                clave = le.cadena()
+                tipo = le.u32()
+                if tipo == 8:              # string
+                    n = le.u64()
+                    if n <= 65536:
+                        crudos[clave] = le.leer(n).decode(
+                            "utf-8", errors="replace")
+                    else:
+                        le.saltar(n)
+                elif tipo == 9:            # array: se salta entero
+                    etipo = le.u32()
+                    n = le.u64()
+                    if etipo == 8:
+                        for _ in range(n):
+                            le.saltar(le.u64())
+                    elif etipo in _TAM_GGUF:
+                        le.saltar(n * _TAM_GGUF[etipo])
+                    else:
+                        return None, ("array con tipo de elemento "
+                                      "desconocido %d" % etipo)
+                elif tipo in _TAM_GGUF:
+                    v = struct.unpack(_FMT_GGUF[tipo], le.leer(_TAM_GGUF[tipo]))[0]
+                    crudos[clave] = bool(v) if tipo == 7 else v
+                else:
+                    return None, "tipo GGUF desconocido %d" % tipo
+        metadatos = {"gguf_version": version}
+        for k, v in sorted(crudos.items()):
+            if any(k == c or k.endswith(c) or c in k for c in _CLAVES_GGUF):
+                metadatos[k] = v
+        return metadatos, None
+    except Exception as e:
+        return None, repr(e)
+
+
+def sha256_archivo(ruta, notificador=None):
+    """SHA256 en streaming (1 MiB por paso); avanza cada ~2 GB si hay
+    notificador. Certifica EL archivo exacto (cuant correcto, N2)."""
+    h = hashlib.sha256()
+    tam = os.path.getsize(ruta)
+    hecho, prox = 0, 2 << 30
+    with open(ruta, "rb") as f:
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                break
+            h.update(chunk)
+            hecho += len(chunk)
+            if notificador and hecho >= prox and tam > (1 << 30):
+                notificador("  sha256... %d/%d GB" % (hecho >> 30, tam >> 30))
+                prox += 2 << 30
+    return h.hexdigest()
+
+
+def _ps_json(comando_ps, timeout=60):
+    """Ejecuta una consulta PowerShell (Get-CimInstance ... ConvertTo-Json) y
+    devuelve lista/dict, o None fuera de Windows / si falla. Nunca es fatal."""
+    if os.name != "nt":
+        return None
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                              comando_ps], capture_output=True, timeout=timeout)
+        txt = (out.stdout or b"").decode("utf-8", errors="replace").strip()
+        if not txt:
+            return None
+        d = json.loads(txt)
+        if isinstance(d, dict):
+            d = [d]
+        return d
+    except Exception:
+        return None
+
+
+def dossier_pc(con_nvidia=True):
+    """Estacion 0.1 del prevuelo: el hardware y el estado del dia."""
+    d = {}
+    sos = _ps_json("Get-CimInstance Win32_OperatingSystem | Select-Object "
+                   "Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime"
+                   " | ConvertTo-Json -Compress")
+    if sos:
+        s = sos[0]
+        d["so"] = "%s · %s · build %s (version %s)" % (
+            s.get("Caption") or "?", s.get("OSArchitecture") or "?",
+            s.get("BuildNumber") or "?", s.get("Version") or "?")
+        m = re.match(r"(\d{14})", str(s.get("LastBootUpTime") or ""))
+        if m:
+            try:
+                arranco = datetime.datetime.strptime(m.group(1), "%Y%m%d%H%M%S")
+                d["encendido_horas"] = round(
+                    (datetime.datetime.now() - arranco).total_seconds() / 3600, 1)
+            except Exception:
+                pass
+    cpus = _ps_json("Get-CimInstance Win32_Processor | Select-Object Name,"
+                    "NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed"
+                    " | ConvertTo-Json -Compress")
+    if cpus:
+        c = cpus[0]
+        d["cpu"] = "%s (%d nucleos / %d hilos, %s MHz max)" % (
+            str(c.get("Name") or "?").strip(), c.get("NumberOfCores") or 0,
+            c.get("NumberOfLogicalProcessors") or 0,
+            c.get("MaxClockSpeed") or "?")
+    palos = _ps_json("Get-CimInstance Win32_PhysicalMemory | Select-Object "
+                     "Capacity,Speed,ConfiguredClockSpeed | ConvertTo-Json "
+                     "-Compress")
+    if palos:
+        caps = [int(x.get("Capacity") or 0) for x in palos]
+        vels = sorted({str(x.get("ConfiguredClockSpeed")
+                           or x.get("Speed") or "?") for x in palos})
+        d["ram_hardware"] = "%d modulos x %s GB a %s MT/s (dual channel si "
+        "son 2)" % (len(palos), fmt(sum(caps) / (1024 ** 3), 1),
+                    "/".join(vels))
+    pf = _ps_json("Get-CimInstance Win32_PageFileUsage | Select-Object Name,"
+                  "AllocatedBaseSize,CurrentUsage,PeakUsage | ConvertTo-Json "
+                  "-Compress")
+    if pf:
+        p = pf[0]
+        d["pagefile"] = "%s reservado %s MB · en uso %s MB · pico %s MB" % (
+            p.get("Name") or "?", p.get("AllocatedBaseSize") or "?",
+            p.get("CurrentUsage") or "?", p.get("PeakUsage") or "?")
+    dk = _ps_json("Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | "
+                  "Select-Object DeviceID,Size,FreeSpace | ConvertTo-Json "
+                  "-Compress")
+    if dk:
+        partes = []
+        for x in dk:
+            tot = int(x.get("Size") or 0)
+            lib = int(x.get("FreeSpace") or 0)
+            if tot:
+                partes.append("%s libre %s/%s GB" % (
+                    x.get("DeviceID") or "?", fmt(lib / (1024 ** 3), 0),
+                    fmt(tot / (1024 ** 3), 0)))
+        d["discos"] = " | ".join(partes)
+    if con_nvidia:
+        try:
+            out = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,driver_version,memory.total,"
+                 "temperature.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, timeout=15)
+            linea = out.stdout.decode("utf-8", errors="replace").strip()
+            if linea:
+                p = [q.strip() for q in linea.splitlines()[0].split(",")]
+                if len(p) >= 4:
+                    d["gpu"] = "%s · driver %s · %s MiB · %s C" % tuple(p[:4])
+        except Exception:
+            pass
+    try:
+        out = subprocess.run(["powercfg", "/getactivescheme"],
+                             capture_output=True, timeout=15)
+        m = re.search(r"\(([^)]+)\)", out.stdout.decode(
+            "utf-8", errors="replace"))
+        if m:
+            d["plan_energia"] = m.group(1)
+    except Exception:
+        pass
+    r = ram_sistema()
+    if r:
+        d["ram_ahora"] = "libre %s MiB de %s MiB (%.0f%% en uso)" % (
+            fmt(r[0], 0), fmt(r[1], 0), (1 - r[0] / r[1]) * 100)
+    top = _ps_json("Get-Process | Sort-Object WS -Descending | "
+                   "Select-Object -First 4 Name,@{n='MB';e={[math]::Round("
+                   "$_.WS/1MB)}} | ConvertTo-Json -Compress", timeout=45)
+    if top:
+        d["ram_comepanes"] = ", ".join(
+            "%s %s MB" % (x.get("Name") or "?", x.get("MB") or "?")
+            for x in top[:4])
+    return d
+
+
+def dossier_modelo(ruta, bytes_modelo, pin, con_sha=True, notificador=None):
+    """Estacion 0.2: identidad certificada del modelo (bytes, SHA256, GGUF)
+    + version/pin del server."""
+    d = {"ruta": ruta, "bytes": bytes_modelo,
+         "bytes_esperados": BYTES_MODELO_ESPERADOS,
+         "bytes_ok": bytes_modelo == BYTES_MODELO_ESPERADOS,
+         "server_version": pin or "N/D",
+         "build_esperado": BUILD_PIN_ESPERADO,
+         "build_ok": bool(pin) and BUILD_PIN_ESPERADO in pin}
+    if con_sha:
+        d["sha256"] = sha256_archivo(ruta, notificador)
+    meta, err = gguf_metadatos(ruta)
+    if err:
+        d["gguf_error"] = err
+    elif meta:
+        d["gguf"] = meta
+    return d
+
+
+def dossier_nivel(configs):
+    """Estacion 0.4: el estado del nivel N3 y de la campana, incrustado como
+    constantes (el rig corre SIN el repo). Fuentes: nivel-3 SS0-SS19,
+    nivel-1 SS14-SS30, README rondas 12/24/28."""
+    return {
+        "campana": ("Orden aprobado (ronda 12): N1 -> N3 -> N2 -> N4 -> "
+                    "RUTA 0 + N5. Estado hoy: N1 medido (k=8 techo 21.53 / "
+                    "k=4 +41% = 28.85-29.13 / k=3 falla aritmetica / k=2 "
+                    "colapso; falta barrido formal v1.2.1 + sanity 20 "
+                    "prompts) - N3 EN CURSO (esta corrida) - N2, N4 y "
+                    "RUTA 0 + N5 pendientes."),
+        "refs": [
+            ("ORO-UB1K (receta diaria, ancla del barrido-30 id 32)",
+             "21.53 t/s [M]"),
+            ("NCM37C4 (colocacion campeona, id 14, SIN UB1K encima)",
+             "22.49 t/s [M]"),
+            ("ORO-CRAM512 (decode intacto, -7.7 GB RAM)", "21.57 t/s [M]"),
+            ("ORO-SHIFT (shift + reuse 256, sin coste)", "21.39 t/s [M]"),
+            ("k=4 CHARLA (D-EXP4 / D-EXP4-UB1K, +41%)",
+             "28.85 / 29.13 t/s [M]"),
+            ("Suelo k=8 con la MISMA receta otro dia", "17.36 / 17.80 [M]"),
+            ("Techo de la familia flags k=8 (sweep LMNONE)", "21.50 [M]"),
+            ("Ruido declarado / dispersion entre corridas",
+             "+/-0.3-0.5 t/s · 9.4 pp (thc1006 v4)"),
+        ],
+        "muertos": [
+            "ngram spec: acceptance 0.00-0.16 [M] - muerto",
+            "afinidad CPU-GPU (-ot): -9..-38% [M] - muerto",
+            "FIT-C (cuant cache f16->q): -38% [M] - muerto",
+            "repack off: -5% [M] - muerto",
+            "KV q5_1: 0% de cambio [M] - muerto",
+            "POLL: ruido · TB8: muerto",
+        ],
+        "pendientes": [
+            "Stack UB1K x NCM37C4 (SS13-1): PRIMER dato = id 8 de esta "
+            "corrida (el 22.49 historico fue SIN UB1K)",
+            "Combo ganadores juntos (SS8.1/SS11.7): ids 9 (COMBO-R, seguro), "
+            "10 (COMBO-T, expectativa 22.5-23.5 [T]) y 11 (NP2-C, slots)",
+            "Cache del hibrido con certificados (SS3.3/SS13): ids 5/6 con "
+            "lineas de log + repro TTFT de 6 turnos; NOCACHE (id 12) es el "
+            "control que DEBE crecer",
+        ],
+        "protocolo": [
+            "Bookend (id 13): |fin-inicio| > 5% = la sesion derivo -> leer "
+            "los deltas con cuidado (leccion v1.2.1)",
+            "Mediana de 3 antes de proclamar ganancias (thc1006 v4); deltas "
+            "<5pp no se persiguen",
+            "Un knob sin certificado = no-op sospechoso (barrido-30)",
+            "PROMOCION: candidatas -> UNA linea de FLAGS_BASE en config.txt "
+            "(la aprueba el Director, config central ronda 20)",
+            "Cache NO-SOPORTADO/ROTO en b11856 = MOTIVO DE RUTA 0 (build "
+            "nuevo), no un fracaso",
+            "El sanity manual de 20 prompts sigue siendo el juez de calidad",
+        ],
+        "dia": ("Ronda 28: el diagnostico midio 17.29 t/s (dia lento dentro "
+                "del lab) con RAM al 97% (0.40 GB libres) = CULPABLE del dia "
+                "confirmado. Antes de medir: cerrar apps; si no, el barrido "
+                "mide el pagefile, no la receta."),
+        "configs_hoy": [{"id": c["id"], "nombre": c["nombre"],
+                         "familia": c["familia"]} for c in configs],
+    }
+
+
+def _nd(v, suf=""):
+    return (str(v) + suf) if v not in (None, "", 0) else "no disponible"
+
+
+def imprimir_prevuelo(pc, mod, niv):
+    """Resumen de consola (~8 lineas); el detalle completo va al informe."""
+    print(cyan("[0.5] PREVUELO COMPLETO (detalle total en el informe, seccion 0)"))
+    print("  PC     : %s" % _nd(pc.get("cpu")))
+    print("           %s · %s" % (_nd(pc.get("ram_hardware")),
+                                  _nd(pc.get("so"))))
+    print("           %s · plan: %s" % (_nd(pc.get("ram_ahora")),
+                                        _nd(pc.get("plan_energia"))))
+    if pc.get("ram_comepanes"):
+        print("           comepanes de RAM: %s" % pc["ram_comepanes"])
+    g = mod.get("gguf") or {}
+    nombre = g.get("general.name") or os.path.basename(mod["ruta"])
+    print("  MODELO : %s · %s bytes (%s) · server %s" % (
+        nombre, fmt(mod["bytes"], 0),
+        "bytes OK" if mod["bytes_ok"] else "BYTES NO COINCIDEN",
+        "build OK" if mod["build_ok"] else "verificar pin"))
+    if mod.get("sha256"):
+        print("           sha256: %s..." % mod["sha256"][:24])
+    if mod.get("gguf_error"):
+        print(gray("           (cabecera GGUF: %s)" % mod["gguf_error"]))
+    print("  NIVEL  : %s" % niv["campana"][:110] + "...")
+    print("           refs [M]: 21.53 ancla · 22.49 NCM · 21.57 CRAM · "
+          "21.39 SHIFT · k=4 28.85-29.13")
+
+
+def md_prevuelo(pc, mod, niv, contexto, problemas_flags):
+    """Seccion 0 completa del informe (reemplaza al pre-vuelo minimal v1.0)."""
+    md = []
+    md.append("## 0. PREVUELO COMPLETO — PC, modelo y nivel "
+              "(lo que hay que saber antes de leer resultados)")
+    md.append("")
+    md.append("### 0.1 El PC (hardware y estado del dia)")
+    md.append("")
+    md.append("- SO: %s" % _nd(pc.get("so")))
+    if pc.get("encendido_horas") is not None:
+        nota = ("  **OJO: maquina encendida %.0f h — dia largo**"
+                % pc["encendido_horas"] if pc["encendido_horas"] >= 12 else "")
+        md.append("- Encendido desde hace: %s h%s"
+                  % (fmt(pc["encendido_horas"], 1), nota))
+    md.append("- CPU: %s" % _nd(pc.get("cpu")))
+    md.append("- RAM hardware: %s" % _nd(pc.get("ram_hardware")))
+    md.append("- RAM ahora: %s" % _nd(pc.get("ram_ahora")))
+    if pc.get("ram_comepanes"):
+        md.append("- Los 4 comepanes de RAM (procesos que mas comen): %s"
+                  % pc["ram_comepanes"])
+    md.append("- Pagefile: %s" % _nd(pc.get("pagefile")))
+    md.append("- Discos: %s" % _nd(pc.get("discos")))
+    md.append("- GPU: %s" % _nd(pc.get("gpu")))
+    md.append("- Plan de energia: %s (el correcto es 'Maximo rendimiento'; "
+              "el 'Equilibrado' frenaba — R24)" % _nd(pc.get("plan_energia")))
+    md.append("")
+    md.append("### 0.2 El modelo (identidad certificada)")
+    md.append("")
+    md.append("- Archivo: `%s`" % mod["ruta"])
+    md.append("- Bytes: %s (esperados %s)%s" % (
+        fmt(mod["bytes"], 0), fmt(mod["bytes_esperados"], 0),
+        "" if mod["bytes_ok"] else "  **NO COINCIDEN — verificar cuant**"))
+    if mod.get("sha256"):
+        md.append("- SHA256: `%s` (certifica EL archivo exacto; la cadena de "
+                  "descarga se cierra aqui)" % mod["sha256"])
+    else:
+        md.append("- SHA256: omitido (--sin-sha256)")
+    if mod.get("gguf_error"):
+        md.append("- Cabecera GGUF: NO leible (%s)" % mod["gguf_error"])
+    elif mod.get("gguf"):
+        md.append("- Metadatos GGUF (fabrica):")
+        for k in sorted(mod["gguf"]):
+            md.append("  - `%s` = %s" % (k, mod["gguf"][k]))
+        k_exp = [k for k in mod["gguf"] if k.endswith(".expert_used_count")]
+        if k_exp:
+            md.append("  - OJO: expert_used_count de FABRICA (el barrido "
+                      "mide k=8 de fabrica; CHARLA usa override a 4 en el "
+                      "arranque diario, no aqui)")
+    md.append("- Server: `%s` · version: %s · build esperado %s: %s"
+              % (contexto["ruta_server"], mod.get("server_version"),
+                 mod.get("build_esperado"),
+                 "OK" if mod.get("build_ok") else "**OJO: verificar**"))
+    md.append("")
+    md.append("### 0.3 La receta viva y la auditoria de flags")
+    md.append("")
+    md.append("- Auditoria de flags: %s"
+              % ("VERDE - todos los tokens verbatim en el dump b11856"
+                 if not problemas_flags else "FALLOS: %s" % problemas_flags))
+    md.append("- Comando base por config (LA RECETA DIARIA + -lv 4): `%s` "
+              "(+ diff de la config; el ultimo valor gana)"
+              % (contexto.get("base_flags_str") or "N/D"))
+    md.append("")
+    md.append("### 0.4 El nivel N3 — donde estamos y que cosecha esta corrida")
+    md.append("")
+    md.append("- **Campana:** %s" % niv["campana"])
+    md.append("- Referencias del laboratorio [M] (el ancla de HOY manda sobre "
+              "todas):")
+    for nom, val in niv["refs"]:
+        md.append("  - %s: **%s**" % (nom, val))
+    md.append("- Libro de muertos (NO se re-mide): %s."
+              % "; ".join(niv["muertos"]))
+    md.append("- Lo que esta corrida cosecha (pendientes del nivel):")
+    for p in niv["pendientes"]:
+        md.append("  - %s" % p)
+    md.append("- Protocolo de decision:")
+    for p in niv["protocolo"]:
+        md.append("  - %s" % p)
+    md.append("- Las %d configs de hoy: %s"
+              % (len(niv["configs_hoy"]),
+                 ", ".join("%d %s (%s)" % (c["id"], c["nombre"], c["familia"])
+                           for c in niv["configs_hoy"])))
+    md.append("")
+    md.append("### 0.5 El dia (recordatorio de la ronda 28)")
+    md.append("")
+    md.append("- %s" % niv["dia"])
+    md.append("")
+    return md
+
 
 # ------------------------------ medicion ------------------------------------
 class MeasError(RuntimeError):
@@ -1464,25 +1926,31 @@ def generar_informe(dir_logs, contexto, resultados, completos, problemas_flags):
     md.append("")
     md.append("Generado: %s · %s · proto %s" % (ahora(), VERSION, PROTO))
     md.append("")
-    md.append("## 0. Pre-vuelo")
-    md.append("")
-    md.append("- Server: `%s`" % contexto["ruta_server"])
-    md.append("- Pin del server: %s" % (contexto.get("pin") or "N/D")
-              + ("" if BUILD_PIN_ESPERADO in (contexto.get("pin") or "")
-                 else "  **OJO: se esperaba build %s**" % BUILD_PIN_ESPERADO))
-    md.append("- Modelo: `%s`" % contexto["ruta_modelo"])
-    if contexto.get("bytes_modelo") is not None:
-        ok_bytes = contexto["bytes_modelo"] == BYTES_MODELO_ESPERADOS
-        md.append("- Bytes del modelo: %s (esperados %s)%s"
-                  % (contexto["bytes_modelo"], BYTES_MODELO_ESPERADOS,
-                     "" if ok_bytes else "  **NO COINCIDEN**"))
-    md.append("- Auditoria de flags: %s"
-              % ("VERDE - todos los tokens verbatim en el dump b11856"
-                 if not problemas_flags else "FALLOS: %s" % problemas_flags))
-    md.append("- Comando base por config (LA RECETA DIARIA + -lv 4): `%s` "
-              "(+ diff de la config; el ultimo valor gana)"
-              % (contexto.get("base_flags_str") or "N/D"))
-    md.append("")
+    prev = contexto.get("prevuelo")
+    if prev:
+        # v1.1: la seccion 0 es el dossier completo PC + modelo + nivel
+        md.extend(md_prevuelo(prev["pc"], prev["modelo"], prev["nivel"],
+                              contexto, problemas_flags))
+    else:
+        md.append("## 0. Pre-vuelo")
+        md.append("")
+        md.append("- Server: `%s`" % contexto["ruta_server"])
+        md.append("- Pin del server: %s" % (contexto.get("pin") or "N/D")
+                  + ("" if BUILD_PIN_ESPERADO in (contexto.get("pin") or "")
+                     else "  **OJO: se esperaba build %s**" % BUILD_PIN_ESPERADO))
+        md.append("- Modelo: `%s`" % contexto["ruta_modelo"])
+        if contexto.get("bytes_modelo") is not None:
+            ok_bytes = contexto["bytes_modelo"] == BYTES_MODELO_ESPERADOS
+            md.append("- Bytes del modelo: %s (esperados %s)%s"
+                      % (contexto["bytes_modelo"], BYTES_MODELO_ESPERADOS,
+                         "" if ok_bytes else "  **NO COINCIDEN**"))
+        md.append("- Auditoria de flags: %s"
+                  % ("VERDE - todos los tokens verbatim en el dump b11856"
+                     if not problemas_flags else "FALLOS: %s" % problemas_flags))
+        md.append("- Comando base por config (LA RECETA DIARIA + -lv 4): `%s` "
+                  "(+ diff de la config; el ultimo valor gana)"
+                  % (contexto.get("base_flags_str") or "N/D"))
+        md.append("")
     md.append("## 1. Resultados")
     md.append("")
     ancla_dec = None
@@ -1632,6 +2100,10 @@ def main(argv=None):
     ap.add_argument("--sin-sanity", action="store_true")
     ap.add_argument("--sin-nvidia", action="store_true")
     ap.add_argument("--sin-pausas", action="store_true")
+    ap.add_argument("--sin-prevuelo", action="store_true",
+                    help="omitir el dossier completo PC/modelo/nivel (v1.0)")
+    ap.add_argument("--sin-sha256", action="store_true",
+                    help="prevuelo sin el hash del modelo (~1 min ahorro)")
     args = ap.parse_args(argv)
 
     PUERTO_DEF = args.puerto
@@ -1708,6 +2180,20 @@ def main(argv=None):
                              "un server vivo (medir con el falsea todo). "
                              "Cerrarlo o relanzar con --si." % args.puerto))
 
+    # ---- 0.5 prevuelo completo (PC + modelo + nivel) -----------------------
+    prevuelo = None
+    if not args.sin_prevuelo:
+        print(cyan("[0.5] PREVUELO COMPLETO: PC + modelo + nivel "
+                   "(~1-2 min por el sha256 del modelo; --sin-sha256 lo salta)"))
+        pc_d = dossier_pc(con_nvidia=not args.sin_nvidia)
+        mod_d = dossier_modelo(args.modelo, bytes_modelo, pin,
+                               con_sha=not args.sin_sha256, notificador=print)
+        niv_d = dossier_nivel(configs)
+        prevuelo = {"pc": pc_d, "modelo": mod_d, "nivel": niv_d}
+        imprimir_prevuelo(pc_d, mod_d, niv_d)
+    else:
+        print(gray("  --sin-prevuelo: dossier omitido (comportamiento v1.0)"))
+
     contexto = {"ruta_server": args.server, "ruta_modelo": args.modelo,
                 "dir_logs": args.logs, "pin": pin,
                 "bytes_modelo": bytes_modelo,
@@ -1718,7 +2204,8 @@ def main(argv=None):
                 "sin_probe": args.sin_probe,
                 "puerto": args.puerto,
                 "base_flags_str": " ".join(base_flags),
-                "base_flags": base_flags}
+                "base_flags": base_flags,
+                "prevuelo": prevuelo}
 
     # ---- 1. corrida --------------------------------------------------------
     print(cyan("[1] CORRIDA: %d configs (pausa termica %d s cada %d)"

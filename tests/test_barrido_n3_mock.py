@@ -255,6 +255,91 @@ check("U13: _dif_veredicto con ruido +/-0.5",
       and b3._dif_veredicto(21.4, 21.53)[0] == "EMPATA"
       and b3._dif_veredicto(20.5, 21.53)[0] == "PIERDE")
 
+# ---- prevuelo v1.1: parser GGUF sintetico + sha256 + nivel ------------------
+import hashlib as _hl
+import struct as _st
+
+
+def _gguf_sintetico():
+    """Construye bytes de una cabecera GGUF valida: 2 kvs escalares, 1 string
+    grande que se salta, 1 array de strings (tokenizer) y 1 kv nextn."""
+    def cad(s):
+        b = s.encode()
+        return _st.pack("<Q", len(b)) + b
+    def kv_str(k, v):
+        return cad(k) + _st.pack("<I", 8) + cad(v)
+    def kv_u32(k, v):
+        return cad(k) + _st.pack("<I", 4) + _st.pack("<I", v)
+    cuerpo = b""
+    cuerpo += kv_str("general.architecture", "qwen35moe")
+    cuerpo += kv_str("general.name", "APEX-I-MINI")
+    cuerpo += kv_u32("qwen35moe.expert_count", 256)
+    cuerpo += kv_u32("qwen35moe.expert_used_count", 8)
+    cuerpo += kv_u32("qwen35moe.context_length", 163840)
+    cuerpo += kv_u32("qwen35moe.block_count", 56)
+    cuerpo += kv_str("tokenizer.chat_template", "X" * 70000)   # > 64 KiB: salta
+    arr = _st.pack("<I", 8) + _st.pack("<Q", 3)               # 3 strings
+    for tok in ("hola", "mundo", "gguf"):
+        arr += _st.pack("<Q", len(tok)) + tok.encode()
+    cuerpo += cad("tokenizer.ggml.tokens") + _st.pack("<I", 9) + arr
+    cuerpo += kv_u32("qwen35moe.nextn.backend", 1)             # MTP preserved
+    return (b"GGUF" + _st.pack("<I", 3) + _st.pack("<Q", 0)
+            + _st.pack("<Q", 9) + cuerpo)
+
+
+GGUF_BIN = _gguf_sintetico()
+gguf_ruta = os.path.join(DIR, "sintetico.gguf")
+open(gguf_ruta, "wb").write(GGUF_BIN)
+meta_gguf, err_gguf = b3.gguf_metadatos(gguf_ruta)
+check("U14: parser GGUF sintetico lee kvs y salta arrays",
+      err_gguf is None and meta_gguf.get("general.architecture") == "qwen35moe"
+      and meta_gguf.get("general.name") == "APEX-I-MINI"
+      and meta_gguf.get("qwen35moe.expert_count") == 256
+      and meta_gguf.get("qwen35moe.expert_used_count") == 8
+      and meta_gguf.get("qwen35moe.context_length") == 163840
+      and meta_gguf.get("qwen35moe.block_count") == 56
+      and meta_gguf.get("qwen35moe.nextn.backend") == 1
+      and "gguf_version" in meta_gguf,
+      "err=%s meta=%s" % (err_gguf, sorted(meta_gguf or {})))
+check("U15: chat_template grande NO contamina los metadatos",
+      meta_gguf is not None
+      and not any("chat_template" in k for k in meta_gguf))
+no_gguf = os.path.join(DIR, "no-gguf.bin")
+open(no_gguf, "wb").write(b"esto no es un gguf")
+meta2, err2 = b3.gguf_metadatos(no_gguf)
+check("U16: archivo no-GGUF -> error limpio, nunca fatal",
+      meta2 is None and err2 and "magic" in err2, str(err2))
+sha_tst = os.path.join(DIR, "sha.bin")
+open(sha_tst, "wb").write(b"1234567890" * 1000)
+check("U17: sha256_archivo coincide con hashlib",
+      b3.sha256_archivo(sha_tst) == _hl.sha256(b"1234567890" * 1000).hexdigest())
+niv = b3.dossier_nivel(b3.construir_configs())
+check("U18: dossier_nivel tiene campana/refs/muertos/pendientes/protocolo/dia",
+      "N1 -> N3 -> N2 -> N4" in niv["campana"] and len(niv["refs"]) == 8
+      and len(niv["muertos"]) == 6 and len(niv["pendientes"]) == 3
+      and len(niv["protocolo"]) == 6 and "RAM al 97%" in niv["dia"]
+      and len(niv["configs_hoy"]) == 13)
+ps_r = b3._ps_json("Get-CimInstance Win32_OperatingSystem")
+check("U19: _ps_json nunca fatal (None fuera de Windows o lista)",
+      ps_r is None or isinstance(ps_r, list))
+pc_d = b3.dossier_pc(con_nvidia=False)
+mod_d = b3.dossier_modelo(gguf_ruta, len(GGUF_BIN), "version: 7000 (b11856)",
+                          con_sha=True)
+check("U20: dossier_modelo certifica bytes+sha+gguf+build",
+      mod_d["bytes"] == len(GGUF_BIN) and not mod_d["bytes_ok"]
+      and mod_d["sha256"] == _hl.sha256(GGUF_BIN).hexdigest()
+      and mod_d["build_ok"] is True
+      and mod_d.get("gguf", {}).get("qwen35moe.expert_used_count") == 8)
+ctx_f = {"ruta_server": "fake", "base_flags_str": "-m M"}
+md_p = b3.md_prevuelo(pc_d, mod_d, niv, ctx_f, [])
+md_txt = "\n".join(md_p)
+check("U21: md_prevuelo pinta las 5 secciones con N/D graceful",
+      "PREVUELO COMPLETO" in md_txt and "### 0.1" in md_txt
+      and "### 0.2" in md_txt and "### 0.3" in md_txt
+      and "### 0.4" in md_txt and "### 0.5" in md_txt
+      and "no disponible" in md_txt
+      and "FABRICA" in md_txt)
+
 # =========================== 2. E2E corrida completa =========================
 print("--- E2E CORRIDA COMPLETA (13 configs) ---")
 PUERTO1 = _libre()
@@ -321,6 +406,26 @@ check("E19: datos.json con repro turno a turno y agg",
       ("repro_ttft" in json.dumps(
           json.load(open(os.path.join(S1["logs"], "faseN3-datos.json"))))))
 
+# ---- E2E del prevuelo completo (v1.1) ---------------------------------------
+check("E28: informe lleva el PREVUELO COMPLETO con las 5 secciones",
+      "PREVUELO COMPLETO" in informe and "### 0.1 El PC" in informe
+      and "### 0.2 El modelo" in informe and "### 0.3 La receta viva"
+      in informe and "### 0.4 El nivel N3" in informe
+      and "### 0.5 El dia" in informe)
+_sha_en_informe = [l for l in informe.splitlines() if "SHA256:" in l]
+check("E29: sha256 del modelo fake en el informe (64 hex)",
+      len(_sha_en_informe) == 1
+      and len(_sha_en_informe[0].split("`")[1]) == 64,
+      _sha_en_informe[:1])
+check("E30: cabecera GGUF no-leible queda como nota (fake no es GGUF)",
+      "Cabecera GGUF: NO leible" in informe)
+check("E31: nivel N3 completo en el informe (refs + muertos + protocolo)",
+      "ORO-UB1K (receta diaria" in informe and "Libro de muertos" in informe
+      and "Mediana de 3" in informe and "Las 13 configs de hoy" in informe
+      and "Ronda 28" in informe)
+check("E32: consola anuncia el prevuelo",
+      "PREVUELO COMPLETO" in salida)
+
 # =========================== 3. resume =======================================
 print("--- RESUME ---")
 p2 = _correr_barrido(S1, PUERTO1)
@@ -352,6 +457,29 @@ check("E23: --quick = 5 configs criticas (1,5,9,10,13)",
       p4.returncode == 0
       and [int(r["id"]) for r in filas4] == [1, 5, 9, 10, 13],
       "rc=%s ids=%s" % (p4.returncode, [r["id"] for r in filas4]))
+
+# ---- --sin-prevuelo / --sin-sha256 ------------------------------------------
+PUERTO6 = _libre()
+S6 = _montar_escenario("sin-prevuelo")
+p6 = _correr_barrido(S6, PUERTO6, ["--solo", "ram", "--sin-prevuelo",
+                                   "--sin-ttft"])
+salida6 = p6.stdout.decode("utf-8", errors="replace")
+filas6 = _leer_csv(S6)
+informe6 = _leer_informe(S6)
+check("E33: --sin-prevuelo rc=0, 3 configs, dossier omitido",
+      p6.returncode == 0 and [int(r["id"]) for r in filas6] == [2, 3, 4]
+      and "dossier omitido" in salida6
+      and "PREVUELO COMPLETO" not in informe6
+      and "## 0. Pre-vuelo" in informe6,
+      "rc=%s" % p6.returncode)
+PUERTO6b = _libre()
+S6b = _montar_escenario("sin-sha256")
+p6b = _correr_barrido(S6b, PUERTO6b, ["--solo", "ram", "--sin-sha256",
+                                      "--sin-ttft"])
+informe6b = _leer_informe(S6b)
+check("E34: --sin-sha256 mantiene el prevuelo pero omite el hash",
+      p6b.returncode == 0 and "PREVUELO COMPLETO" in informe6b
+      and "omitido (--sin-sha256)" in informe6b)
 
 # =========================== 5. warning #24055 ===============================
 print("--- WARNING #24055 (cache no soportada) ---")

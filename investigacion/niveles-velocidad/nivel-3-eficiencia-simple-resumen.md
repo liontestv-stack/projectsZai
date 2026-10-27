@@ -151,3 +151,15 @@ ngram como spec · afinidad/masks · FIT-C · repack off · KV q5_1 · override 
 - **RUTA 0** = 2 zips de b11901 (binario CUDA 12.4 + cudart DLLs).
 - **Medición**: mediana de 3, baseline matcheado, no perseguir <5pp.
 - 📄 Detalle completo, fuentes y auditoría: [`nivel-3-eficiencia-simple.md`](nivel-3-eficiencia-simple.md)
+
+---
+
+## El prevuelo completo: lo que el barrido sabe de ti antes de empezar (28-oct-2026, espejo simple del §20)
+
+- **Pedido del Director**: "hazlo completo con todo lo que va a necesitar saber sobre mi pc, el modelo y todo sobre el nivel en el que estamos antes de comenzar". Ahora el informe abre con un **dossier completo** (sección 0) que se arma ANTES de medir la primera config.
+- **0.1 Tu PC**: sistema operativo, CPU, RAM por módulo (¿son 2 palos a la misma velocidad? = dual channel), pagefile (el detector del riesgo de la ronda 28), espacio libre en los discos, GPU con su driver, plan de energía, cuánto tiempo lleva encendida la máquina y **los 4 programas que más RAM se están comiendo** (explica dónde se fue el 97% del 27-oct).
+- **0.2 Tu modelo, certificado**: tamaño exacto + **huella SHA256** (como la firma del archivo: si mañana descargas otro cuant, la huella cambia y se nota) + los datos internos del GGUF leídos del archivo real (cuántos cocineros tiene de fábrica, contexto, bloques, si trae MTP) + la versión del server (build 11856).
+- **0.3 Tu receta diaria**: el comando exacto que se va a medir, con la auditoría de flags en verde.
+- **0.4 El nivel N3 entero, incrustado**: la campaña (N1 → N3 → N2 → N4 → RUTA 0 + N5 y dónde está cada una), los números de referencia del laboratorio (21.53 / 22.49 / 21.57 / 21.39 / k=4 28.85), el libro de muertos (lo que NO se vuelve a medir), lo que ESTA corrida viene a cosechar, y el protocolo de decisión (mediana de 3, bookend, promoción de UNA línea).
+- **0.5 El día**: el recordatorio de la ronda 28 — si la RAM va al 97%, cierra apps antes; el barrido debe medir la receta, no el pagefile.
+- **Sin miedo**: si una pieza no existe (p. ej. fuera de Windows), el dossier pone "no disponible" y sigue — nunca se cae. El hash añade ~1 min al inicio; `--sin-sha256` lo salta y `--sin-prevuelo` vuelve al comportamiento de la v1.0. Las dosis, la medición y el CSV NO cambian nada.
