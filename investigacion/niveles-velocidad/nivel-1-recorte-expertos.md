@@ -623,3 +623,33 @@ La v1.2 corrió COMPLETA en el rig real: 15/15 configs medidas sin crash, CSV+JS
    Menú para jugar (escalera ya medida, SS23): k=8 → k=6 (+21%) → k=5 (+30%) → k=4 (+41%) → no bajar más para nada serio (k=3 ya falla cuentas, k=2 sopa de letras). Para probar cualquier k intermedio: editar `EXPERTOS_CHARLA = K` en config.txt y abrir CHARLA (el 8 de TRABAJO no se toca — es el default de fábrica).
 
 **4. Relación con la campaña (honestidad de siempre):** esto es medición INFORMAL del Director — convive con, no sustituye, el barrido v1.2.1 (18 configs, autenticación en 4 vías, bookend) que sigue siendo la medición FORMAL de N1, ni al sanity manual de 20 prompts que decide el k operativo. Si el experimento manual muestra algo raro (p. ej. k=4 por debajo de k=8 en la misma máquina), se anota en el repo y el barrido formal lo confirma o lo entierra. Nota de proceso: el Director está reordenando el repo por su lado — LAIA hará fetch/pull antes de tocar nada en la próxima ronda y esta ronda no mueve ninguna ruta.
+
+## 28. ANEXO SS28 — AUDITORÍA DEL 15 t/s: LA RECETA DE TRABAJO ES LA ORIGINAL; LO QUE CAMBIA ES EL DÍA (ronda 24, 27-oct-2026)
+
+> Pregunta del Director (primera medición informal con el cliente v1.1 tras SS27): *"la receta completa de trabajo me va a 15 t/s, ¿hay algo mal en esa receta? ¿Utilizaste la original, la de las pruebas?"*. Se audita el comando real de config.txt contra el comando real que midió el laboratorio. Cero cambios en configs, scripts ni campaña.
+
+**1. Veredicto pieza por pieza: SÍ — la receta de config.txt es la original de las pruebas, cero deriva.** El comando que `ABRIR-QWEN.bat` lanza hoy (reconstruido desde config.txt por `abrir-qwen-apex.py` v3.0) contra el comando REAL que midió el laboratorio (faseD-N1-INFORME §0, corrida v1.2 real, 26-oct-2026):
+
+| Pieza | config.txt (trabajo, hoy) | Pruebas (D-ANCLA, faseD §0) | ¿Misma? |
+|---|---|---|---|
+| `-ngl 99` · `-cmoe` · `-c 16384` | sí | sí | ✓ idéntica |
+| `-fa on` · `-ctk q8_0` · `-ctv q8_0` | sí | sí | ✓ idéntica |
+| `-t 4` · `--prio 2` · `--no-mmproj` · `-lm none` | sí | sí | ✓ idéntica |
+| `-b` / `-ub` | 4096 / 1024 (FLAGS_GANADORAS al final, last-wins) | 2048 / 256 | distinta de D-ANCLA — pero es **ORO-UB1K** (id 32 del barrido-30, 21.53 t/s [M]): mueve la DIGESTIÓN del prompt, no la velocidad de escritura (D-EXP4-UB1K vs D-EXP4 = +1%, dentro del ruido) |
+| SAMPLING (temp 1.0 / top-k 20 / top-p 0.95 / min-p / presencia) | preset think de la card | (el lab midió a temp 0 por protocolo) | parámetros de SABOR, no de velocidad |
+| `-a apex35b` / `-lv` | etiqueta del server / (el lab usaba `-lv 4`) | — | log/etiqueta, sin efecto en velocidad |
+
+Además, el **test de regresión T06** (`test_abrir_mock.py`, 11/11 VERDE) prueba que el comando generado hoy es EXACTAMENTE el probado en su día (v2.1: mismo multiset de flags). Nada se coló, nada falta. Respuesta directa: **sí, es la original**.
+
+**2. ¿Y por qué 15 y no 17-21? Porque el suelo k=8 YA respiraba en el laboratorio, y el día a día añade su recargo:**
+- (a) **El laboratorio mismo midió la MISMA receta k=8 a 17.36, 17.80 y 20.51 en UNA sola sesión** (faseD v1.2: D-EXP10-CTRL, D-ANCLA, D-EXP8) **y a 21.53 otro día** (barrido-30, ORO-UB1K). El rango real del baseline k=8 es ~17.4-21.5 t/s según la sesión — el suelo nunca fue 21.
+- (b) **El número del chat es de reloj de pared.** El cliente mide desde FUERA: entre el primer y el último token cuenta TODAS las pausas — un page fault, un pico del navegador, Windows haciendo casa. El lab usó el reloj interno del server sobre corridas limpias con prompts cortos de la misma familia.
+- (c) **Presión de RAM (sospechoso #1 del día a día):** el modelo ocupa 14.27 GB de 16 GB. Con navegador y ventanas abiertas, Windows manda trozos del modelo al pagefile y la generación se traba — la causa ya documentada de los lentos 16 t/s históricos. Chequeo de 10 segundos: Ctrl+Shift+Esc → Rendimiento → Memoria; si va cerca de 16 GB, ahí está la fuga.
+- (d) **GPU caliente:** el lab enfriaba 60 s cada 8 configs (SS8); una sesión de chat sostenida calienta la GTX 1650 y el reloj baja.
+- (e) **Contexto creciente:** el lab midió decode con prompts de ~256 tokens; en chat real la ctx crece (línea "ctx X/16384" de cada turno) y la atención paga un poco más por palabra.
+- (f) **Plan de energía:** "Equilibrado" recorta relojes de CPU/GPU; el plan de la casa es "Alto rendimiento" (N4 §8).
+→ **15 t/s en TRABAJO (k=8) es compatible con receta sana bajo condiciones de día.** No hay nada roto que reparar en la receta; hay condiciones que pesan.
+
+**3. El diagnóstico decisivo: el RATIO, no el número absoluto.** El número absoluto depende del día; el RATIO 8 vs 4 en la MISMA sesión no. Protocolo (con las reglas SS27.3 R1-R5): TRABAJO abierto → `/modo 8` → misma pregunta de 150-300 palabras → anota el tok/s de la 2ª y 3ª respuesta. Cierra TODO → CHARLA → `/modo 4` → la MISMA pregunta → anota. **Salud = charla ≈ 1.5-1.6× trabajo** (lab, misma sesión: 28.85 vs 17.80 = ×1.62; la expectativa conservadora de SS5 era ×1.41). Si el ratio sale ~1.5×: receta sana, verificada en TU máquina — el resto es recargo del día. Si sale ~1.0× (charla no se separa de trabajo): eso SÍ es raro → avisar y revisar el banner del server (`perfil CHARLA (4 expertos) — config: <ruta>`: la ruta debe ser la del config.txt que editaste y el perfil el del .bat que abriste). `/stats` y `/guardar` dejan la comparación por modo ya hecha.
+
+**4. Recordatorio práctico (para no perseguir el número equivocado):** para CHATEAR el perfil rápido es CHARLA (4 expertos: +41-62% medido según sesión); TRABAJO (8) es el equipo completo para código y tareas finas. Medir trabajo a ~15 y charla a ~24 sería EXACTAMENTE el comportamiento esperado de la receta original en condiciones de día. Y el número del experimento sigue siendo el **tok/s de la línea final de cada turno** (sin `~`, sin "1er tok" — SS27 R4): el del título es en vivo y fluctúa. La medición FORMAL no cambia: barrido v1.2.1 + sanity manual de 20 prompts siguen siendo el juez de N1; esta auditoría queda en el repo para que la pregunta se responda con evidencia, no de memoria. Nota de proceso: esta ronda partió de `git pull` (la reorganización del repo ya estaba en origin como ronda 23, commit a5c2d02 — rutas nuevas respetadas, contenido intacto).

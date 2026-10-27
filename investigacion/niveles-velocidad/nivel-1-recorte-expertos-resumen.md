@@ -198,3 +198,13 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 - **Juego limpio (5 reglas)**: misma pregunta · respuestas de 200 palabras · descarta la primera (GPU fría) · compara solo el "tok/s" de escritura · etiqueta con /modo y /guardar al cerrar cada sesión.
 - **Para bajar a 6, 5 o 3 expertos**: edita `EXPERTOS_CHARLA = K` en config.txt y abre CHARLA. Lo ya medido: k=4 (+41%) es la dosis buena; k=3 ya falla cuentas y k=2 es sopa de letras.
 - **Honestidad**: esto es tu medición informal; el barrido formal (BARRIDO-N1.bat, ~50-65 min) sigue siendo el juez de N1.
+
+---
+
+## El velocímetro y el día a día: ¿15 t/s significa receta rota? (27-oct-2026, espejo simple del §28)
+
+- **La pregunta**: "la receta completa de trabajo me va a 15 t/s, ¿hay algo mal? ¿Usaste la original, la de las pruebas?"
+- **Respuesta corta: la receta ES la original.** Se auditaron las piezas una por una contra el comando REAL que midió el laboratorio: todas las flags de velocidad idénticas (`-ngl 99`, `-cmoe`, `-c 16384`, `-fa`, KV q8_0, `-t 4`, `--prio 2`, `-lm none`) y el único extra (`-ub 1024 -b 4096`) también es campeón medido (ORO-UB1K). Además un test automático (T06) re-comprueba en cada versión que el comando es exactamente el probado — nada se cuela.
+- **¿Y por qué 15 entonces? Mismo restaurante, otro día.** En el laboratorio la MISMA receta con 8 cocineros marcó entre 17.4 y 21.5 según la sesión. En casa el velocímetro del chat es un cronómetro que cuenta TODAS las pausas: navegador abierto, RAM al límite (el modelo ocupa 14.3 de los 16 GB — si Windows empieza a mover trozos al pagefile, todo se traba: mira la memoria en el Administrador de tareas), GPU caliente, plan de energía "Equilibrado".
+- **La prueba que decide (mejor que cualquier número suelto): el RATIO.** Misma pregunta, misma sesión: TRABAJO → /modo 8 → anota su tok/s → cierra todo → CHARLA → /modo 4 → misma pregunta → anota. **Sano = charla ~1.5-1.6 veces más rápido que trabajo.** Si charla no se separa de trabajo, eso sí es raro: avisa (y mira el banner del server, que dice qué perfil y qué config.txt usó).
+- **Para chatear rápido: CHARLA.** TRABAJO (8 cocineros) es para código y tareas finas. Ver trabajo a ~15 y charla a ~24 es exactamente el comportamiento esperado de la receta original en un día normal — no hay nada que reparar.
