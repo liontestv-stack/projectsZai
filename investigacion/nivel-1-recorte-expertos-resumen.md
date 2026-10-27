@@ -152,6 +152,18 @@ Todas las URLs exactas (papers, issues, discusiones, repos HF) están en el arch
 
 ---
 
+## 23. La primera corrida real completa (anexo §23 del completo): funcionó — y el doble de velocidad
+
+- **La prueba salió bien de punta a punta**: 15 pruebas seguidas, 22 minutos, cero crashes. El error "HTTP 400" de antes quedó enterrado.
+- **LA GRAN NOTICIA: el truco de usar menos expertos FUNCIONA.** Con 8 expertos ~18 t/s; bajando a 6, 5, 4, 3 y 2 la velocidad subió escalón por escalón hasta **35 t/s con k=2 (el doble)**. Si el truco no se hubiera aplicado, todo habría salido plano (como en el barrido-30 con la clave equivocada). La escalera ordenada ES la prueba.
+- **¿Por qué el informe marcó casi todo "NO"?** Ninguna trampa es del modelo: (1) el programa pide un "certificado" en el log (la línea que dice cuántos expertos se usaron) y TU build nunca lo imprime — el portero pedía un papel que la oficina no emite; con `-lv 4` debería salir, y ahora además la dosis se autentica por 4 vías; (2) la GPU arrancó fría: el ancla (la referencia) midió 17.80 cuando el "8 expertos real" andaba en ~21 (cuatro pruebas lo confirman: EXP8 +15%, la recta de las filas estables da 21.7, el histórico da 21.53, y EXP10 sí frena contra la referencia sana). Por eso los "vs ancla" de esa corrida estaban inflados: corregidos son ~+41% (k=4), ~+55% (k=3), ~+71% (k=2).
+- **Falsa alarma del "fit abortado"**: era el aviso benigno de "no auto-ajusto porque fijaste las capas a mano"; el server midió normal detrás. Corregido.
+- **Calidad**: k=4 perfecto (3/3); k=6/5 se pone verboso y el examen se quedaba sin palabras (fallo del examen, no del modelo — ahora 128 tokens y distingue "se cortó" de "respondió mal"); k=3 ya falla cuentas (17×23 → 431); k=2 sopa de letras. **k=4 es la dosis competitiva con calidad intacta; k=2 muerto.**
+- **Preliminares prometedores**: la cache de expertos (MEC) ganó en sesión (+38% con 1024 MiB, +31% con 768, contra su control) y el knob `-ot` clavó el método original (+0.9%) — dos caminos independientes al mismo número. Ojo: 1024 MiB de cache deja la VRAM al borde (3784/4096).
+- **Siguiente paso humano**: copiar la v1.2.1 a `D:\ZLia\` y correr `BARRIDO-N1.bat` otra vez (~50-65 min, ahora 18 pruebas incluidos 2 stacks GANADOR+GANADOR); después, sanity manual de 20 prompts para fijar el k operativo.
+
+---
+
 ## Cheatsheet operativa del nivel 1
 
 - **Dosis**: `--override-kv <arch_real>.expert_used_count=int:K` (K = 6→4→3→2) + `--moe-cache-mib 512/1024` con control D-MEC-0.
