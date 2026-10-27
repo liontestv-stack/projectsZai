@@ -1,6 +1,6 @@
 # 04 — Análisis del rig: i3-10100F + GTX 1650 + 16GB RAM + SSD 500GB (presupuesto $0)
 
-> ⚠ Doc original (mañana 2026-10-24); §1-§3 y §5 corregidos por auditoría (tamaños reales + techo corregido). Guía vigente: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md).
+> ⚠ Doc original (mañana 2026-10-24); §1-§3 y §5 corregidos por auditoría (tamaños reales + techo corregido). Guía vigente: [../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md).
 
 ## 1. Radiografía del hardware
 
@@ -39,7 +39,7 @@ Reglas de supervivencia: cerrar navegador/apps pesadas al servir el modelo; NO u
 - Causa 2 de los 16 t/s: el archivo real (14.27 GB) sobre 16 GB de RAM → pageouts; el disco roba t/s. Mitigación: pagefile en el SSD dedicado + sweep de `-ncmoe`.
 - El multiplicador que no gasta ancho de banda: **draft-mtp** — un pase forward lee los expertos UNA vez y verifica N tokens. PR #22673 (fusionado 2026-05-16, verificado) declara **"more than 2x speed-up over baseline with ~75% acceptance"**.
 - Lo que NO se puede: superar el ancho de banda de la DDR4 (sin cambiar RAM/CPU) — pero el techo real está por encima de lo que necesitamos.
-- Expectativa honesta corregida: base **14-24 t/s** tras sweep (según pageouts) → **28-36 t/s** con draft-mtp. Protocolo y comandos vigentes: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md). Estabilidad y compatibilidad API siguen siendo la ganancia estructural.
+- Expectativa honesta corregida: base **14-24 t/s** tras sweep (según pageouts) → **28-36 t/s** con draft-mtp. Protocolo y comandos vigentes: [../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md). Estabilidad y compatibilidad API siguen siendo la ganancia estructural.
 
 ## 4. Plan de sweep (protocolo de ajuste, 30-60 min)
 

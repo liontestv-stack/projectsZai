@@ -29,8 +29,8 @@ import threading
 import time
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
-SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "abrir-qwen-apex.py"))
-CFG_REAL = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "config.txt"))
+SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "scripts", "abrir-qwen-apex.py"))
+CFG_REAL = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "configs", "config.txt"))
 DIR = tempfile.mkdtemp(prefix="abrir_test_")
 ok_fallos = []
 

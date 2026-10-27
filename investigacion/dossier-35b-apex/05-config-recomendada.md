@@ -1,6 +1,6 @@
 # 05 — Configuración recomendada paso a paso
 
-> ⚠ ACTUALIZADO por auditoría 2026-10-24: rutas reales del Director = `D:\ZLia\models\...` y `D:\llama.cpp\build\bin\...` (ver [../InformacionCritica/RutasArchivos.md](../InformacionCritica/RutasArchivos.md)); el build actual NO tiene draft-mtp → RUTA 0; guía operativa vigente: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md). Rutas ya corregidas abajo.
+> ⚠ ACTUALIZADO por auditoría 2026-10-24: rutas reales del Director = `D:\ZLia\models\...` y `D:\llama.cpp\build\bin\...` (ver [../../InformacionCritica/docs/RutasArchivos.md](../../InformacionCritica/docs/RutasArchivos.md)); el build actual NO tiene draft-mtp → RUTA 0; guía operativa vigente: [../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md). Rutas ya corregidas abajo.
 
 ## 0. Supuestos
 - Windows 10/11 x64 (si es Linux, mismos flags; rutas cambian).

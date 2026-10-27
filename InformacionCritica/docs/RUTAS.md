@@ -1,8 +1,8 @@
 # RUTAS — Del techo real al objetivo x2 (16 → ~32 t/s)
 
-> **Archivo crítico del proyecto.** Vive en `InformacionCritica/` junto a:
-> - [`llama-flags.txt`](llama-flags.txt) — **FUENTE DE VERDAD #1**: dump real de `--help` del build del Director (UTF-16, intocado). Nada fuera de ese dump existe para este proyecto.
-> - [`flags-verificadas-LAIA.txt`](flags-verificadas-LAIA.txt) — destilado verificado por LAIA (docs oficiales + auditoría del dump del Director).
+> **Archivo crítico del proyecto.** Vive en `InformacionCritica/docs/` junto a:
+> - [`configs/llama-flags.txt`](../configs/llama-flags.txt) — **FUENTE DE VERDAD #1**: dump real de `--help` del build del Director (UTF-16, intocado). Nada fuera de ese dump existe para este proyecto.
+> - [`configs/flags-verificadas-LAIA.txt`](../configs/flags-verificadas-LAIA.txt) — destilado verificado por LAIA (docs oficiales + auditoría del dump del Director).
 > - [`RutasArchivos.md`](RutasArchivos.md) — rutas reales en disco: modelo `D:\ZLia\models\...APEX-I-MINI.gguf` · server `D:\llama.cpp\build\bin\llama-server.exe`.
 
 **Rig:** i3-10100F (4C/8T) · GTX 1650 4GB · 16GB DDR4-2666 · SSD 500GB · Presupuesto $0
@@ -141,7 +141,7 @@ D:\llama.cpp\bin-new\llama-server.exe --help | findstr draft-mtp
 D:\llama.cpp\bin-new\llama-server.exe --help > D:\ZLia\llama-flags-nuevo.txt
 ```
 
-   Luego subir `llama-flags-nuevo.txt` a `InformacionCritica/` del repo en lugar del
+   Luego subir `llama-flags-nuevo.txt` a `InformacionCritica/configs/` del repo en lugar del
    anterior (generado desde PowerShell conserva el formato UTF-16 del original). Cuando
    el nuevo dump esté en el repo, LAIA re-audita las flags contra él antes de ejecutar V2.
 
@@ -269,7 +269,7 @@ Si algún tamaño difiere → no improvisar, usar la Opción A. (El `copy` toca 
 bin-new: tu build viejo no se modifica — rollback intacto.)
 
 **VARIANTE .PY (100% automática, con veredicto de seguridad final):**
-`InformacionCritica/actualizar-llama-b11856.py` — Python 3.8+, solo librería estándar,
+`InformacionCritica/scripts/actualizar-llama-b11856.py` — Python 3.8+, solo librería estándar,
 cero pip installs. Hace el ciclo completo: descarga (con auto re-descarga si el tamaño
 no cuadra) → SHA-256 fail-fast VERDE/ROJO → extracción anti zip-slip → archivos
 críticos + tamaños byte-exactos de las 3 DLLs CUDA → sistema (nvcuda.dll, msvcp140.dll)
@@ -323,7 +323,7 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
 - Dump del build nuevo: **`D:\ZLia\llama-flags-nuevo.txt`** (122,440 B, UTF-16LE) —
   generado por el script desde `bin-new` (mismo binario b11856, así que sigue
   siendo válido aunque el exe se haya movido). Es el archivo a subir a
-  `InformacionCritica/` para la re-auditoría de flags antes de V2. Si el Director
+  `InformacionCritica/configs/` para la re-auditoría de flags antes de V2. Si el Director
   quiere regenerarlo desde la ruta nueva (idéntico resultado):
   ```powershell
   & D:\llama.cpp\llama-server.exe --help 2>&1 | Out-File D:\ZLia\llama-flags-nuevo.txt -Encoding unicode
@@ -331,7 +331,7 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
 
 **REGISTRO DE RE-AUDITORÍA DEL DUMP NUEVO (2026-10-25, subido por el Director):**
 - `llama-flags-nuevo.txt` recibido (122,440 B byte-exacto), movido a
-  `InformacionCritica/` y auditado con diff automático (98 → 97 flags) + grep
+  `InformacionCritica/configs/` y auditado con diff automático (98 → 97 flags) + grep
   verbatim. Detalle completo en `flags-verificadas-LAIA.txt` (bloque RE-AUDITORÍA).
 - Confirmado en SU dump: `draft-mtp` en `--spec-type` (+ nuevos draft-eagle3/
   dflash/dspark), `-ncmoe/-cmoe`, `--moe-cache-mib` (default 0), `-lm` sustituye
@@ -342,7 +342,7 @@ Uso: `py actualizar-llama-b11856.py` (o `python actualizar-llama-b11856.py`).
 
 ### 3-A.4. LANZADOR AUTOMÁTICO del modelo (nuevo, 2026-10-25)
 
-`InformacionCritica/abrir-qwen-apex.py` — Python 3.8+ solo stdlib, especifico del
+`InformacionCritica/scripts/abrir-qwen-apex.py` — Python 3.8+ solo stdlib, especifico del
 modelo Qwen APEX-I-MINI (14,273,277,376 B verificado) y del build b11856. Usa
 SOLO flags auditadas contra el dump nuevo. Fases:
 
@@ -712,7 +712,7 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
 
 ## 13. Fuentes
 
-- Dump del build del Director: [`llama-flags.txt`](llama-flags.txt) · Rutas reales: [`RutasArchivos.md`](RutasArchivos.md)
+- Dump del build del Director: [`configs/llama-flags.txt`](../configs/llama-flags.txt) · Rutas reales: [`RutasArchivos.md`](RutasArchivos.md)
 - Documentación oficial speculative: https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md
 - Server README (flags): https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
 - Model card del autor (SC117): https://huggingface.co/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF
@@ -720,7 +720,7 @@ configs (69 vs 256 tokens, 1 pasada): el barrido nuevo corrige el protocolo.
 - Guía MTP de Unsloth: https://unsloth.ai/docs/models/mtp
 - Foro NVIDIA (Qwen3.6-27B MTP): https://forums.developer.nvidia.com/t/mtp-llama-cpp-a-look-at-qwen3-6-27b/370298
 - Flags explicadas 2026 (cambio -lm/--load-mode): https://openclawdc.com/blog/llama-cpp-flags-explained
-- Dossier completo: [`investigacion-35b-apex/`](../investigacion-35b-apex/README.md)
+- Dossier completo: [`investigacion/dossier-35b-apex/`](../../investigacion/dossier-35b-apex/README.md)
 
 
 ---

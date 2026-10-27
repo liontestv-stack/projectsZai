@@ -1,6 +1,6 @@
 # 03 — Software: llama.cpp, MTP, --n-cpu-moe y ecosystem
 
-> ⚠ Doc de investigación original (2026-10-24, mañana). Estado operativo ACTUAL + auditoría del build del Director: [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md) y [../InformacionCritica/flags-verificadas-LAIA.txt](../InformacionCritica/flags-verificadas-LAIA.txt).
+> ⚠ Doc de investigación original (2026-10-24, mañana). Estado operativo ACTUAL + auditoría del build del Director: [../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md) y [../../InformacionCritica/configs/flags-verificadas-LAIA.txt](../../InformacionCritica/configs/flags-verificadas-LAIA.txt).
 
 ## 1. llama.cpp — requisitos de versión
 

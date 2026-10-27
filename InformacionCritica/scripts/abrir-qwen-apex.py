@@ -37,13 +37,15 @@ KEYS = ("RUTA_SERVER", "RUTA_MODELO", "RUTA_LOGS", "PUERTO",
 
 def encontrar_config():
     """Orden de busqueda: variable de entorno CONFIG_TXT (tests/avanzado)
-    -> ruta oficial D:\\ZLia\\config.txt -> config.txt junto a este script."""
+    -> ruta oficial D:\\ZLia\\config.txt -> config.txt junto a este script -> configs/ del repo (Ronda 21)."""
     candidatas = []
     if os.environ.get("CONFIG_TXT"):
         candidatas.append(os.environ["CONFIG_TXT"])
     candidatas.append(CONFIG_OFICIAL)
-    candidatas.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "config.txt"))
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidatas.append(os.path.join(_script_dir, "config.txt"))
+    candidatas.append(os.path.join(_script_dir, "..", "configs",
+                                   "config.txt"))  # Ronda 21: layout repo
     for c in candidatas:
         if c and os.path.exists(c):
             return c

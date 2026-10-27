@@ -6,7 +6,7 @@
 > y su viabilidad real en el rig: **i3-10100F · GTX 1650 4GB · 16GB RAM · SSD 500GB**.
 > Presupuesto: **$0**.
 >
-> ⚠ **ACTUALIZADO (tarde 2026-10-24):** auditoría del build del Director (sin draft-mtp → RUTA 0: actualizar build), corrección del techo (el x2 es alcanzable: PR #22673 ">2x, ~75% acceptance") y tamaños reales de archivo (I-MINI = **14.27 GB**, no 12.2). Guía operativa vigente: **[../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md)**. Este dossier conserva el análisis de fondo; donde difiera, manda InformacionCritica.
+> ⚠ **ACTUALIZADO (tarde 2026-10-24):** auditoría del build del Director (sin draft-mtp → RUTA 0: actualizar build), corrección del techo (el x2 es alcanzable: PR #22673 ">2x, ~75% acceptance") y tamaños reales de archivo (I-MINI = **14.27 GB**, no 12.2). Guía operativa vigente: **[../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md)**. Este dossier conserva el análisis de fondo; donde difiera, manda InformacionCritica.
 
 ---
 

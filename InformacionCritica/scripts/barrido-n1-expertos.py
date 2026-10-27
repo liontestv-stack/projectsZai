@@ -171,8 +171,13 @@ PROTO = "faseD-N1-v3"
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
 RUTA_MODELO_DEF = (r"D:\ZLia\models"
                    r"\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf")
-RUTA_DUMP_DEF = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "llama-flags-nuevo.txt")
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+RUTA_DUMP_DEF = os.path.join(_SCRIPT_DIR, "llama-flags-nuevo.txt")
+if not os.path.exists(RUTA_DUMP_DEF):   # Ronda 21: layout del repo
+    _dump_repo = os.path.join(_SCRIPT_DIR, "..", "configs",
+                              "llama-flags-nuevo.txt")
+    if os.path.exists(_dump_repo):
+        RUTA_DUMP_DEF = _dump_repo
 LOGS_DIR_DEF = r"D:\ZLia\faseD-logs"
 
 ALIAS = "apex35b"

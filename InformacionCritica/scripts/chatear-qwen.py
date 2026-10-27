@@ -68,9 +68,11 @@ def _config_central():
     """Lee config.txt (ruta oficial D:\\ZLia\\config.txt o junto a este
     script). Devuelve {} si no existe — el cliente usa sus defaults y
     los --host/--port de la linea de comandos SIEMPRE ganan."""
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
     candidatas = [CONFIG_OFICIAL,
-                  os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "config.txt")]
+                  os.path.join(_script_dir, "config.txt"),
+                  os.path.join(_script_dir, "..", "configs",
+                               "config.txt")]  # Ronda 21: layout repo
     for ruta in candidatas:
         try:
             if not os.path.exists(ruta):

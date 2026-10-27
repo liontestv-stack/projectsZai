@@ -25,7 +25,7 @@ import time
 import urllib.request
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
-SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "barrido-qwen-25.py"))
+SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica", "scripts", "barrido-qwen-25.py"))
 DIR = tempfile.mkdtemp(prefix="barrido_test_")
 ok_fallos = []
 

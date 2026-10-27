@@ -18,7 +18,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-CLIENTE = "/home/z/my-project/repo-work/repo/InformacionCritica/chatear-qwen.py"
+CLIENTE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "..", "InformacionCritica", "scripts", "chatear-qwen.py")
 PORT = 19931
 HITOS = {"reqs": 0, "cuerpos": []}
 

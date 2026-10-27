@@ -44,7 +44,7 @@ SC117/...-APEX-GGUF           (requantización APEX, 4 tiers + mmproj)
 
 | `mmproj-...APEX-F16.gguf` | Proyector de visión (~0.4B params, CLIP) — 0.90 GB reales |
 
-⚠ **Tamaños "reales"** = bytes del archivo según la API de HF (2026-10-24, GB decimal). La card lista tamaños de perfil (GiB) y puede preceder a la actualización del repo del 2026-10-03. Consecuencia material: el I-MINI deja solo ~1.5 GB de margen sobre 16 GB de RAM → pageouts probables (ver [../InformacionCritica/RUTAS.md](../InformacionCritica/RUTAS.md) §0).
+⚠ **Tamaños "reales"** = bytes del archivo según la API de HF (2026-10-24, GB decimal). La card lista tamaños de perfil (GiB) y puede preceder a la actualización del repo del 2026-10-03. Consecuencia material: el I-MINI deja solo ~1.5 GB de margen sobre 16 GB de RAM → pageouts probables (ver [../../InformacionCritica/docs/RUTAS.md](../../InformacionCritica/docs/RUTAS.md) §0).
 
 ## 4. ¿Qué es APEX? ([mudler/apex-quant](https://github.com/mudler/apex-quant), equipo LocalAI, MIT)
 

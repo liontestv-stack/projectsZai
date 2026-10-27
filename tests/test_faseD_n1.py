@@ -52,7 +52,7 @@ import traceback
 import urllib.request
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTR = os.path.join(RAIZ, "InformacionCritica", "barrido-n1-expertos.py")
+INSTR = os.path.join(RAIZ, "InformacionCritica", "scripts", "barrido-n1-expertos.py")
 FALLOS = []
 
 
