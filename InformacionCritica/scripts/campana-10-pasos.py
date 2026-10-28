@@ -83,6 +83,26 @@ casa, abrir-qwen-apex.py, tests de la casa):
 Bateria ampliada: test_campana_mock.py pasa de 46 a 65 checks ejecutados
 TODO VERDE (N01-N14 nuevos; nota: r35 anunciaba "38 checks" y era un conteo
 a la baja — papereria tambien corregida).
+
+CHANGELOG v1.2 (2026-10-29, ronda 37 — verificacion de seguridad EN VIVO del
+objetivo N2, pedida por el Director: "realiza una verificacion de seguridad
+del archivo"). Verificacion contra la API publica de HuggingFace:
+  1. OBJETIVO CONFIRMADO AUTENTICO: la API publica HOY UD-IQ3_XXS.gguf con
+     EXACTAMENTE 14,069,266,720 bytes y SHA256 36f9ec0e...7150 — identicos
+     a los pinados aqui desde la ronda 35 (comparados al caracter). El repo
+     es de la org oficial unsloth, no gated, sin banner de seguridad.
+  2. HALLAZGO (el unico ROJO): REPO_ALT estaba MAL DOCUMENTADO — la nota
+     "mismo archivo, mismo SHA" (heredada de r35/r36) es FALSA. La API
+     publica en unsloth/Qwen3.6-35B-A3B-GGUF el mismo NOMBRE de archivo
+     pero SIN el modulo MTP (13,211,155,424 B, SHA256 9c964e65...88fbe) y
+     sin ninguna variante -MTP (23 GGUF, 0 con MTP). Haberlo usado habria
+     costado una descarga nocturna de 13 GB que p5 rechazaria por SHA.
+  3. FIX: p4 rechaza --repo REPO_ALT con FATAL nominado ANTES de descargar
+     (--fuerza lo salta dejandolo escrito en el informe); comentario de la
+     constante y ayuda de --repo corregidos con la evidencia; el fallback
+     real sigue siendo re-ejecutar p4 contra REPO_DEFAULT (hf RETOMA la
+     descarga cortada, no empieza de cero).
+Bateria: 67 checks (E13b/E13c nuevos).
 """
 import argparse
 import csv
@@ -98,7 +118,7 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = "campana-10-pasos v1.1 (2026-10-28, piloto de la campana tras la revision 'ni un solo bug': 13 fixes; pedido del Director 'que no tenga ni un solo bug')"
+VERSION = "campana-10-pasos v1.2 (2026-10-29, verificacion de seguridad EN VIVO del objetivo N2: objetivo autentico confirmado al byte y al SHA; REPO_ALT desautenticado y bloqueado con FATAL nominado; pedido del Director 'realiza una verificacion de seguridad del archivo')"
 
 
 def _pausa_doble_click(es_tty=None):
@@ -141,7 +161,15 @@ MODELO_NUEVO_BYTES = 14069266720
 MODELO_NUEVO_SHA = ("36f9ec0e4c775f6efd3a61c1ea76f0875128469c3d012e3d9e249"
                     "5a90e7a7150")
 REPO_DEFAULT = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF"  # RUTAS.md L738: MTP preserved
-REPO_ALT = "unsloth/Qwen3.6-35B-A3B-GGUF"          # mismo archivo, mismo SHA
+# REPO_ALT DESAUTENTICADO en vivo (API HF 2026-10-29, verificacion r37):
+# sirve el MISMO NOMBRE de archivo pero SIN modulo MTP (13,211,155,424 B,
+# SHA256 9c964e65...88fbe) y sin variante -MTP. La nota vieja "mismo
+# archivo, mismo SHA" era FALSA. p4 lo rechaza antes de descargar.
+REPO_ALT = "unsloth/Qwen3.6-35B-A3B-GGUF"
+REPO_ALT_MOTIVO = ("la API de HF (29-oct) publica en este repo el UD-IQ3_XXS "
+                   "SIN modulo MTP (13,211,155,424 B, SHA256 9c964e65...88fbe) "
+                   "y sin ninguna variante -MTP: NO es el archivo del hito N2 "
+                   "y p5 lo rechazaria por SHA despues de horas de descarga")
 GO_PCT, NOGO_PCT = 15.0, 5.0
 DISCO_MIN_GB = 16.0      # para la descarga en D:
 DISCO_HIGIENE_GB = 25.0  # aviso de higiene en C: (pagefile vive en C:)
@@ -680,6 +708,17 @@ def _quita_modelo_de_flags(flags):
 
 def paso4(args, rutas, estado):
     print(bold(cyan("\n=== P4 - descarga UD-IQ3_XXS (corre cuando el rig NO mide) ===")))
+    if args.repo == REPO_ALT and not args.fuerza:
+        fatal("el repo alternativo esta DESAUTENTICADO: %s" % REPO_ALT_MOTIVO,
+              ["usa el repo por defecto (%s)" % REPO_DEFAULT,
+               "si la descarga se corto, re-ejecuta p4 igual: hf RETOMA donde iba",
+               "si de verdad quieres el repo ALT: --fuerza (queda escrito, y p5 "
+               "rechazara el archivo por SHA salvo que unsloth lo arregle)"])
+    if args.repo == REPO_ALT and args.fuerza:
+        informe(rutas["informe"], "P4 repo ALT usado con --fuerza",
+                ["- %s" % REPO_ALT_MOTIVO,
+                 "- el archivo bajado NO pasara el SHA256 de p5 salvo que "
+                 "unsloth lo haya cambiado de vuelta"])
     if not estado["n3"].get("cerrado") and not args.fuerza:
         fatal("la puerta p3 no cerro el N3 (veredicto: %s)"
               % (estado["n3"].get("veredicto_sanity") or "SIN P3"),
@@ -1042,7 +1081,9 @@ def main():
     ap.add_argument("--veredicto", help="p3: OK | FALLA (cierra el N3)")
     ap.add_argument("--tag", help="p3: etiqueta de la carpeta de sanity")
     ap.add_argument("--repo", default=REPO_DEFAULT,
-                    help="p4: repo HF (def: %s; ALT mismo archivo y SHA: %s)"
+                    help="p4: repo HF (def: %s). El ALT (%s) esta "
+                         "DESAUTENTICADO en vivo 29-oct: sirve la variante "
+                         "SIN MTP y p4 lo rechaza"
                          % (REPO_DEFAULT, REPO_ALT))
     ap.add_argument("--dry-run", action="store_true", help="p4: mostrar sin descargar")
     ap.add_argument("--sin-humo", action="store_true", help="p5: solo certificar, sin server")

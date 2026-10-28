@@ -218,3 +218,14 @@ Pedido del Director (28-oct-2026): "yo hago doble click y hace todo automaticame
 **Paperería cazada de paso:** la ronda 35 anunciaba "38 checks" y la batería ejecutaba en realidad 46 — conteo a la baja corregido (el contador ahora es dinámico).
 
 **Batería:** test_campana_mock.py pasa de 46 a **65 checks ejecutados TODO VERDE** (N01-N14 nuevos: puerta tras YA-PROMOVIDA, -np 20 no engaña, cancelaciones escritas, higiene que avisa en ambos discos, json roto no revienta, helpers puros, paleta, veredicto que actualiza pasos["3"], pausa de doble click, Ctrl+C limpio, forense acumulativo con 4 intentos, RESUMEN archivado). Regresión de la casa 5/5 VERDE (abrir, chatear, barrido, diagnostico, barrido-n3). py_compile OK. test_faseD_n1 SIN TOCAR (el diff confirma: cero cambios fuera del campana, su test y el bat nuevo).
+
+---
+
+## Anexo R37 — Verificación de seguridad EN VIVO del objetivo N2 (2026-10-29)
+
+Pedido del Director: "realiza una verificacion de seguridad del archivo". Cuatro candadas contra la API pública de HuggingFace + la cadena local del repo:
+
+1. **El paquete es auténtico [F]:** la API pública publica HOY `Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf` en `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` con **14,069,266,720 bytes y SHA256 `36f9ec0e…7150` — idénticos a los pinados en el script desde r35** (comparados al carácter). El almacén es de la org oficial unsloth, no gated, sin banner de seguridad. Nadie cambió nada en el estante.
+2. **REPO_ALT desautenticado [F — el único ROJO]:** `unsloth/Qwen3.6-35B-A3B-GGUF` sirve el MISMO nombre de archivo pero **SIN el módulo MTP**: 13,211,155,424 B (13.21 GB), SHA256 `9c964e65…88fbe`, y CERO variantes -MTP entre sus 23 GGUF. La nota de r35/r36 "mismo archivo, mismo SHA" era FALSA (el N2 lo tenía escrito: el sin-MTP pesa 858 MB menos = el módulo nextn). Haberlo usado habría costado una descarga nocturna de 13 GB que p5 rechaza por SHA. **Fix (campana v1.2):** p4 rechaza el repo ALT con FATAL nominado ANTES de descargar (--fuerza lo salta dejándolo escrito); el fallback real es re-ejecutar p4 contra el repo por defecto (hf retoma donde iba).
+3. **Aclaración del "13 GB":** la cifra "13.2 GB" del PASO 6 es la foto vieja de la variante sin-MTP (ronda 33, antes de los inventarios al byte de las rondas 6-8). El objetivo del hito cerrado por SHA es el de **14.07 GB con nextn dentro**: RAM ≈ igual que hoy; la ganancia = calidad-por-byte (frontera Pareto: unsloth 14/26 posiciones, mudler/APEX ninguna [F]) + el draft de la fase E incluido sin segunda descarga.
+4. **Cadena local intacta:** git status limpio; constantes del script == docs (comparación programática); batería 65 → **67 checks TODO VERDE** (E13b/E13c nuevos) + regresión de la casa 5/5 + py_compile OK; configs/barridos/bats SIN TOCAR.

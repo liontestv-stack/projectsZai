@@ -341,6 +341,20 @@ try:
 except SystemExit:
     check("E13 p4 sin cliente hf = FATAL con pista de pip", True)
 
+# E13b/E13c — REPO_ALT desautenticado (verificacion de seguridad en vivo r37):
+# el repo ALT sirve el archivo SIN MTP (otra huella) -> p4 debe rechazarlo
+# ANTES de descargar, y --fuerza debe dejarlo escrito en el informe.
+try:
+    cam.paso4(args(dir=BASE, repo=cam.REPO_ALT), r, e)
+    check("E13b p4 repo ALT sin --fuerza = FATAL", False)
+except SystemExit:
+    check("E13b p4 repo ALT sin --fuerza = FATAL (desautenticado 29-oct)", True)
+rc = cam.paso4(args(dir=BASE, repo=cam.REPO_ALT, dry_run=True, fuerza=True), r, e)
+con_fuerza_escrito = os.path.exists(r["informe"]) and (
+    "repo ALT usado con --fuerza" in open(r["informe"], encoding="utf-8").read())
+check("E13c p4 repo ALT con --fuerza + dry-run pasa y queda escrito",
+      rc == 0 and con_fuerza_escrito)
+
 # pasos guiados
 a, r, e = rutas()
 builtins.input = lambda *a, **k: "re-ancla 21.9 t/s con modelo nuevo"
