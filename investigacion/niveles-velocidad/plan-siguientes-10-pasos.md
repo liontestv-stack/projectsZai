@@ -135,3 +135,45 @@ py barrido-n3-eficiencia.py --logs D:\ZLia\faseN3-np2-b3 --solo ancla,slots,ancl
 - **Días lentos/rápidos (17.4 vs 21.5)** — por eso ancla por sesión SIEMPRE; el techo ya se tocó una vez (R32) pero solo la mediana lo convierte en hecho.
 - **No apilar sin medir** — NP2+CMS1024, y en general cualquier combo nuevo = su propia mediana antes de tocar la receta.
 - **El cuant viejo y las carpetas de evidencia NUNCA se borran** — fallback y referencia histórica (append-only).
+
+---
+
+# REVISIÓN R34 — ORDEN MEJORADO DE LOS 10 PASOS (2026-10-28, pedido del Director: "mejora el orden")
+
+**Naturaleza del cambio:** NO es barajar por gusto — es mover 3 piezas fuera de la ruta crítica, adelantar 2 higiene/verificación que hoy pagan intereses después, y estacionar 1 decisión que no bloquea nada. El método, los criterios de salida y la tesis RAM quedan intactos.
+
+## Las 6 mejoras reales (ANTES → AHORA → POR QUÉ)
+
+1. **La higiene de disco se ADELANTA a la mediana.** ANTES: limpiar C: era preparación del N2 (paso 6, días después). AHORA: primer movimiento de todos. POR QUÉ: el pagefile vive en C: y un C: al 6% puede contaminar con swap TODAS las mediciones que vienen (mediana, N1 formal) — es higiene de medición, no solo logística de descarga; además es el único prerequisito de la descarga.
+2. **La descarga de 13.2 GB SALE DE LA RUTA CRÍTICA.** ANTES: bloqueaba el paso 7 y venía después del N1 formal. AHORA: se lanza apenas cierra el N3 y corre en TIEMPO DE RELOJ (noche / entre sesiones — nunca en paralelo con una corrida de medición, higiene R28). POR QUÉ: es el único ítem de horas de toda la ruta; serializado cuesta una tarde, en paralelo de reloj cuesta 0 minutos de rig. Cuando llegue el turno del N2, el modelo ya estará ahí.
+3. **Verificación + humo del cuant ADELANTADA (fail-fast).** ANTES: SHA256 + parser venían amarrados al trabajo de dosis del N2. AHORA: en cuanto termina la descarga, 10-15 min de verificación (SHA256 `36f9ec0e…` + parser `nextn.*` + primer arranque). POR QUÉ: si el archivo vino roto o el parser no ve el MTP, se sabe HOY con tiempo de re-descargar — no una semana después con la campaña ya montada encima.
+4. **Ruta crítica simplificada: mediana → promoción → sanity SIN escalas.** ANTES: el paso 2 (cosecha + decisión CMS1024) estaba EN la ruta crítica. AHORA: la cosecha es trabajo mío entre pasos (minutos, cero rig) y la decisión CMS1024 queda ESTACIONADA como plan B — solo se activa si NP2 NO-GO (o después de campaña, si sobran ganas). POR QUÉ: si NP2 aguanta (+22.8%), CMS1024 (+5.2%, roza el umbral) no bloquea nada y no merece un escalón propio.
+5. **El log NOCACHE (2 min) se lee en la misma visita al rig de la mediana.** ANTES: pendiente flotante "para cualquier sesión". AHORA: tarea anclada al paso 1. POR QUÉ: cierra temprano el hilo abierto de la anomalía TTFT (recalibración del repro) con costo cero.
+6. **El N1 formal mantiene su lugar lógico (tras la promoción) pero ahora LLENA LA VENTANA de espera de la descarga.** ANTES: N1 formal → luego pre-vuelo → luego descarga (todo serial). AHORA: N1 formal corre mientras el modelo baja en segundo plano de reloj. POR QUÉ: mismo certificado (receta final con -np 2 incluida), mejor calendario. El override ya demostró aplicar informalmente (escalera 17.80→35.12 t/s) → riesgo plan B bajo, no justifica adelantarlo.
+
+## Lo que NO cambia (y por qué — la parte seria de "mejorar el orden" es saber qué no tocar)
+
+- **N4 después de N2**: las dosis VRAM no transfieren entre cuants (N4 §17) — medirla antes es medir dos veces.
+- **RUTA 0 antes de N5**: el presupuesto del draft se mide con la VRAM ya cerrada (un dato, no una suposición).
+- **N1 formal tras la promoción**: su ancla es la receta final; adelantarlo mediría un mundo que ya cambió.
+- **Sanity con tool-calling en cada cambio de cuant; mediana de 3; ancla por sesión; no apilar sin medir.**
+- **La tesis RAM**: higiene (R28) + ~1.05 GB del cuant nuevo — sin cirugía.
+
+## El orden mejorado (esta tabla REEMPLAZA a la de R33)
+
+| # | Paso | Quién | Costo de rig | Cambio vs R33 | Criterio de salida |
+|---|------|-------|--------------|---------------|--------------------|
+| 1 | Higiene C: (≥25 GB libres) + mediana de 3 de NP2 (b2/b3) + leer 12-NOCACHE.log | Director | ~35-45 min | **ADELANTADO** (higiene era paso 6; NOCACHE flotaba) | mediana ≥+15% = GO; <5pp = NO-GO |
+| 2 | Promoción `-np 2` en FLAGS_BASE | Director | 5 min | **DIRECTO** (ya sin escala CMS1024) | server arriba + auditoría VERDE |
+| 3 | Sanity 20 prompts (el juez) → CIERRE del N3 | Director | ~20-30 min | igual | 20/20 o revert+lección |
+| 4 | **Lanzar descarga UD-IQ3_XXS** (13.2 GB, entre sesiones/de noche) | Director (0 min activos) | horas de reloj | **SALE DE LA RUTA CRÍTICA** (era paso 6) | descarga completa |
+| 5 | Verificación + humo del cuant nuevo (SHA256 + parser nextn.* + primer arranque) | Director | ~10-15 min | **NUEVO paso** (fail-fast; antes viajaba dentro del N2) | SHA clava + parser ve MTP (o plan B draft) |
+| 6 | N1 formal (BARRIDO-N1.bat v1.2.1) | Director | ~50-65 min | mantiene lógica, llena la ventana de la descarga | modo dual ratificado con mediana |
+| 7 | N2 dosis re-aplicadas + sanity del cuant | Director + LAIA | 2-3 sesiones | igual (ya sin carga de descarga/verificación) | ≥+8% t/s + ~+1 GB RAM |
+| 8 | N4 escalera VRAM sobre cuant nuevo | Director + LAIA | 2-3 sesiones | igual | sin cliff + pageouts ≈0 |
+| 9 | RUTA 0 (b11901, 2 zips) + re-auditoría + test cache-reuse | LAIA + Director | 1 sesión + re-ancla | igual (los 2 zips también pueden bajar en paralelo de reloj) | reuse vivo o motivo cerrado |
+| 10 | N5 duelo spec vs NP2 + receta final con backup | Director + LAIA | fase E + S | igual | ≥+25% [M] o NP2 se queda |
+
+**La ruta crítica queda en ~60-90 min de rig para tener el N3 cerrado y la descarga ya corriendo**: higiene+mediana → promoción → sanity → lanzar descarga. Todo lo demás hereda el tiempo libre.
+
+**Regla nueva de calendario que introduce esta revisión:** las descargas (N2 hoy; zips de RUTA 0 cuando toque) corren cuando el rig NO mide; si una sesión de medición cae en medio de una descarga, la descarga se pausa — ninguna medición compite con el disco.
