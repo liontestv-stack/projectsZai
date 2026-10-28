@@ -1,0 +1,232 @@
+m==============================================================================
+mbarrido-n3-eficiencia v1.1 (2026-10-28, prevuelo completo PC+modelo+nivel)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+mFATAL: no existe el dump de flags: D:\ZLia\llama-flags-nuevo.txt (el script NO arranca sin su fuente de verdad)
+m==============================================================================
+mbarrido-n3-eficiencia v1.1 (2026-10-28, prevuelo completo PC+modelo+nivel)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+m[0.5] PREVUELO COMPLETO: PC + modelo + nivel (~1-2 min por el sha256 del modelo; --sin-sha256 lo salta)
+Traceback (most recent call last):
+  File "D:\ZLia\barrido-n3-eficiencia.py", line 2307, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "D:\ZLia\barrido-n3-eficiencia.py", line 2188, in main
+    pc_d = dossier_pc(con_nvidia=not args.sin_nvidia)
+  File "D:\ZLia\barrido-n3-eficiencia.py", line 920, in dossier_pc
+    "son 2)" % (len(palos), fmt(sum(caps) / (1024 ** 3), 1),
+    ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                "/".join(vels))
+                ~~~~~~~~~~~~~~~
+TypeError: not all arguments converted during string formatting
+m==============================================================================
+mbarrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+mFATAL: /health ya responde en el puerto 9931. Hay un server vivo (medir con el falsea todo). Cerrarlo o relanzar con --si.
+m==============================================================================
+mbarrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+mFATAL: /health ya responde en el puerto 9931. Hay un server vivo (medir con el falsea todo). Cerrarlo o relanzar con --si.
+m==============================================================================
+mbarrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+mFATAL: /health ya responde en el puerto 9931. Hay un server vivo (medir con el falsea todo). Cerrarlo o relanzar con --si.
+m==============================================================================
+mbarrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+m[0.5] PREVUELO COMPLETO: PC + modelo + nivel (~1-2 min por el sha256 del modelo; --sin-sha256 lo salta)
+  sha256... 2/13 GB
+  sha256... 4/13 GB
+  sha256... 6/13 GB
+  sha256... 8/13 GB
+  sha256... 10/13 GB
+  sha256... 12/13 GB
+m[0.5] PREVUELO COMPLETO (detalle total en el informe, seccion 0)
+  PC     : Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz (4 nucleos / 8 hilos, 3600 MHz max)
+           2 modulos x 16.0 GB a 2666 MT/s (dual channel si son 2) · Microsoft Windows 11 Home Single Language · 64 bits · build 26200 (version 10.0.26200)
+           libre 12455 MiB de 16317 MiB (24% en uso) · plan: Máximo rendimiento
+           comepanes de RAM: explorer 317 MB, MsMpEng 217 MB, dwm 168 MB, TextInputHost 89 MB
+  MODELO : Qwen3.6 35B A3B Uncensored Heretic Native MTP Preserved · 14273277376 bytes (bytes OK) · server build OK
+           sha256: e4eae0e289b36039faa26f95...
+  NIVEL  : Orden aprobado (ronda 12): N1 -> N3 -> N2 -> N4 -> RUTA 0 + N5. Estado hoy: N1 medido (k=8 techo 21.53 / k=4 +...
+           refs [M]: 21.53 ancla · 22.49 NCM · 21.57 CRAM · 21.39 SHIFT · k=4 28.85-29.13
+m[1] CORRIDA: 13 configs (pausa termica 60 s cada 8)
+m  [01] N3-ANCLA: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.02.506.506 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.02.506.516 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.02.506.526 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.02.506.555 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.05.138.316 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.05.138.539 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.05.189.531 E llama_model_load: error loading
+m  [02] N3-CRAM512: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.884.765 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.884.774 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.884.784 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.884.815 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.945.708 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.945.717 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.01.996.561 E llama_model_load: error loading
+m  [03] N3-CTXCP4: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.876.682 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.876.691 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.876.701 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.876.731 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.957.929 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.957.939 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.02.007.148 E llama_model_load: error loading
+m  [04] N3-CMS1024: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.869.186 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.869.198 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.869.207 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.869.235 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.927.204 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.927.213 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.01.976.382 E llama_model_load: error loading
+m  [05] N3-REUSE: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.880.297 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.880.310 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.880.319 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.880.348 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.947.232 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.947.243 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.01.997.206 E llama_model_load: error loading
+m  [06] N3-SHIFT: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.874.275 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.874.285 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.874.295 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.874.324 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.966.136 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.966.144 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.02.015.618 E llama_model_load: error loading
+m  [07] N3-NP2: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.882.476 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.882.485 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.882.495 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.882.525 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.989.563 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.989.571 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.02.038.093 E llama_model_load: error loading
+m  [08] N3-NCM37C4-UB: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m18.78 t/s | prefill 22 tok/s | agg 19 tok/s | mVALIDO m; auto-fit declino (ngl ya fijado por usuario; esperado, benigno)
+m  pausa termica 60 s (protege la medicion)...
+m  [09] N3-COMBO-R: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.967.018 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.967.027 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.967.037 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.967.064 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.02.009.144 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.02.011.457 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.02.061.386 E llama_model_load: error loading
+m  [10] N3-COMBO-T: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.23 s -> tfin=5.01 s (PLANO)
+    decode m19.72 t/s | prefill 25 tok/s | agg 20 tok/s | mVALIDO m; auto-fit declino (ngl ya fijado por usuario; esperado, benigno); cache_reuse NO SOPORTADA en este contexto (#24055): la via queda condicionada a build/colocacion -> RUTA 0 gana un motivo
+m  [11] N3-NP2-C: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.953.012 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.953.022 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.953.031 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.953.059 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.02.032.931 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.02.035.273 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.02.084.149 E llama_model_load: error loading
+m  [12] N3-NOCACHE: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.863.578 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.863.591 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.863.603 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.863.631 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.773.471 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.773.480 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.01.820.050 E llama_model_load: error loading
+m  [13] N3-ANCLA-FIN: lanzando server...
+m    FAIL carga (carga fallida: el server murio durante la carga (exit 1) (fit abortado: VRAM insuficiente para esta config))
+m    cola del log: 0.00.883.516 W model has unused tensor blk.40.nextn.eh_proj.weight (size = 8912896 bytes) -- ignoring | 0.00.883.527 W model has unused tensor blk.40.nextn.enorm.weight (size = 8192 bytes) -- ignoring | 0.00.883.538 W model has unused tensor blk.40.nextn.hnorm.weight (size = 8192 bytes) -- ignoring | 0.00.883.569 W model has unused tensor blk.40.nextn.shared_head_norm.weight (size = 8192 bytes) -- ignoring | 0.01.809.945 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 12535.81 MiB on device 0: cudaMalloc failed: out of memory | 0.01.809.954 E ggml_backend_buft_alloc_buffer_n_default: failed to allocate CUDA0 buffer of size 13144752640 | 0.01.859.405 E llama_model_load: error loading
+m[2] INFORME...
+m  D:\ZLia\faseD-logs\faseN3-INFORME.md
+m  D:\ZLia\faseD-logs\faseN3-resultados.csv
+m  D:\ZLia\faseD-logs\faseN3-datos.json
+m  D:\ZLia\faseD-logs\faseN3-consola.log
+
+mPara pasar al analisis: faseN3-INFORME.md + faseN3-resultados.csv (+ carpeta logs-config si se pide).
+m==============================================================================
+mbarrido-n3-eficiencia v1.3 (2026-10-28, hotfix de campo 2: colocacion por config + certificado de receta + ancla-muerta=FATAL; 11 configs murieron sin -cmoe en la 1a corrida completa)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseD-logs
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 13 configs, todos los tokens verbatim en el dump, cero prohibidas
+m  VERDE: receta diaria certificada en el ancla (incluida la colocacion -cmoe)
+m  VERDE: colocacion por config en 13/13 configs
+m[0.5] PREVUELO COMPLETO: PC + modelo + nivel (~1-2 min por el sha256 del modelo; --sin-sha256 lo salta)
+  sha256... 2/13 GB
+  sha256... 4/13 GB
+  sha256... 6/13 GB
+  sha256... 8/13 GB
+  sha256... 10/13 GB
+  sha256... 12/13 GB
+m[0.5] PREVUELO COMPLETO (detalle total en el informe, seccion 0)
+  PC     : Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz (4 nucleos / 8 hilos, 3600 MHz max)
+           2 modulos, 16.0 GB en total a 2666 MT/s (dual channel si son 2) · Microsoft Windows 11 Home Single Language · 64 bits · build 26200 (version 10.0.26200)
+           libre 12281 MiB de 16317 MiB (25% en uso) · plan: Máximo rendimiento
+           comepanes de RAM: explorer 318 MB, MsMpEng 313 MB, dwm 165 MB, StartMenuExperienceHost 93 MB
+  MODELO : Qwen3.6 35B A3B Uncensored Heretic Native MTP Preserved · 14273277376 bytes (bytes OK) · server build OK
+           sha256: e4eae0e289b36039faa26f95...
+  NIVEL  : Orden aprobado (ronda 12): N1 -> N3 -> N2 -> N4 -> RUTA 0 + N5. Estado hoy: N1 medido (k=8 techo 21.53 / k=4 +...
+           refs [M]: 21.53 ancla · 22.49 NCM · 21.57 CRAM · 21.39 SHIFT · k=4 28.85-29.13
+m[1] CORRIDA: 13 configs (pausa termica 60 s cada 8)
+m  resume: 2 ya medidas, 11 pendientes
+m  [01] N3-ANCLA: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.29 s -> tfin=5.15 s (PLANO)
+    decode m17.44 t/s | prefill 17 tok/s | agg 18 tok/s | mVALIDO m
+m  [02] N3-CRAM512: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m17.94 t/s | prefill 16 tok/s | agg 19 tok/s | mVALIDO m
+m  [03] N3-CTXCP4: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m17.84 t/s | prefill 17 tok/s | agg 18 tok/s | mVALIDO m
+m  [04] N3-CMS1024: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m18.34 t/s | prefill 17 tok/s | agg 18 tok/s | mVALIDO m
+m  [05] N3-REUSE: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.26 s -> tfin=5.03 s (PLANO)
+    decode m17.89 t/s | prefill 19 tok/s | agg 18 tok/s | mVALIDO m; cache_reuse NO SOPORTADA en este contexto (#24055): la via queda condicionada a build/colocacion -> RUTA 0 gana un motivo
+m  [06] N3-SHIFT: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.33 s -> tfin=5.13 s (PLANO)
+    decode m18.26 t/s | prefill 23 tok/s | agg 18 tok/s | mVALIDO m; cache_reuse NO SOPORTADA en este contexto (#24055): la via queda condicionada a build/colocacion -> RUTA 0 gana un motivo
+m  [07] N3-NP2: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m21.41 t/s | prefill 26 tok/s | agg 21 tok/s | mVALIDO m
+m  [08] N3-NCM37C4-UB: ya medida (valida), salto
+m  [09] N3-COMBO-R: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.23 s -> tfin=5.08 s (PLANO)
+    decode m18.17 t/s | prefill 20 tok/s | agg 19 tok/s | mVALIDO m; cache_reuse NO SOPORTADA en este contexto (#24055): la via queda condicionada a build/colocacion -> RUTA 0 gana un motivo
+m  [10] N3-COMBO-T: ya medida (valida), salto
+m  pausa termica 60 s (protege la medicion)...
+m  [11] N3-NP2-C: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.29 s -> tfin=5.10 s (PLANO)
+    decode m20.53 t/s | prefill 24 tok/s | agg 21 tok/s | mVALIDO m; cache_reuse NO SOPORTADA en este contexto (#24055): la via queda condicionada a build/colocacion -> RUTA 0 gana un motivo
+m  [12] N3-NOCACHE: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.33 s -> tfin=5.13 s (PLANO)
+    decode m17.60 t/s | prefill 19 tok/s | agg 19 tok/s | mVALIDO m
+m  [13] N3-ANCLA-FIN: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m17.74 t/s | prefill 17 tok/s | agg 18 tok/s | mVALIDO m
+m[2] INFORME...
+m  D:\ZLia\faseD-logs\faseN3-INFORME.md
+m  D:\ZLia\faseD-logs\faseN3-resultados.csv
+m  D:\ZLia\faseD-logs\faseN3-datos.json
+m  D:\ZLia\faseD-logs\faseN3-consola.log
+
+mPara pasar al analisis: faseN3-INFORME.md + faseN3-resultados.csv (+ carpeta logs-config si se pide).
