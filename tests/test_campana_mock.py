@@ -636,16 +636,32 @@ check("N12 2a corrida del mismo tag archiva el RESUMEN anterior",
 srv2.terminate()
 srv2.wait(timeout=10)
 
-# N13: el repo alternativo (mismo archivo y SHA) esta documentado
+# N13: el repo alternativo existe y es DISTINTO del default (desde r37 está
+# DESAUTENTICADO en vivo: sirve el cuant SIN MTP; p4 lo rechaza con FATAL —
+# ver E13b/E13c). Aquí solo se pina la identidad de la constante.
 check("N13 REPO_ALT presente y distinto del default",
       cam.REPO_ALT == "unsloth/Qwen3.6-35B-A3B-GGUF" and cam.REPO_ALT != cam.REPO_DEFAULT)
+
+# N15: doble click con estado VIRGEN (el rig del Director antes del p1) ->
+# el titulo muestra "sin empezar", NO un vacio (paperría cazada en r38:
+# la clave "actualizado" nace con cadena vacía y .get(default) no cubria).
+# Se usa el estado de fabrica EXACTO (leer_estado sobre archivo inexistente),
+# no el del disco compartido (que los tests E ya dejaron promovido).
+r_virgen = cam._rutas(args(dir=BASE))
+e_virgen = {"version": cam.VERSION, "actualizado": "", "pasos": {}, "n3": {}}
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    cam.mostrar_estado(r_virgen, e_virgen)
+salida = buf.getvalue()
+check("N15 estado virgen: titulo 'sin empezar' (no vacio) + 10 PENDIENTE",
+      "=== CAMPANA - sin empezar ===" in salida and salida.count("PENDIENTE") == 10)
 
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E24 + N01-N14)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E24 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

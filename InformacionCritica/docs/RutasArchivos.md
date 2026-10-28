@@ -186,3 +186,8 @@ Ejecución real del script en la máquina del Director (D:\llama.cpp\bin-new):
 - Batería: test_campana_mock.py 65 → 67 checks TODO VERDE (E13b: ALT sin --fuerza = FATAL; E13c: ALT con --fuerza + dry-run pasa y queda escrito en campana-INFORME.md). Regresión casa 5/5 VERDE (abrir, chatear E2E, barrido, diagnostico, barrido-n3). py_compile OK. test_faseD_n1 SIN TOCAR; configs/barridos/bats SIN TOCAR.
 - Docs append-only: anexo R37 en plan-siguientes-10-pasos.md, estado ronda 37 en README niveles-velocidad, Registro 37-a aquí.
 - Para el rig: re-copiar campana-10-pasos.py v1.2 a D:\ZLia (CAMPANA.bat sin cambios); p4 sin --repo no cambia nada (REPO_DEFAULT sigue siendo el bueno).
+
+## Registro 38-a — PAPERERÍA DE CAMPO: título vacío con estado virgen (LAIA, 2026-10-29)
+- El Director pegó de campo el doble click con estado virgen: el título salía "=== CAMPANA -  ===" VACÍO. Causa raíz: `"actualizado": ""` nace vacío (fábrica del estado) y `.get("actualizado", "sin empezar")` solo cubre clave AUSENTE, no vacía. Fix en campana-10-pasos.py v1.2 → v1.3: `estado.get("actualizado") or "sin empezar"`; tras cualquier paso el título muestra la fecha/hora real (guardar_estado).
+- Batería 67 → 68 checks TODO VERDE (N15: título 'sin empezar' + 10 PENDIENTE con estado de fábrica exacto, no el del disco compartido de los tests E). Regresión casa 5/5 VERDE; py_compile OK; configs/barridos/bats SIN TOCAR.
+- Para el rig: re-copiar campana-10-pasos.py v1.3 a D:\ZLia (cosmético; no cambia ninguna lógica ni puertas).

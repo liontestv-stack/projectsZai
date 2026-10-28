@@ -103,6 +103,15 @@ del archivo"). Verificacion contra la API publica de HuggingFace:
      real sigue siendo re-ejecutar p4 contra REPO_DEFAULT (hf RETOMA la
      descarga cortada, no empieza de cero).
 Bateria: 67 checks (E13b/E13c nuevos).
+
+CHANGELOG v1.3 (2026-10-29, ronda 38 — paperría de campo vista por el propio
+Director en el rig, doble click con estado virgen): el título imprimía
+"=== CAMPANA -  ===" VACIO — el respaldo "sin empezar" estaba escrito para
+clave AUSENTE (.get con default), pero la clave "actualizado" nace con
+cadena VACIA y .get() la devuelve tal cual. Fix: `or "sin empezar"` (cubre
+ausente Y vacía). Tras cualquier paso, el título vuelve a mostrar la fecha
+y hora real (guardar_estado la estampa en cada guardado). Bateria: 68
+checks (N15 nuevo: estado virgen -> titulo 'sin empezar' + 10 PENDIENTE).
 """
 import argparse
 import csv
@@ -118,7 +127,7 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = "campana-10-pasos v1.2 (2026-10-29, verificacion de seguridad EN VIVO del objetivo N2: objetivo autentico confirmado al byte y al SHA; REPO_ALT desautenticado y bloqueado con FATAL nominado; pedido del Director 'realiza una verificacion de seguridad del archivo')"
+VERSION = "campana-10-pasos v1.3 (2026-10-29, paperría de campo: título del estado vacío con estado virgen -> 'sin empezar'; verificacion de seguridad r37 + revision r36 incluidas)"
 
 
 def _pausa_doble_click(es_tty=None):
@@ -1045,7 +1054,7 @@ AMARILLOS_ESTADO = ("DUDOSO", "PENDIENTE", "EN-ESPERA-DEL-JUEZ", "INCOMPLETO",
 
 
 def mostrar_estado(rutas, estado):
-    print(bold(cyan("\n=== CAMPANA - %s ===" % estado.get("actualizado", "sin empezar"))))
+    print(bold(cyan("\n=== CAMPANA - %s ===" % (estado.get("actualizado") or "sin empezar"))))
     print("  informe append-only: %s" % rutas["informe"])
     tabla = [("1", "mediana NP2 (higiene + NOCACHE)"), ("2", "promocion -np 2"),
              ("3", "sanity 20 prompts -> cierra N3"), ("4", "descarga UD-IQ3_XXS"),
