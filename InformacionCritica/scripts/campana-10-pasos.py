@@ -39,9 +39,10 @@ REGLAS que el script hace cumplir:
   - las descargas corren cuando el rig NO mide; si hay que medir, se pausa.
   - FATAL nominado con forense: si algo muere, se imprime por que y donde
     mirar, y el estado queda guardado.
-  - DOBLE CLICK = MODO CAMPANA: foto del estado + OFERTA del paso que toca;
-    NADA corre sin un SI escrito del Director (las puertas internas de cada
-    paso siguen mandando).
+  - DOBLE CLICK = MODO AUTO (v1.5): los pasos 1..6 corren SOLOS, en orden,
+    sin preguntas; cada confirmación auto-aceptada queda escrita en el
+    informe; las puertas rojas y el SHA256 DETIENEN el turno limpio (nunca
+    se saltan solos). --ofrecer = MODO CAMPANA de r39 (foto + oferta con SI).
 
 Todo vive junto al script (en el rig: D:\ZLia): campana-estado.json,
 campana-INFORME.md, campana-sanity-<tag>/, models/. --dir cambia la base.
@@ -127,6 +128,32 @@ las puertas y confirmaciones internas de cada paso siguen mandando (el SI
 de aquí solo abre la puerta del paso; el paso luego pide lo suyo). Todo lo
 demás intacto: 'estado' explicito sigue siendo solo foto, CAMPANA.bat pN
 sigue funcionando igual. Bateria 68 -> 73 checks (U16/U17 + E25/E26/E27).
+
+CHANGELOG v1.5 (2026-10-29, ronda 41 — pedido del Director: "quiero dejarlo y
+que haga todo automaticamente... que no me pida 'ejecutar' o escribir algo,
+inicio y aunque tarde 2 horas dejarlo haciendo cosas y probando diferentes
+cosas dejando siempre un log; prioridad es seguridad ante malware"). MODO AUTO:
+  1. DOBLE CLICK (sin argumentos) = MODO AUTO: corre los pasos 1..6 en orden
+     sin NINGUNA pregunta; cada confirmación interna (EJECUTAR/PROMOVER/
+     DESCARGAR/LANZAR) se auto-acepta y DEJA ESCRITA su aceptación en el
+     informe (append-only). --ofrecer conserva el MODO CAMPANA de r39.
+  2. PREVUELO del AUTO antes de mover una sola medida: puerto libre, RAM
+     (regla R28), config.txt con FLAGS_BASE y RUTA_SERVER reales, cliente hf
+     y espacio en D: — si la noche no puede completarse, muere a los 5
+     segundos con el motivo, no a las 2 horas.
+  3. P3 en AUTO se basta solo: si no hay server vivo arranca UNO PROPIO con
+     la receta diaria de config.txt (lo apaga al terminar), corre los 20
+     prompts y aplica un veredicto OBJETIVO (0 errores HTTP + 20/20 con
+     carne + 3 anclas deterministas: 391/verde/Valparaiso) que CIERRA el N3
+     y queda marcado como revocable por el juez humano (p3 --veredicto).
+  4. SEGURIDAD ANTE MALWARE (no negociable, ni en AUTO): solo el repo oficial
+     (REPO_ALT sigue desautenticado y FATAL), el SHA256 certificado es
+     obligatorio ANTES de usar nada (p5 fail-fast), y --fuerza no existe en
+     AUTO (las puertas rojas DETIENEN el turno limpio, no se saltan).
+  5. P7..P10 quedan para la siguiente fase: sus instrumentos finos se
+     fabrican CON los resultados de 1..6 (regla de la casa); el AUTO para en
+     el FIN DE TURNO con todo escrito. Re-doble-click retoma donde quedó.
+Bateria 73 -> 84 checks (U18/U19 + E28-E33).
 """
 import argparse
 import csv
@@ -142,7 +169,15 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = "campana-10-pasos v1.4 (2026-10-29, MODO CAMPANA: doble click ofrece ejecutar el paso que toca con un SI escrito; puertas intactas; incluye verificacion r37 + paperría r38)"
+VERSION = ("campana-10-pasos v1.5 (2026-10-29, MODO AUTO: doble click = pasos 1..6 "
+           "sin preguntas, todo escrito en el informe; seguridad: repo oficial unico "
+           "+ SHA256 obligatorio antes de usar nada; --ofrecer conserva el modo "
+           "campana r39)")
+
+# MODO AUTO: cuando esta activo, las confirmaciones se auto-aceptan y quedan
+# escritas (evidencia append-only). NUNCA activa --fuerza: las puertas rojas
+# (repo ALT, SHA256, GO del p1) detienen el turno limpio, no se saltan.
+AUTO = {"on": False, "aceptadas": []}
 
 
 def _pausa_doble_click(es_tty=None):
@@ -280,6 +315,12 @@ def fatal(msg, pistas=()):
 
 
 def confirmar(palabra, pregunta):
+    if AUTO["on"]:
+        print(yellow("\n%s" % pregunta))
+        print(cyan("  [AUTO] aceptado automaticamente (la aceptacion queda escrita "
+                   "en el informe)."))
+        AUTO["aceptadas"].append("%s — %s" % (palabra, pregunta))
+        return True
     print(yellow("\n%s" % pregunta))
     try:
         resp = input(yellow("  escribe %s para confirmar (otra cosa cancela): " % bold(palabra)))
@@ -620,6 +661,76 @@ def _chat_uno(puerto, texto, timeout=180):
     return contenido, tps
 
 
+def _p3_corre_sanity(args, rutas, estado, carpeta, tag):
+    """Corre los 20 prompts contra el server vivo del puerto args.puerto (el
+    que llama comprueba antes que HAY server). Deja prompt-NN-*.txt + RESUMEN
+    (archivando el anterior si existe), guarda estado e informe, y devuelve
+    (fallas_http, respuestas) para que el AUTO aplique su veredicto objetivo."""
+    puerto = args.puerto
+    print(cyan("  server vivo en %d. %d prompts, 1 por uno..." % (puerto, SANITY_TOTAL)))
+    resumen, fallas, respuestas = [], 0, []
+    for i, (nombre, texto) in enumerate(SANITY_PROMPTS, 1):
+        try:
+            contenido, tps = _chat_uno(puerto, texto)
+        except Exception as e:
+            contenido, tps, fallas = "[ERROR HTTP] %r" % e, None, fallas + 1
+        respuestas.append((nombre, contenido))
+        with open(os.path.join(carpeta, "prompt-%02d-%s.txt" % (i, nombre)),
+                  "w", encoding="utf-8") as f:
+            f.write("PROMPT: %s\n\nRESPUESTA:\n%s\n" % (texto, contenido))
+        primera = contenido.strip().splitlines()[0][:70] if contenido.strip() else "(vacia)"
+        tps_s = "%.1f t/s" % tps if tps else "-"
+        estilo = green if "[ERROR" not in contenido and contenido.strip() else red
+        print(estilo("  %02d/%02d %-18s %-12s %s" % (i, SANITY_TOTAL, nombre, tps_s, primera)))
+        resumen.append("| %02d | %s | %s | %s |" % (i, nombre, tps_s, primera.replace("|", "/")))
+    if fallas:
+        print(red("  %d/%d prompts con error HTTP: revisa el log del server." % (fallas, SANITY_TOTAL)))
+    ruta_res = os.path.join(carpeta, "RESUMEN.md")
+    if os.path.exists(ruta_res):
+        # re-corrida del mismo tag: el resumen ANTERIOR se archiva (la
+        # evidencia de la casa nunca se pisa; el informe guarda todas)
+        viejo = os.path.join(carpeta, "RESUMEN-%s.md"
+                             % datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        os.replace(ruta_res, viejo)
+        print(gray("  resumen anterior archivado: %s" % os.path.basename(viejo)))
+    with open(ruta_res, "w", encoding="utf-8") as f:
+        f.write("# Sanity %s — %d prompts (juez: Director)\n\n"
+                "(respuestas completas en prompt-NN-*.txt junto a este archivo)\n\n"
+                "| # | tipo | velocidad | primera linea |\n|---|------|-----------|---------------|\n"
+                % (tag, SANITY_TOTAL))
+        f.write("\n".join(resumen) + "\n")
+    print(green("  resumen: %s" % ruta_res))
+    estado["pasos"]["3"] = {"estado": "EN-ESPERA-DEL-JUEZ", "carpeta": carpeta,
+                            "errores_http": fallas}
+    guardar_estado(rutas["estado"], estado)
+    informe(rutas["informe"], "P3 sanity %d prompts ejecutado (%s)" % (SANITY_TOTAL, tag),
+            ["- carpeta: %s" % carpeta, "- errores http: %d" % fallas,
+             "- esperando veredicto: p3 --veredicto OK|FALLA"])
+    return fallas, respuestas
+
+
+def _sanity_auto_veredicto(fallas, respuestas):
+    """(veredicto, motivos) — el criterio OBJETIVO del AUTO para el juez:
+    0 errores HTTP + 20/20 respuestas con carne + 3 anclas deterministas de
+    calidad (aritmetica 391, memoria 'verde', seguimiento 'Valparaiso').
+    El juez HUMANO sigue siendo el Director: el OK del AUTO es revocable
+    leyendo el RESUMEN y cerrando con p3 --veredicto FALLA (+ p2 --revert)."""
+    motivos = []
+    if fallas:
+        motivos.append("%d/%d prompts con error HTTP" % (fallas, SANITY_TOTAL))
+    contenido = {n: (t or "") for n, t in respuestas}
+    vacias = [n for n, t in contenido.items() if not t.strip()]
+    if vacias:
+        motivos.append("respuestas vacias: %s" % ", ".join(vacias))
+    if "391" not in contenido.get("matematica", ""):
+        motivos.append("ancla aritmetica (17x23=391) fallo")
+    if "verde" not in contenido.get("memoria-corta", "").lower():
+        motivos.append("ancla memoria (color favorito) fallo")
+    if "valpara" not in contenido.get("seguimiento", "").lower():
+        motivos.append("ancla seguimiento (ciudad) fallo")
+    return ("FALLA" if motivos else "OK"), motivos
+
+
 def paso3(args, rutas, estado):
     print(bold(cyan("\n=== P3 - sanity de 20 prompts (el juez) ===")))
     if args.veredicto:
@@ -647,55 +758,17 @@ def paso3(args, rutas, estado):
         fatal("la puerta p2 no esta PROMOVIDA (estado: %s)" % (p2.get("estado") or "SIN P2"),
               ["promueve con p2 primero (el sanity juzga la receta NUEVA)",
                "o --fuerza si sabes lo que haces (queda escrito)"])
-    puerto = args.puerto
-    if not health_ok(puerto):
-        fatal("no hay server vivo en el puerto %d" % puerto,
+    if not health_ok(args.puerto):
+        fatal("no hay server vivo en el puerto %d" % args.puerto,
               ["arranca el server como siempre (ABRIR-QWEN.bat) y reintenta",
                "o pasa --puerto si usa otro"])
     tag = args.tag or ("np2" if p2.get("estado") in ("PROMOVIDA", "YA-PROMOVIDA") else "libre")
     carpeta = os.path.join(rutas["base"], "campana-sanity-%s" % tag)
     os.makedirs(carpeta, exist_ok=True)
-    print(cyan("  server vivo en %d. %d prompts, 1 por uno..." % (puerto, SANITY_TOTAL)))
-    resumen, fallas = [], 0
-    for i, (nombre, texto) in enumerate(SANITY_PROMPTS, 1):
-        try:
-            contenido, tps = _chat_uno(puerto, texto)
-        except Exception as e:
-            contenido, tps, fallas = "[ERROR HTTP] %r" % e, None, fallas + 1
-        with open(os.path.join(carpeta, "prompt-%02d-%s.txt" % (i, nombre)),
-                  "w", encoding="utf-8") as f:
-            f.write("PROMPT: %s\n\nRESPUESTA:\n%s\n" % (texto, contenido))
-        primera = contenido.strip().splitlines()[0][:70] if contenido.strip() else "(vacia)"
-        tps_s = "%.1f t/s" % tps if tps else "-"
-        estilo = green if "[ERROR" not in contenido and contenido.strip() else red
-        print(estilo("  %02d/%02d %-18s %-12s %s" % (i, SANITY_TOTAL, nombre, tps_s, primera)))
-        resumen.append("| %02d | %s | %s | %s |" % (i, nombre, tps_s, primera.replace("|", "/")))
-    if fallas:
-        print(red("  %d/%d prompts con error HTTP: revisa el log del server." % (fallas, SANITY_TOTAL)))
-    ruta_res = os.path.join(carpeta, "RESUMEN.md")
-    if os.path.exists(ruta_res):
-        # re-corrida del mismo tag: el resumen ANTERIOR se archiva (la
-        # evidencia de la casa nunca se pisa; el informe guarda todas)
-        viejo = os.path.join(carpeta, "RESUMEN-%s.md"
-                             % datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        os.replace(ruta_res, viejo)
-        print(gray("  resumen anterior archivado: %s" % os.path.basename(viejo)))
-    with open(ruta_res, "w", encoding="utf-8") as f:
-        f.write("# Sanity %s — %d prompts (juez: Director)\n\n"
-                "(respuestas completas en prompt-NN-*.txt junto a este archivo)\n\n"
-                "| # | tipo | velocidad | primera linea |\n|---|------|-----------|---------------|\n"
-                % (tag, SANITY_TOTAL))
-        f.write("\n".join(resumen) + "\n")
-    print(green("  resumen: %s" % ruta_res))
+    _p3_corre_sanity(args, rutas, estado, carpeta, tag)
     print(yellow("  LEE las 20 respuestas (tu eres el catador) y cierra con:"))
     print("    py campana-10-pasos.py p3 --veredicto OK      (20/20 -> N3 CERRADO)")
     print("    py campana-10-pasos.py p3 --veredicto FALLA   (algo se rompio -> revert)")
-    estado["pasos"]["3"] = {"estado": "EN-ESPERA-DEL-JUEZ", "carpeta": carpeta,
-                            "errores_http": fallas}
-    guardar_estado(rutas["estado"], estado)
-    informe(rutas["informe"], "P3 sanity %d prompts ejecutado (%s)" % (SANITY_TOTAL, tag),
-            ["- carpeta: %s" % carpeta, "- errores http: %d" % fallas,
-             "- esperando veredicto: p3 --veredicto OK|FALLA"])
     return 0
 
 
@@ -1147,10 +1220,267 @@ def modo_campana(args, rutas, estado):
             5: paso5, 6: paso6}[n](args, rutas, estado)
 
 
+# ---------------- MODO AUTO (doble click, pedido del Director 29-oct) -------
+
+PASOS_AUTO = {1: paso1, 2: paso2, 4: paso4, 5: paso5, 6: paso6}
+AUTO_ULTIMO = 6   # p7..p10 son GUIADOS: sus instrumentos finos se fabrican
+                  # con los resultados de 1..6 (regla de la casa); el AUTO
+                  # termina su turno ahi, con todo escrito.
+
+
+def _prevuelo_auto(args, rutas, estado):
+    """(fatales, avisos) ANTES de mover una sola medida: si la noche no puede
+    completarse, mejor morir a los 5 segundos con el motivo que a las 2
+    horas. Solo FATALiza lo que bloquea SIEMPRE; lo demas son avisos."""
+    fatales, avisos = [], []
+    if health_ok(args.puerto):
+        fatales.append("hay un server vivo en el puerto %d: apagalo antes del "
+                       "AUTO (el rig debe estar quieto para medir)" % args.puerto)
+    ram = ram_sistema()
+    if ram:
+        libre_mib, total_mib = ram
+        usada = 100.0 * (total_mib - libre_mib) / max(total_mib, 1)
+        if usada >= 80.0:
+            fatales.append("RAM al %.0f%% usada ANTES de empezar (regla R28: cierra "
+                           "apps; si no, el barrido mide el pagefile, no la receta)" % usada)
+        elif usada >= 70.0:
+            avisos.append("RAM al %.0f%%: ideal cerrar apps antes de medir (R28)" % usada)
+    if not os.path.exists(rutas["config"]):
+        fatales.append("no esta config.txt en %s" % rutas["config"])
+    else:
+        cfg = leer_config(rutas["config"])
+        if not (cfg.get("FLAGS_BASE") or "").strip():
+            fatales.append("config.txt sin FLAGS_BASE (p2 no puede promover)")
+        if not (cfg.get("RUTA_SERVER") or "").strip():
+            fatales.append("config.txt sin RUTA_SERVER (p3/p5 no pueden arrancar server)")
+        elif not os.path.exists(cfg["RUTA_SERVER"]):
+            fatales.append("RUTA_SERVER no existe en disco: %s" % cfg["RUTA_SERVER"])
+    if not _binario_hf():
+        fatales.append("sin cliente de HuggingFace (hf): la descarga de p4 no puede "
+                       "correr (instala con: pip install -U \"huggingface_hub[cli]\")")
+    base_disco = rutas["models"] if os.path.isdir(rutas["models"]) else rutas["base"]
+    libre, _tot = gb_libres(base_disco)
+    if libre is not None and libre < DISCO_MIN_GB:
+        fatales.append("disco sin espacio para la descarga de 14.07 GB (%.1f GB "
+                       "libres, minimo %.0f)" % (libre, DISCO_MIN_GB))
+    candidatos = ([args.bat] if args.bat else
+                  [os.path.join(rutas["base"], "BARRIDO-N1.bat"),
+                   os.path.join(rutas["base"], "scripts", "BARRIDO-N1.bat")])
+    if not any(b and os.path.exists(b) for b in candidatos):
+        avisos.append("BARRIDO-N1.bat no encontrado: el AUTO llegara hasta p5 y "
+                      "parara limpio antes del N1 formal")
+    return fatales, avisos
+
+
+def _arranca_server_receta(rutas, args, log_path, timeout_s=420):
+    """Arranca el server DIARIO con la receta de config.txt (FLAGS_BASE +
+    FLAGS_GANADORAS, modelo actual incluido) y espera a que el health
+    responda. Devuelve el Popen: QUIEN LLAMA es dueno de apagarlo (nunca
+    toca servers ajenos). Patron de seguridad identico al humo de p5:
+    log propio acumulativo + fail-fast si el server muere en la carga."""
+    cfg = leer_config(rutas["config"])
+    servidor = cfg.get("RUTA_SERVER", "")
+    if not servidor or not os.path.exists(servidor):
+        fatal("RUTA_SERVER no valido para arrancar el server del sanity: %r" % servidor,
+              ["revisa RUTA_SERVER en config.txt"])
+    flags = (cfg.get("FLAGS_BASE", "") + " " + cfg.get("FLAGS_GANADORAS", "")).split()
+    cmd = [servidor] + flags + ["--host", "127.0.0.1", "--port", str(args.puerto)]
+    print(gray("  $ %s" % " ".join(cmd)))
+    flog = open(log_path, "a", encoding="utf-8")
+    flog.write("===== server del sanity AUTO %s (puerto %d) =====\n"
+               % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), args.puerto))
+    flog.flush()
+    proc = subprocess.Popen(cmd, stdout=flog, stderr=subprocess.STDOUT)
+    try:
+        fin = time.time() + timeout_s
+        while time.time() < fin:
+            if proc.poll() is not None:
+                fatal("el server del sanity murio durante la carga (rc=%s)" % proc.returncode,
+                      ["forense en %s" % log_path])
+            if health_ok(args.puerto):
+                break
+            time.sleep(2)
+        else:
+            fatal("el server del sanity no levanto en %d min" % (timeout_s // 60),
+                  ["forense en %s" % log_path])
+    except BaseException:
+        try:
+            proc.terminate()
+            proc.wait(timeout=10)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        raise
+    finally:
+        flog.close()
+    return proc
+
+
+def _auto_apaga(proc):
+    """Apaga SOLO el hijo que este AUTO lanzo (multiplataforma, sin taskkill
+    y sin riesgo de matar un server ajeno)."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=10)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _auto_informe_trail(rutas, etiqueta):
+    """Deja escritas en el informe las confirmaciones auto-aceptadas de este
+    tramo (evidencia append-only; vacia el acumulador)."""
+    if AUTO["aceptadas"]:
+        informe(rutas["informe"], "AUTO (%s): confirmaciones auto-aceptadas" % etiqueta,
+                ["- %s" % x for x in AUTO["aceptadas"]])
+        AUTO["aceptadas"] = []
+
+
+def _auto_detener(rutas, causa, lineas):
+    """Detencion LIMPIA del turno: todo lo hecho queda escrito y se explica
+    la causa. Devuelve rc 2 (nunca se salta una puerta roja)."""
+    _auto_informe_trail(rutas, "al detenerse")
+    informe(rutas["informe"], "AUTO DETENIDO: %s" % causa, lineas)
+    print(red("\n[AUTO DETENIDO] %s" % causa))
+    for ln in lineas:
+        print(yellow("  %s" % ln))
+    print(cyan("  lo hecho queda escrito. Re-doble-click cuando resuelvas la causa: "
+               "todo retoma donde quedo."))
+    return 2
+
+
+def _auto_paso3(args, rutas, estado):
+    """P3 en AUTO: si no hay server vivo, arranca UNO PROPIO con la receta
+    diaria (lo apaga al terminar), corre los 20 prompts y aplica el veredicto
+    OBJETIVO (0 errores + 20/20 con carne + 3 anclas). Si OK cierra el N3
+    (revocable por el Director con p3 --veredicto FALLA); si FALLA, detiene
+    el turno dejando las respuestas para el juez humano."""
+    print(bold(cyan("\n=== P3 (AUTO) - sanity de 20 prompts con server propio ===")))
+    p2 = estado["pasos"].get("2", {})
+    if p2.get("estado") not in ("PROMOVIDA", "YA-PROMOVIDA"):
+        return _auto_detener(rutas, "P3 exige p2 promovida (estado: %s)"
+                             % (p2.get("estado") or "SIN P2"),
+                             ["- la mediana p1 no dio GO o p2 no corrio: revisa el informe"])
+    tag = "np2" if p2.get("estado") in ("PROMOVIDA", "YA-PROMOVIDA") else "libre"
+    carpeta = os.path.join(rutas["base"], "campana-sanity-%s" % tag)
+    os.makedirs(carpeta, exist_ok=True)
+    proc = None
+    if health_ok(args.puerto):
+        print(cyan("  usando el server vivo en el puerto %d (NO es mio: no lo toco "
+                   "al terminar)." % args.puerto))
+    else:
+        print(cyan("  no hay server vivo: el AUTO arranca uno con la receta diaria "
+                   "(puerto %d) y lo apaga al terminar..." % args.puerto))
+        log_srv = os.path.join(rutas["base"], "campana-sanity-%s-server.log" % tag)
+        proc = _arranca_server_receta(rutas, args, log_srv)
+    try:
+        fallas, respuestas = _p3_corre_sanity(args, rutas, estado, carpeta, tag)
+    finally:
+        if proc is not None:
+            _auto_apaga(proc)
+    v, motivos = _sanity_auto_veredicto(fallas, respuestas)
+    if v == "OK":
+        estado["n3"]["veredicto_sanity"] = "OK"
+        estado["n3"]["cerrado"] = True
+        estado["n3"]["cerrado_en"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        estado["pasos"]["3"] = {"estado": "OK", "carpeta": carpeta,
+                                "errores_http": fallas, "veredicto_auto": True}
+        guardar_estado(rutas["estado"], estado)
+        informe(rutas["informe"], "P3 (AUTO) veredicto objetivo -> OK: N3 CERRADO",
+                ["- criterio: 0 errores HTTP + 20/20 respuestas con carne + 3 anclas "
+                 "(391 / verde / Valparaiso)",
+                 "- veredicto AUTO, revocable: lee %s y si algo no te gusta cierra "
+                 "con p3 --veredicto FALLA (+ p2 --revert)" % carpeta])
+        print(green(bold("  N3 CERRADO con el veredicto objetivo del AUTO "
+                         "(revocable por el Director).")))
+        return 0
+    estado["pasos"]["3"] = {"estado": "EN-ESPERA-DEL-JUEZ", "carpeta": carpeta,
+                            "errores_http": fallas}
+    guardar_estado(rutas["estado"], estado)
+    return _auto_detener(rutas,
+                         "el sanity no paso el criterio objetivo: %s" % "; ".join(motivos),
+                         ["- las 20 respuestas estan en %s (tu eres el catador)" % carpeta,
+                          "- cierra a mano con: py campana-10-pasos.py p3 --veredicto OK (o FALLA)"])
+
+
+def modo_auto(args, rutas, estado):
+    """DOBLE CLICK = MODO AUTO (pedido del Director 29-oct: 'doble click y que
+    haga todo automaticamente... aunque tarde 2 horas... dejando siempre un
+    log; prioridad es seguridad ante malware'). Corre los pasos 1..%d en orden
+    SIN preguntar nada: las confirmaciones se auto-aceptan y quedan escritas.
+    Seguridad no negociable: solo el repo oficial, SHA256 certificado
+    obligatorio ANTES de usar nada (p5 fail-fast), y ninguna puerta roja se
+    salta: si algo esta mal, el turno SE DETIENE LIMPIO con su log y el
+    re-doble-click retoma donde quedo.""" % AUTO_ULTIMO
+    AUTO["on"] = True
+    AUTO["aceptadas"] = []
+    print(bold(cyan("\n=== MODO AUTO — la campana trabaja sola (pasos 1..%d) ===" % AUTO_ULTIMO)))
+    print(cyan("  sin preguntas: las confirmaciones se auto-aceptan y quedan escritas."))
+    print(cyan("  seguridad: solo repo oficial + SHA256 certificado obligatorio; "
+               "puertas rojas = parada limpia."))
+    mostrar_estado(rutas, estado)
+    fatales, avisos = _prevuelo_auto(args, rutas, estado)
+    resumen_prevuelo = ("OK" if not fatales and not avisos
+                        else ("avisos: " + "; ".join(avisos) if avisos else "FATAL"))
+    informe(rutas["informe"], "MODO AUTO arrancado (pedido del Director 29-oct)",
+            ["- pasos 1..%d en orden, sin preguntas; confirmaciones quedan escritas" % AUTO_ULTIMO,
+             "- seguridad: repo oficial unico + SHA256 obligatorio antes de usar nada; "
+             "--fuerza no existe en AUTO",
+             "- prevuelo: %s" % resumen_prevuelo])
+    for av in avisos:
+        print(yellow("  aviso del prevuelo: %s" % av))
+    if fatales:
+        return _auto_detener(rutas, "el prevuelo encontro bloqueos (mejor ahora que "
+                             "a las 2 horas)", ["- %s" % f for f in fatales])
+    try:
+        for n in range(1, AUTO_ULTIMO + 1):
+            estado = leer_estado(rutas["estado"])
+            est = estado["pasos"].get(str(n), {}).get("estado")
+            if est in VERDES_ESTADO:
+                print(cyan("\n  P%d ya estaba hecho (%s): se salta." % (n, est)))
+                continue
+            if n == 3:
+                rc = _auto_paso3(args, rutas, estado)
+            else:
+                rc = PASOS_AUTO[n](args, rutas, estado)
+            _auto_informe_trail(rutas, "P%d" % n)
+            if rc != 0:
+                return _auto_detener(rutas, "P%d devolvio rc=%d (mira su salida arriba)" % (n, rc),
+                                     ["- el paso no quedo verde; el re-doble-click retoma"])
+        estado = leer_estado(rutas["estado"])
+        hechos = [n for n in range(1, AUTO_ULTIMO + 1)
+                  if estado["pasos"].get(str(n), {}).get("estado") in VERDES_ESTADO]
+        informe(rutas["informe"], "AUTO FIN DE TURNO: pasos 1..%d gestionados" % AUTO_ULTIMO,
+                ["- verdes ahora: %s" % (", ".join("P%d" % x for x in hechos) or "ninguno"),
+                 "- P7..P10: siguiente fase (sus instrumentos finos se fabrican CON "
+                 "estos resultados; regla de la casa)"])
+        print(green(bold("\n  FIN DE TURNO AUTO: pasos 1..%d gestionados." % AUTO_ULTIMO)))
+        print(green("  verdes: %s" % (", ".join("P%d" % x for x in hechos) or "ninguno")))
+        print("  log completo : %s" % rutas["informe"])
+        print("  estado       : %s" % rutas["estado"])
+        print(cyan("  P7..P10: siguiente fase — se fabrican con estos resultados."))
+        return 0
+    except SystemExit:
+        return _auto_detener(rutas, "una puerta/freno del paso detuvo el turno "
+                             "(mira el [FATAL] de arriba)",
+                             ["- nada se salto: la puerta roja manda, incluso en AUTO",
+                              "- lo hecho quedo escrito; resuelve la causa y re-doble-click"])
+    except KeyboardInterrupt:
+        _auto_informe_trail(rutas, "al interrumpirse")
+        informe(rutas["informe"], "AUTO INTERRUMPIDO (Ctrl+C)",
+                ["- lo hecho queda escrito; re-doble-click retoma donde quedo"])
+        print(yellow("\n[AUTO] interrumpido (Ctrl+C): lo hecho queda escrito."))
+        return 130
+
+
 def main():
     ap = argparse.ArgumentParser(description=VERSION)
     ap.add_argument("paso", nargs="?", default=None,
-                    help="estado | plan | p1..p10 (sin argumento = modo campana)")
+                    help="estado | plan | p1..p10 (sin argumento = MODO AUTO)")
     ap.add_argument("--dir", help="carpeta base de la campana (def: junto al script)")
     ap.add_argument("--config", help="ruta de config.txt (def: base/config.txt)")
     ap.add_argument("--puerto", type=int, default=9931)
@@ -1170,6 +1500,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="p4: mostrar sin descargar")
     ap.add_argument("--sin-humo", action="store_true", help="p5: solo certificar, sin server")
     ap.add_argument("--bat", help="p6: ruta de BARRIDO-N1.bat")
+    ap.add_argument("--ofrecer", action="store_true",
+                    help="sin paso: MODO CAMPANA r39 (foto + oferta con SI escrito); "
+                         "el doble click sin esto ahora es MODO AUTO")
     ap.add_argument("--fuerza", action="store_true",
                     help="saltar puertas A PROPOSITO (queda escrito en el informe)")
     args = ap.parse_args()
@@ -1177,7 +1510,8 @@ def main():
     estado = leer_estado(rutas["estado"])
 
     if args.paso is None:
-        rc = modo_campana(args, rutas, estado)
+        rc = (modo_campana(args, rutas, estado) if args.ofrecer
+              else modo_auto(args, rutas, estado))
         _pausa_doble_click()
         return rc
 

@@ -709,12 +709,207 @@ with contextlib.redirect_stdout(buf):
 check("E27 modo campana con campana cerrada: mensaje y sin pedir paso",
       rc == 0 and "campana cerrada" in buf.getvalue())
 
+# ================= MODO AUTO (r41): U23/U24 + E28-E33 ========================
+
+# U23: el veredicto objetivo del AUTO (pieza pura, sin server)
+_nombres = [n for n, _ in cam.SANITY_PROMPTS]
+_dic = {n: "respuesta con carne" for n in _nombres}
+_dic["matematica"] = "El resultado es 391."
+_dic["memoria-corta"] = "Tu color favorito es verde."
+_dic["seguimiento"] = "Dijiste que trabajas en Valparaiso."
+_resp_ok = [(n, _dic[n]) for n in _nombres]
+v, mot = cam._sanity_auto_veredicto(0, _resp_ok)
+check("U23a veredicto objetivo: 20/20 con carne + 3 anclas -> OK sin motivos",
+      v == "OK" and mot == [])
+_resp_mal = list(_resp_ok)
+_resp_mal[_nombres.index("matematica")] = ("matematica", "390")
+v, mot = cam._sanity_auto_veredicto(0, _resp_mal)
+check("U23b ancla aritmetica rota -> FALLA con su motivo",
+      v == "FALLA" and any("aritmetica" in m for m in mot))
+_resp_vac = list(_resp_ok)
+_resp_vac[_nombres.index("resumen")] = ("resumen", "")
+v, mot = cam._sanity_auto_veredicto(2, _resp_vac)
+check("U23c error http + respuesta vacia -> FALLA con ambos motivos",
+      v == "FALLA" and any("error HTTP" in m for m in mot)
+      and any("vacias" in m for m in mot))
+
+# U24: confirmar en AUTO se auto-acepta y deja rastro acumulado
+cam.AUTO["on"] = True
+cam.AUTO["aceptadas"] = []
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    ok = cam.confirmar("EJECUTAR", "prueba de aceptacion automatica")
+check("U24 confirmar en AUTO: True + rastro escrito en el acumulador",
+      ok is True and len(cam.AUTO["aceptadas"]) == 1
+      and "EJECUTAR" in cam.AUTO["aceptadas"][0])
+cam.AUTO["on"] = False
+cam.AUTO["aceptadas"] = []
+
+# E28-E32: modo_auto con pasos parcheados (sin tocar el taller)
+orden = []
+
+
+def _fake_paso(n, verde):
+    def f(a2, r2, e2):
+        orden.append(n)
+        e2["pasos"][str(n)] = {"estado": verde}
+        cam.guardar_estado(r2["estado"], e2)
+        return 0
+    return f
+
+
+def _fake_paso_fatal(a2, r2, e2):
+    orden.append("fatal2")
+    cam.fatal("puerta de prueba del taller")
+
+
+def _estado_fresco():
+    e2 = {"version": cam.VERSION, "actualizado": "", "pasos": {}, "n3": {}}
+    cam.guardar_estado(ESTADO, e2)
+    return e2
+
+
+_prev_viejo, _hok_viejo, _p3auto_viejo = (cam._prevuelo_auto, cam.health_ok,
+                                          cam._auto_paso3)
+_arr_viejo, _corr_viejo = cam._arranca_server_receta, cam._p3_corre_sanity
+_PASOS_VIEJOS = dict(cam.PASOS_AUTO)
+
+cam._prevuelo_auto = lambda *a2, **k2: ([], [])
+cam.health_ok = lambda *a2, **k2: False
+cam._auto_paso3 = _fake_paso(3, "OK")
+for _n, _v in ((1, "GO"), (2, "PROMOVIDA"), (4, "DESCARGADA"),
+               (5, "VERIFICADO-HUMO-OK"), (6, "EJECUTADO")):
+    cam.PASOS_AUTO[_n] = _fake_paso(_n, _v)
+
+_estado_fresco()
+e2 = cam.leer_estado(ESTADO)
+e2["pasos"]["2"] = {"estado": "YA-PROMOVIDA"}   # debe SALTARSE (ya verde)
+cam.guardar_estado(ESTADO, e2)
+a, r, e = rutas()
+orden.clear()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+est = json.load(open(ESTADO, encoding="utf-8"))
+inf = open(r["informe"], encoding="utf-8").read()
+check("E28 modo auto feliz: orden 1,3,4,5,6 (p2 verde saltada), rc 0, fin escrito",
+      rc == 0 and orden == [1, 3, 4, 5, 6] and "FIN DE TURNO" in inf
+      and "MODO AUTO arrancado" in inf and "YA-PROMOVIDA" not in orden
+      and est["pasos"]["2"]["estado"] == "YA-PROMOVIDA")
+
+_estado_fresco()
+orden.clear()
+cam.PASOS_AUTO[1] = _fake_paso(1, "GO")
+cam.PASOS_AUTO[2] = _fake_paso_fatal
+a, r, e = rutas()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+inf = open(r["informe"], encoding="utf-8").read()
+check("E29 modo auto con FATAL en p2: detencion limpia rc 2 y queda escrito",
+      rc == 2 and orden == [1, "fatal2"] and "AUTO DETENIDO" in inf)
+
+_estado_fresco()
+orden.clear()
+cam._prevuelo_auto = lambda *a2, **k2: (["bloqueo de prueba del prevuelo"], [])
+a, r, e = rutas()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+inf = open(r["informe"], encoding="utf-8").read()
+check("E30 prevuelo con bloqueo: no corre NINGUN paso, rc 2",
+      rc == 2 and orden == [] and "bloqueo de prueba del prevuelo" in inf)
+
+# E31: P3 del AUTO de punta a punta con server falso parcheado -> OK cierra N3
+cam._auto_paso3 = _p3auto_viejo   # el parche de E28 se retira: aqui va el REAL
+_estado_fresco()
+e2 = cam.leer_estado(ESTADO)
+e2["pasos"]["2"] = {"estado": "PROMOVIDA"}
+cam.guardar_estado(ESTADO, e2)
+orden.clear()
+cam._prevuelo_auto = lambda *a2, **k2: ([], [])
+for _n, _v in ((1, "GO"), (2, "PROMOVIDA"), (4, "DESCARGADA"),
+               (5, "VERIFICADO-HUMO-OK"), (6, "EJECUTADO")):
+    cam.PASOS_AUTO[_n] = _fake_paso(_n, _v)
+
+
+class _ProcFalso(object):
+    def __init__(self):
+        self.apagado = False
+
+    def terminate(self):
+        self.apagado = True
+
+    def wait(self, timeout=None):
+        return 0
+
+    def kill(self):
+        self.apagado = True
+
+
+_procs = []
+cam._arranca_server_receta = lambda *a2, **k2: (
+    _procs.append(1), _ProcFalso())[1]
+cam._p3_corre_sanity = lambda *a2, **k2: (0, _resp_ok)
+a, r, e = rutas()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+est = json.load(open(ESTADO, encoding="utf-8"))
+inf = open(r["informe"], encoding="utf-8").read()
+check("E31 p3 AUTO feliz: cierra N3 con veredicto objetivo, apaga SU server, rc 0",
+      rc == 0 and len(_procs) == 1 and est["n3"]["cerrado"] is True
+      and est["pasos"]["3"]["estado"] == "OK" and est["pasos"]["3"]["veredicto_auto"] is True
+      and "veredicto objetivo" in inf and "N3 CERRADO" in inf)
+
+# E32: sanity que NO pasa el criterio -> detiene el turno y deja al juez humano
+_estado_fresco()
+e2 = cam.leer_estado(ESTADO)
+e2["pasos"]["2"] = {"estado": "PROMOVIDA"}
+cam.guardar_estado(ESTADO, e2)
+orden.clear()
+cam.PASOS_AUTO[1] = _fake_paso(1, "GO")
+cam.PASOS_AUTO[2] = _fake_paso(2, "PROMOVIDA")
+cam._p3_corre_sanity = lambda *a2, **k2: (
+    1, [("casual", "hola")] + [(n, "") for n in _nombres[1:]])
+a, r, e = rutas()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+est = json.load(open(ESTADO, encoding="utf-8"))
+inf = open(r["informe"], encoding="utf-8").read()
+check("E32 p3 AUTO con respuestas vacias: FALLA objetivo, turno detenido rc 2",
+      rc == 2 and est["pasos"]["3"]["estado"] == "EN-ESPERA-DEL-JUEZ"
+      and est["n3"].get("cerrado") is not True and "criterio objetivo" in inf
+      and "AUTO DETENIDO" in inf)
+
+# restaurar el taller para los tests de despacho
+cam._prevuelo_auto, cam.health_ok, cam._auto_paso3 = (_prev_viejo, _hok_viejo,
+                                                      _p3auto_viejo)
+cam._arranca_server_receta, cam._p3_corre_sanity = _arr_viejo, _corr_viejo
+cam.PASOS_AUTO.clear()
+cam.PASOS_AUTO.update(_PASOS_VIEJOS)
+
+# E33: el despacho — doble click (sin args) = MODO AUTO; --ofrecer = r39
+argv_viejo = sys.argv
+_ma, _mc = cam.modo_auto, cam.modo_campana
+sys.argv = ["campana-10-pasos.py"]
+cam.modo_auto = lambda *a2, **k2: 5
+rc = cam.main()
+check("E33a main sin argumentos -> MODO AUTO", rc == 5)
+sys.argv = ["campana-10-pasos.py", "--ofrecer"]
+cam.modo_campana = lambda *a2, **k2: 6
+rc = cam.main()
+check("E33b main --ofrecer -> MODO CAMPANA de r39", rc == 6)
+cam.modo_auto, cam.modo_campana = _ma, _mc
+sys.argv = argv_viejo
+
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E27 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U24 + E01-E33 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)
