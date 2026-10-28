@@ -154,6 +154,32 @@ cosas dejando siempre un log; prioridad es seguridad ante malware"). MODO AUTO:
      fabrican CON los resultados de 1..6 (regla de la casa); el AUTO para en
      el FIN DE TURNO con todo escrito. Re-doble-click retoma donde quedó.
 Bateria 73 -> 84 checks (U18/U19 + E28-E33).
+
+CHANGELOG v1.6 (2026-10-29, ronda 43 — el Director pidio analisis profesional
+"ambos repos ... busca las diferencias y elige una" entre el cuant vigente
+(SC117 APEX-I-MINI heretic+MTP) y la UD-IQ3_XXS de unsloth):
+  1. IDENTIDAD ACLARADA: el modelo que el rig corre desde hace semanas es
+     SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-
+     I-MINI.gguf (14,273,277,376 B, SHA256 e4eae0e289b36039faa26f955ca0210
+     25754e0c56130a16746749bb1491118d4): heretic v1.3.0+MPOA (88% menos
+     rechazos con KL 0.0015) sobre Qwen3.6-35B-A3B, cuantizacion APEX-I
+     (apex-quant de mudler: precision por ROL de tensor — experto routado,
+     experto compartido, atencion) y las 20 capas MTP dentro del mismo GGUF.
+  2. DECISION (Puerta A): NOS QUEDAMOS con el cuant vigente y P4-P5 quedan
+     APARCADAS — el doble click YA NO descarga los 14.07 GB de unsloth.
+     Razones: (a) heretic preservado (lo que el Director valoro: sin
+     "soy un asistente, no tengo emociones"); (b) el MTP es IDENTICO en
+     ambos (--spec-type draft-mtp --spec-draft-n-max 2): la UD no compra
+     turbo extra; (c) MTP y -np 2 son incompatibles HOY (model card de
+     unsloth) — el duelo spec-vs-NP2 de P10 se corre con el vigente igual;
+     (d) TODA la evidencia N3 (+23% NP2) fue medida sobre este archivo;
+     (e) 0 GB de descarga y 0 superficie nueva de riesgo. La UD-IQ3_XXS
+     queda PINADA (bytes/SHA ya en este archivo) como duelo opcional de
+     P10 y el acceso manual p4/p5 sigue vivo.
+  3. _siguiente_paso y el AUTO saltan P4-P5 cuando P4_APARCADA=True
+     (constante revivable a False); el salto queda ESCRITO en el informe.
+Bateria 87 -> 90 checks (U25a/b salto aparcado, E35 AUTO sin descarga;
+E28 prueba el orden completo con P4_APARCADA=False puntual).
 """
 import argparse
 import csv
@@ -169,10 +195,16 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = ("campana-10-pasos v1.5 (2026-10-29, MODO AUTO: doble click = pasos 1..6 "
-           "sin preguntas, todo escrito en el informe; seguridad: repo oficial unico "
-           "+ SHA256 obligatorio antes de usar nada; --ofrecer conserva el modo "
-           "campana r39)")
+VERSION = ("campana-10-pasos v1.6 (2026-10-29, P4-P5 APARCADAS: nos quedamos con "
+           "el cuant vigente heretic+MTP (Anexo R43); doble click = pasos 1..6 "
+           "sin preguntas y SIN descarga; --ofrecer conserva el modo campana r39)")
+
+# R43 — decision del Director (delego: "elige una", elegida A): el cuant
+# vigente SC117 APEX-I-Mini ya trae heretic + MTP nativo, asi que p4 (descarga
+# 14.07 GB de unsloth) y p5 (verificacion de ese archivo) quedan APARCADAS.
+# True = el AUTO y _siguiente_paso saltan p4/p5 (queda escrito); el acceso
+# manual `p4`/`p5` sigue vivo para un duelo explicito. False = plan original.
+P4_APARCADA = True
 
 # MODO AUTO: cuando esta activo, las confirmaciones se auto-aceptan y quedan
 # escritas (evidencia append-only). NUNCA activa --fuerza: las puertas rojas
@@ -1184,8 +1216,13 @@ def _siguiente_paso(estado):
     Regla: el primero cuyo estado no este VERDE; antes de p4 se exige el N3
     cerrado (si el juez no firmo, lo que toca es el veredicto de p3)."""
     for n in range(1, 11):
+        if P4_APARCADA and n in (4, 5):
+            continue
         if estado.get("pasos", {}).get(str(n), {}).get("estado") not in VERDES_ESTADO:
-            if n == 4 and not estado.get("n3", {}).get("cerrado"):
+            # R43: con p4/p5 aparcadas, el primer paso no-aparcado >= 4 (hoy p6)
+            # HEREDA la puerta del juez: sin N3 cerrado, lo que toca es el
+            # veredicto de p3 (el U17 del taller cazó este hueco).
+            if n >= 4 and not estado.get("n3", {}).get("cerrado"):
                 return 3
             return n
     return None
@@ -1422,6 +1459,9 @@ def modo_auto(args, rutas, estado):
     print(cyan("  sin preguntas: las confirmaciones se auto-aceptan y quedan escritas."))
     print(cyan("  seguridad: solo repo oficial + SHA256 certificado obligatorio; "
                "puertas rojas = parada limpia."))
+    if P4_APARCADA:
+        print(cyan("  P4-P5 APARCADAS (Anexo R43): el cuant vigente ya trae "
+                   "heretic+MTP; este turno NO descarga nada."))
     mostrar_estado(rutas, estado)
     fatales, avisos = _prevuelo_auto(args, rutas, estado)
     resumen_prevuelo = ("OK" if not fatales and not avisos
@@ -1438,6 +1478,10 @@ def modo_auto(args, rutas, estado):
                              "a las 2 horas)", ["- %s" % f for f in fatales])
     try:
         for n in range(1, AUTO_ULTIMO + 1):
+            if P4_APARCADA and n in (4, 5):
+                print(cyan("\n  P%d APARCADA (Anexo R43): fuera del turno, sin "
+                           "descarga." % n))
+                continue
             estado = leer_estado(rutas["estado"])
             est = estado["pasos"].get(str(n), {}).get("estado")
             if est in VERDES_ESTADO:
@@ -1454,10 +1498,16 @@ def modo_auto(args, rutas, estado):
         estado = leer_estado(rutas["estado"])
         hechos = [n for n in range(1, AUTO_ULTIMO + 1)
                   if estado["pasos"].get(str(n), {}).get("estado") in VERDES_ESTADO]
+        lineas_fin = ["- verdes ahora: %s" % (", ".join("P%d" % x for x in hechos) or "ninguno"),
+                      "- P7..P10: siguiente fase (sus instrumentos finos se fabrican CON "
+                      "estos resultados; regla de la casa)"]
+        if P4_APARCADA:
+            lineas_fin.append("- P4-P5 APARCADAS por decision del Director (Anexo R43): "
+                              "el cuant vigente SC117 APEX-I-Mini ya trae heretic+MTP "
+                              "(SHA e4eae0e2...118d4); la UD-IQ3_XXS queda pinada como "
+                              "duelo opcional de P10")
         informe(rutas["informe"], "AUTO FIN DE TURNO: pasos 1..%d gestionados" % AUTO_ULTIMO,
-                ["- verdes ahora: %s" % (", ".join("P%d" % x for x in hechos) or "ninguno"),
-                 "- P7..P10: siguiente fase (sus instrumentos finos se fabrican CON "
-                 "estos resultados; regla de la casa)"])
+                lineas_fin)
         print(green(bold("\n  FIN DE TURNO AUTO: pasos 1..%d gestionados." % AUTO_ULTIMO)))
         print(green("  verdes: %s" % (", ".join("P%d" % x for x in hechos) or "ninguno")))
         print("  log completo : %s" % rutas["informe"])

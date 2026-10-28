@@ -773,6 +773,8 @@ _prev_viejo, _hok_viejo, _p3auto_viejo = (cam._prevuelo_auto, cam.health_ok,
                                           cam._auto_paso3)
 _arr_viejo, _corr_viejo = cam._arranca_server_receta, cam._p3_corre_sanity
 _PASOS_VIEJOS = dict(cam.PASOS_AUTO)
+_P4_VIEJO = cam.P4_APARCADA
+cam.P4_APARCADA = False   # E28 prueba el orden completo del plan original (r43 aparcadas se prueba en E35)
 
 cam._prevuelo_auto = lambda *a2, **k2: ([], [])
 cam.health_ok = lambda *a2, **k2: False
@@ -796,6 +798,7 @@ check("E28 modo auto feliz: orden 1,3,4,5,6 (p2 verde saltada), rc 0, fin escrit
       rc == 0 and orden == [1, 3, 4, 5, 6] and "FIN DE TURNO" in inf
       and "MODO AUTO arrancado" in inf and "YA-PROMOVIDA" not in orden
       and est["pasos"]["2"]["estado"] == "YA-PROMOVIDA")
+cam.P4_APARCADA = _P4_VIEJO   # r43: se reactiva el aparcamiento para el resto
 
 _estado_fresco()
 orden.clear()
@@ -904,6 +907,42 @@ check("E33b main --ofrecer -> MODO CAMPANA de r39", rc == 6)
 cam.modo_auto, cam.modo_campana = _ma, _mc
 sys.argv = argv_viejo
 
+# U25 (r43): P4/P5 aparcadas — el salto del despacho
+_e43 = {"pasos": {"1": {"estado": "GO"}, "2": {"estado": "YA-PROMOVIDA"},
+                  "3": {"estado": "OK"}, "4": {"estado": "PENDIENTE"},
+                  "5": {"estado": "PENDIENTE"}, "6": {"estado": "PENDIENTE"}},
+        "n3": {"cerrado": True}}
+check("U25a siguiente con P4/P5 aparcadas -> 6 (no 4)",
+      cam._siguiente_paso(_e43) == 6)
+_e43b = {"pasos": {"1": {"estado": "GO"}, "2": {"estado": "YA-PROMOVIDA"},
+                   "3": {"estado": "PENDIENTE"}}, "n3": {"cerrado": False}}
+check("U25b con p3 pendiente y N3 abierto -> 3 (la puerta sigue mandando)",
+      cam._siguiente_paso(_e43b) == 3)
+
+# E35 (r43): el AUTO con P4/P5 aparcadas NO descarga — orden 1,3,6 y queda escrito
+cam._prevuelo_auto = lambda *a2, **k2: ([], [])
+cam.health_ok = lambda *a2, **k2: False
+cam._auto_paso3 = _fake_paso(3, "OK")
+for _n, _v in ((1, "GO"), (2, "PROMOVIDA"), (4, "DESCARGADA"),
+               (5, "VERIFICADO-HUMO-OK"), (6, "EJECUTADO")):
+    cam.PASOS_AUTO[_n] = _fake_paso(_n, _v)
+_estado_fresco()
+e2 = cam.leer_estado(ESTADO)
+e2["pasos"]["2"] = {"estado": "YA-PROMOVIDA"}   # verde: se salta
+cam.guardar_estado(ESTADO, e2)
+orden.clear()
+a, r, e = rutas()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_auto(a, r, e)
+inf = open(r["informe"], encoding="utf-8").read()
+check("E35 AUTO con P4/P5 aparcadas: orden 1,3,6 (p2 verde saltada), sin descarga, rc 0",
+      rc == 0 and orden == [1, 3, 6] and "APARCADA" in inf and "FIN DE TURNO" in inf)
+cam._prevuelo_auto, cam.health_ok, cam._auto_paso3 = (_prev_viejo, _hok_viejo,
+                                                      _p3auto_viejo)
+cam.PASOS_AUTO.clear()
+cam.PASOS_AUTO.update(_PASOS_VIEJOS)
+
 # E34: archivo unico (r42) — el payload del CAMPANA.bat ES el py, byte-a-byte
 import base64 as _b64
 _ruta_bat = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
@@ -928,7 +967,7 @@ if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U24 + E01-E34 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E35 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

@@ -257,3 +257,23 @@ Sanity auto 3/3 en las tres configs (391 / Cervantes / Marte). El prefill tambi�
 **Coste conocido de NP2:** +~0.9 GB de RAM de proceso; en 16 GB ya saturados (95-97% con el modelo cargado) es el riesgo del día normal — exactamente por eso el protocolo exige la mediana completa antes de la cirugía p2.
 
 **Siguiente paso del rig:** doble click en CAMPANA.bat → si P1 ya quedó cosechado, la foto muestra su veredicto y ofrece p2 (la ÚNICA cirugía: `-np 2` a FLAGS_BASE, con backup y `--revert`). Si P1 sigue PENDIENTE/INCOMPLETO: `py campana-10-pasos.py p1 --sin-corridas` cosecha lo ya medido; y si b2 no existe, una pasada de `py barrido-n3-eficiencia.py --logs D:\ZLia\faseN3-np2-b2 --solo ancla,slots,anclafin` y cosechar de nuevo. Después: p3 (el sanity de 20 prompts del Director) cierra el N3.
+
+## Anexo R43 — DUELO PROFESIONAL DE CUANTS: cuant vigente (SC117 APEX-I-MINI heretic+MTP) vs unsloth UD-IQ3_XXS (2026-10-29, pedida por el Director: "analiza mas seriamente profesional ambos repos ... busca las diferencias y elige una")
+
+**DESCUBRIMIENTO DE IDENTIDAD (verificado byte-a-byte via API de HF):** el modelo que el rig corre desde hace semanas NO es un APEX generico — es `SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf`, **14,273,277,376 bytes y SHA256 `e4eae0e2...118d4` exactos** a los documentados del rig (14.27 GB). Cadena de procedencia: Qwen/Qwen3.6-35B-A3B (oficial) -> llmfan46 heretic v1.3.0+MPOA (88% menos rechazos con **KL 0.0015**, es decir: el Director tenia razon, el heretic moderno pierde casi nada) -> SC117 lo re-cuantiza con **APEX-I** (apex-quant de mudler, codigo abierto: precision mixta por ROL de tensor — experto routado / experto compartido / atencion, gradiente por capa) dejando **las 20 capas MTP dentro del mismo GGUF**.
+
+**Comparacion tecnica:**
+
+| Dimension | Vigente: SC117 APEX-I-MINI | unsloth UD-IQ3_XXS |
+|---|---|---|
+| Peso | 13.29 GiB (14,273,277,376 B) | 13.10 GiB (14,069,266,720 B) |
+| bpw aprox (33.1B params) | ~3.2 | ~3.2 |
+| Esquema | APEX-I: MoE-aware por rol (mudler, open source; su card reclama PP mejor que Q8_0 a mitad de tamano) | UD dinamicos con imatrix calibrada (estandar de facto, 1.3M descargas) |
+| Heretic/uncensored | SI (KL 0.0015, 88% menos rechazos) | NO (alineacion stock: vuelve el "soy un asistente...") |
+| MTP dentro (nextn) | SI, 20 capas, flags `--spec-type draft-mtp --spec-draft-n-max 2` | SI, identico |
+| -np 2 + MTP simultaneos | NO (MTP exige -np 1; card de unsloth) | NO (misma limitacion) |
+| Evidencia N3 en el rig | TODA: b1 +22.8%, b3 +23.4%, bookends, firma R28 | NINGUNA |
+| Verificacion anti-malware | SHA pinado aqui; corriendo en el rig hace semanas (validacion empirica) | SHA pinado desde r35; verificado vs API en r37 |
+| Riesgo de procedencia | re-empaquetador unico (52k desc) pero archivo ya auditado en el rig | org verificada, changelogs publicos |
+
+**DECISION (Puerta A, elegida por encargo del Director): NOS QUEDAMOS con el cuant vigente.** Razones: (a) heretic preservado — la propiedad que el Director valora explicitamente; (b) la UD NO compra turbo: el MTP es identico y en ambos el duelo spec-vs-NP2 de P10 decide; (c) cambiar de cuant tira TODA la evidencia N3 medida por un edge de cuantizacion no demostrado (~mismo bpw); (d) 0 GB de descarga, 0 superficie nueva de riesgo, RAM ya validada en dias lentos reales. Consecuencias: **P4-P5 quedan APARCADAS** (campana v1.6: `P4_APARCADA = True`, el AUTO salta 4/5 y lo deja escrito; el acceso manual `p4`/`p5` sigue vivo para un duelo explicito; la UD-IQ3_XXS queda PINADA como revivable). P6 (N1 formal) corre sobre la receta promovida con el vigente y HEREDA la puerta del juez (N3 cerrado antes de avanzar — hueco cazado por U17 en el taller). P7..P10 intactos: ahora el escalon MTP (P8) y el duelo (P10) se corren con el vigente, sin descargas. La personalidad de ZLia se cocina igual con system prompt (pendiente de pedido explicito).
