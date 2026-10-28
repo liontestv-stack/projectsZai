@@ -164,3 +164,9 @@ Ejecución real del script en la máquina del Director (D:\llama.cpp\bin-new):
 - Invariantes que no cambian: N4 tras N2 (VRAM no transfiere entre cuants), RUTA 0 antes de N5 (draft con VRAM cerrada), sanity tool-calling en cambio de cuant, mediana de 3, ancla por sesión, no apilar sin medir, tesis RAM (higiene R28 + ~1.05 GB del cuant nuevo, sin cirugía).
 - Regla nueva de calendario: descargas cuando el rig NO mide; sesión de medición en medio → descarga pausada.
 - Cero cambios en scripts/tests/configs/bat. Estado espejo: README ronda 34.
+
+## Registro 35-a — PILOTO DE CAMPAÑA campana-10-pasos.py v1.0 (LAIA, 2026-10-28)
+- Pedido del Director: "tengo mas espacio en D:, ahora planea esos 10 pasos solidificarlos bien en un .py que haga todo". Nuevo script `InformacionCritica/scripts/campana-10-pasos.py` (piloto de la campaña, ~910 líneas) + `tests/test_campana_mock.py` (38 checks) + anexo R35 en plan-siguientes-10-pasos.md.
+- Comandos: `estado` | `plan` | `p1` (higiene + NOCACHE + mediana NP2 via barrido v1.3, veredicto GO/NO-GO/DUDOSO) | `p2` (promoción -np 2 con confirmación escrita + backup + --revert) | `p3` (20 prompts + --veredicto OK|FALLA cierra N3) | `p4` (descarga HF_HOME→D:, resumable, --dry-run) | `p5` (bytes+SHA256 36f9ec0e…7150+parser nextn+humo) | `p6` (BARRIDO-N1.bat) | `p7-p10` guiados. Puertas con --fuerza registrado. Importa barrido-n3 real (parser GGUF, SHA256 streaming, RAM, health).
+- Batería 38 checks TODO VERDE; 3 bugs cazados en taller antes del rig (p2 idempotente borraba backup → revert ciego; dry-run moría por disco; bool vs len() en nextn). Regresión casa 5/5 VERDE. configs/config.txt SIN TOCAR.
+- Para el rig: copiar campana-10-pasos.py a D:\ZLia y `py campana-10-pasos.py estado`; la ruta crítica R34 queda intacta (p1→p2→p3→p4 de noche→p5).

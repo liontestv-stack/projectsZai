@@ -177,3 +177,17 @@ py barrido-n3-eficiencia.py --logs D:\ZLia\faseN3-np2-b3 --solo ancla,slots,ancl
 **La ruta crítica queda en ~60-90 min de rig para tener el N3 cerrado y la descarga ya corriendo**: higiene+mediana → promoción → sanity → lanzar descarga. Todo lo demás hereda el tiempo libre.
 
 **Regla nueva de calendario que introduce esta revisión:** las descargas (N2 hoy; zips de RUTA 0 cuando toque) corren cuando el rig NO mide; si una sesión de medición cae en medio de una descarga, la descarga se pausa — ninguna medición compite con el disco.
+
+---
+
+# SOLIDIFICACIÓN R35 — EL PLAN VIVE AHORA EN `campana-10-pasos.py v1.0` (2026-10-28)
+
+Pedido del Director: "tengo mas espacio en D:, ahora planea esos 10 pasos solidificarlos bien en un .py que haga todo". El plan deja de ser solo papel: **`InformacionCritica/scripts/campana-10-pasos.py` v1.0** es el PILOTO de la campaña — no reemplaza a los instrumentos de cada nivel (regla de la casa: se generan "conforme se llegue, sin adelantar trabajo"), los maneja en orden con puertas, pre-vuelos, certificados y memoria.
+
+**Comandos:** `estado` (foto de la campaña) · `p1` (higiene C:/D:/RAM + log 12-NOCACHE + mediana de 3 de NP2 via barrido v1.3 b2/b3 + veredicto GO ≥+15% / NO-GO <5pp / DUDOSO) · `p2` (promoción `-np 2` en config.txt: confirmación ESCRITA, backup con marca de tiempo, `--revert` byte-a-byte) · `p3` (sanity de 20 prompts al server vivo —ES, código, tool-calling, trampa— + `--veredicto OK|FALLA` que CIERRA el N3) · `p4` (descarga UD-IQ3_XXS 14,069,266,720 B con HF_HOME en D:, resumable, `--dry-run`) · `p5` (fail-fast: bytes exactos + SHA256 certificado `36f9ec0e…7150` + parser GGUF nextn.* + humo con la receta promovida, 1 prompt) · `p6` (lanza BARRIDO-N1.bat) · `p7-p10` (guiados: checklist del nivel + registro de la decisión).
+
+**Reglas que el script hace cumplir:** PUERTAS (p2 exige p1=GO; p3 exige p2; p4 exige N3 cerrado; p5 exige archivo) con `--fuerza` que salta A PROPÓSITO y lo deja escrito; config.txt SOLO se toca en p2; informe `campana-INFORME.md` APPEND-ONLY; estado en `campana-estado.json`; FATAL nominado con forense; importa al barrido N3 real (mismo directorio) para reutilizar parser GGUF, SHA256 streaming, RAM y health.
+
+**Batería:** `tests/test_campana_mock.py` — 38 checks TODO VERDE (U01-U22 piezas puras: autenticadores del hito PINADOS contra RUTAS.md L738, mediana con ancla por corrida, GGUF fabricado a bytes con/sin nextn, informe append-only; E01-E24 E2E: puertas, cirugía con backup+revert, cierre del N3, dry-run que no frena, humo con server falso en sus DOS mundos —levanta y responde / muere en carga con forense— y guardarrail de server ajeno). **Bugs que la batería cazó en el taller:** (1) la rama idempotente de p2 borraba la referencia al backup → revert ciego (arreglado + fallback al backup más reciente); (2) dry-run de p4 moría por disco chico del taller → ahora avisa sin frenar (en real sigue siendo FATAL); (3) verificar_gguf devolvía bool y paso5 hacía len() → devuelve la lista de claves. Regresión de la casa 5/5 VERDE (abrir 11/11, chatear E2E, barrido, diagnostico, barrido-n3).
+
+**El Director solo necesita:** copiar `campana-10-pasos.py` a D:\ZLia (junto a barrido-n3-eficiencia.py) y correr `py campana-10-pasos.py estado`. La ruta crítica del R34 queda intacta: p1 → p2 → p3 → lanzar p4 de noche → p5 al amanecer.
