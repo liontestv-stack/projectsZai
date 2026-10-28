@@ -5,7 +5,7 @@ set PY=python
 where py >nul 2>nul && set PY=py
 echo ==================================================
 echo  CAMPANA 10 PASOS  -  piloto de la campana
-echo  doble click = foto del estado (p1..p10 con puertas)
+echo  doble click = te OFRECE el paso que toca (SI = ejecutar)
 echo  paso concreto: CAMPANA.bat p1   (o p2, p3, ...)
 echo ==================================================
 %PY% campana-10-pasos.py %*

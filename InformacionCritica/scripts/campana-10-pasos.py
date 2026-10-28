@@ -39,6 +39,9 @@ REGLAS que el script hace cumplir:
   - las descargas corren cuando el rig NO mide; si hay que medir, se pausa.
   - FATAL nominado con forense: si algo muere, se imprime por que y donde
     mirar, y el estado queda guardado.
+  - DOBLE CLICK = MODO CAMPANA: foto del estado + OFERTA del paso que toca;
+    NADA corre sin un SI escrito del Director (las puertas internas de cada
+    paso siguen mandando).
 
 Todo vive junto al script (en el rig: D:\ZLia): campana-estado.json,
 campana-INFORME.md, campana-sanity-<tag>/, models/. --dir cambia la base.
@@ -112,6 +115,18 @@ cadena VACIA y .get() la devuelve tal cual. Fix: `or "sin empezar"` (cubre
 ausente Y vacía). Tras cualquier paso, el título vuelve a mostrar la fecha
 y hora real (guardar_estado la estampa en cada guardado). Bateria: 68
 checks (N15 nuevo: estado virgen -> titulo 'sin empezar' + 10 PENDIENTE).
+
+CHANGELOG v1.4 (2026-10-29, ronda 39 — pedido del Director aclarado de campo:
+"el problema es que nada mas doble click me salia para cerrar con enter, no
+hacia nada"). El doble click SOLO mostraba la foto (comportamiento r36) y
+el Director esperaba que HICIERA. Fix de diseño, no de bug: MODO CAMPANA —
+sin argumentos, además de la foto, calcula el SIGUIENTE PASO que toca
+(_siguiente_paso: el primero no-VERDE; antes de p4 exige N3 cerrado), lo
+describe en cristiano (QUE_HACE_PASO) y pide un SI escrito para ejecutarlo;
+las puertas y confirmaciones internas de cada paso siguen mandando (el SI
+de aquí solo abre la puerta del paso; el paso luego pide lo suyo). Todo lo
+demás intacto: 'estado' explicito sigue siendo solo foto, CAMPANA.bat pN
+sigue funcionando igual. Bateria 68 -> 73 checks (U16/U17 + E25/E26/E27).
 """
 import argparse
 import csv
@@ -127,7 +142,7 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = "campana-10-pasos v1.3 (2026-10-29, paperría de campo: título del estado vacío con estado virgen -> 'sin empezar'; verificacion de seguridad r37 + revision r36 incluidas)"
+VERSION = "campana-10-pasos v1.4 (2026-10-29, MODO CAMPANA: doble click ofrece ejecutar el paso que toca con un SI escrito; puertas intactas; incluye verificacion r37 + paperría r38)"
 
 
 def _pausa_doble_click(es_tty=None):
@@ -1074,10 +1089,68 @@ def mostrar_estado(rutas, estado):
     return 0
 
 
+# ---------------- MODO CAMPANA (doble click) ---------------------------------
+
+QUE_HACE_PASO = {
+    "1": "higiene (discos + RAM) + mediana de 3 de NP2 — mide 3 corridas (~15 min)",
+    "2": "anade -np 2 a config.txt con backup automatico (5 min; --revert restaura)",
+    "3": "sanity de 20 prompts: abre el server antes (ABRIR-QWEN.bat) y TU lees "
+         "las respuestas (~20-30 min)",
+    "4": "descarga el cerebro nuevo (14.07 GB): mejor DE NOCHE; Ctrl+C pausa y p4 retoma",
+    "5": "verifica lo bajado (bytes + SHA256 + MTP dentro) + humo del server (~10 min)",
+    "6": "N1 formal con BARRIDO-N1.bat (~50-65 min, mide 18 configs)",
+    "7": "guiado N2: re-aplicar las dosis al cuant nuevo (te pide una nota)",
+    "8": "guiado N4: escalera de VRAM (te pide una nota)",
+    "9": "guiado RUTA 0: build b11901 y re-ancla (te pide una nota)",
+    "10": "guiado N5: duelo spec vs NP2 + receta final de campana (te pide una nota)",
+}
+
+
+def _siguiente_paso(estado):
+    """Numero del siguiente paso (1..10) o None si la campana esta cerrada.
+    Regla: el primero cuyo estado no este VERDE; antes de p4 se exige el N3
+    cerrado (si el juez no firmo, lo que toca es el veredicto de p3)."""
+    for n in range(1, 11):
+        if estado.get("pasos", {}).get(str(n), {}).get("estado") not in VERDES_ESTADO:
+            if n == 4 and not estado.get("n3", {}).get("cerrado"):
+                return 3
+            return n
+    return None
+
+
+def modo_campana(args, rutas, estado):
+    """DOBLE CLICK = modo campana: muestra la foto y OFRECE ejecutar el paso
+    que toca. Nada corre sin un SI escrito del Director; el SI de aqui solo
+    abre la puerta del paso — despues el paso pide SUS confirmaciones y deja
+    TODO escrito en el informe (append-only)."""
+    mostrar_estado(rutas, estado)
+    n = _siguiente_paso(estado)
+    if n is None:
+        print(green("\n  Los 10 pasos estan VERDE: campana cerrada. Felicidades, Director."))
+        return 0
+    print(bold(cyan("\n  SIGUIENTE PASO: P%s" % n)))
+    print(cyan("  %s" % QUE_HACE_PASO[str(n)]))
+    try:
+        respuesta = input(cyan("  escribe SI y Enter para ejecutar P%s ahora "
+                               "(otra cosa = solo mirar): " % n))
+    except (EOFError, KeyboardInterrupt):
+        respuesta = ""
+        print()
+    if respuesta.strip().upper() != "SI":
+        print(gray("  ok, solo miraste. Para correrlo a mano: CAMPANA.bat p%s" % n))
+        return 0
+    informe(rutas["informe"], "MODO CAMPANA: Director acepto ejecutar P%s" % n,
+            ["- %s" % QUE_HACE_PASO[str(n)]])
+    if str(n) in CHECKLISTS:
+        return paso_guiado(str(n), args, rutas, estado)
+    return {1: paso1, 2: paso2, 3: paso3, 4: paso4,
+            5: paso5, 6: paso6}[n](args, rutas, estado)
+
+
 def main():
     ap = argparse.ArgumentParser(description=VERSION)
-    ap.add_argument("paso", nargs="?", default="estado",
-                    help="estado | plan | p1..p10")
+    ap.add_argument("paso", nargs="?", default=None,
+                    help="estado | plan | p1..p10 (sin argumento = modo campana)")
     ap.add_argument("--dir", help="carpeta base de la campana (def: junto al script)")
     ap.add_argument("--config", help="ruta de config.txt (def: base/config.txt)")
     ap.add_argument("--puerto", type=int, default=9931)
@@ -1102,6 +1175,11 @@ def main():
     args = ap.parse_args()
     rutas = _rutas(args)
     estado = leer_estado(rutas["estado"])
+
+    if args.paso is None:
+        rc = modo_campana(args, rutas, estado)
+        _pausa_doble_click()
+        return rc
 
     bruto = args.paso.lower()
     paso = bruto[1:] if (bruto.startswith("p") and bruto[1:].isdigit()) else bruto

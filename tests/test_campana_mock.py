@@ -656,12 +656,65 @@ salida = buf.getvalue()
 check("N15 estado virgen: titulo 'sin empezar' (no vacio) + 10 PENDIENTE",
       "=== CAMPANA - sin empezar ===" in salida and salida.count("PENDIENTE") == 10)
 
+# U16/U17: _siguiente_paso — el cerebro del MODO CAMPANA (r39: doble click
+# que OFRECE ejecutar el paso que toca en vez de solo mirar).
+check("U16 siguiente_paso: virgen->1, p1 GO->2, p2 YA-PROMOVIDA->3",
+      cam._siguiente_paso({"pasos": {}, "n3": {}}) == 1
+      and cam._siguiente_paso({"pasos": {"1": {"estado": "GO"}}, "n3": {}}) == 2
+      and cam._siguiente_paso({"pasos": {"1": {"estado": "GO"},
+                                         "2": {"estado": "YA-PROMOVIDA"}},
+                               "n3": {}}) == 3)
+check("U17 siguiente_paso: p3 verde sin N3 cerrado->3, todo verde->None",
+      cam._siguiente_paso({"pasos": {"1": {"estado": "GO"},
+                                     "2": {"estado": "PROMOVIDA"},
+                                     "3": {"estado": "OK"}},
+                           "n3": {"cerrado": False}}) == 3
+      and cam._siguiente_paso({"pasos": {str(i): {"estado": "GO"}
+                                         for i in range(1, 11)},
+                               "n3": {"cerrado": True}}) is None)
+
+# E25/E26/E27: modo_campana con estado VIRGEN de fabrica (determinista:
+# el siguiente paso es P1) y paso1 parcheado para no tocar el taller.
+a, r, e = rutas()
+e_virgen = {"version": cam.VERSION, "actualizado": "", "pasos": {}, "n3": {}}
+informe_antes = open(r["informe"], encoding="utf-8").read() if os.path.exists(r["informe"]) else ""
+buf = io.StringIO()
+builtins.input = lambda *a2, **k2: "no"
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_campana(a, r, e_virgen)
+check("E25 modo campana con 'no': solo mira, nada corre, informe intacto",
+      rc == 0 and "solo miraste" in buf.getvalue()
+      and (open(r["informe"], encoding="utf-8").read() == informe_antes))
+
+llamado = []
+paso1_viejo = cam.paso1
+cam.paso1 = lambda *a2, **k2: (llamado.append(1), 7)[1]
+builtins.input = lambda *a2, **k2: "SI"
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_campana(a, r, e_virgen)
+cam.paso1 = paso1_viejo
+check("E26 modo campana con 'SI': corre el paso que toca y queda escrito",
+      rc == 7 and llamado == [1]
+      and "MODO CAMPANA: Director acepto ejecutar P1"
+      in open(r["informe"], encoding="utf-8").read())
+
+e_todo_verde = {"version": "x", "actualizado": "hoy",
+                "pasos": {str(i): {"estado": "GO"} for i in range(1, 11)},
+                "n3": {"cerrado": True}}
+buf = io.StringIO()
+builtins.input = lambda *a2, **k2: ""
+with contextlib.redirect_stdout(buf):
+    rc = cam.modo_campana(a, r, e_todo_verde)
+check("E27 modo campana con campana cerrada: mensaje y sin pedir paso",
+      rc == 0 and "campana cerrada" in buf.getvalue())
+
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E24 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E27 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

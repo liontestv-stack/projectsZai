@@ -191,3 +191,9 @@ Ejecución real del script en la máquina del Director (D:\llama.cpp\bin-new):
 - El Director pegó de campo el doble click con estado virgen: el título salía "=== CAMPANA -  ===" VACÍO. Causa raíz: `"actualizado": ""` nace vacío (fábrica del estado) y `.get("actualizado", "sin empezar")` solo cubre clave AUSENTE, no vacía. Fix en campana-10-pasos.py v1.2 → v1.3: `estado.get("actualizado") or "sin empezar"`; tras cualquier paso el título muestra la fecha/hora real (guardar_estado).
 - Batería 67 → 68 checks TODO VERDE (N15: título 'sin empezar' + 10 PENDIENTE con estado de fábrica exacto, no el del disco compartido de los tests E). Regresión casa 5/5 VERDE; py_compile OK; configs/barridos/bats SIN TOCAR.
 - Para el rig: re-copiar campana-10-pasos.py v1.3 a D:\ZLia (cosmético; no cambia ninguna lógica ni puertas).
+
+## Registro 39-a — MODO CAMPANA: el doble click OFRECE ejecutar el paso que toca (LAIA, 2026-10-29)
+- El Director aclaró de campo: "nada mas doble click me salia para cerrar con enter, no hacia nada" — desde r36 el doble click solo mostraba la foto; él esperaba que HICIERA. Malentendido de diseño resuelto en campana-10-pasos.py v1.3 → v1.4.
+- MODO CAMPANA (arranque sin argumentos): foto del estado + `_siguiente_paso` (primero no-VERDE; antes de p4 exige N3 cerrado) + `QUE_HACE_PASO` (descripción en cristiano con duración) + confirmación **SI escrita** para ejecutar; la aceptación queda en campana-INFORME.md; puertas y confirmaciones internas de cada paso intactas. `estado` explicito y `CAMPANA.bat pN` sin cambios; CAMPANA.bat actualizado solo en el banner.
+- Batería 68 → 73 checks TODO VERDE (U16/U17 + E25/E26/E27). Regresión casa 5/5 VERDE; py_compile OK; configs/barridos/bats SIN TOCAR.
+- Para el rig: re-copiar campana-10-pasos.py v1.4 + CAMPANA.bat a D:\ZLia; doble click = foto + oferta; escribir SI ejecuta el paso que toca.
