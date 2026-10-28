@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-barrido-n3-eficiencia.py v1.2 — COSECHA del NIVEL 3 (eficiencia simple)
+barrido-n3-eficiencia.py v1.3 — COSECHA del NIVEL 3 (eficiencia simple)
 =======================================================================
 Encargo del Director (28-oct-2026): "dejemos de lado el diagnostico, que
 hacemos" -> el siguiente paso del orden aprobado (Ronda 12: N1 -> N3 -> N2
@@ -31,6 +31,24 @@ FLAGS_GANADORAS = ORO-UB1K, auditoria R24) + -lv 4 para que el log deje
 los certificados de cache. Por eso el ancla de esta sesion ES la receta
 que ABRIR-QWEN.bat lanza hoy: los deltas se leen directo sobre la vida
 real del Director (no sobre un ancla de laboratorio).
+
+v1.3 (hotfix de campo 28-oct, primera corrida completa del rig): la
+COLOCACION va POR CONFIG (leccion barrido-qwen-30: en b11856 -cmoe y
+-ncmoe juntos = gana el general y anula al -ncmoe). La v1.2 salio sin
+colocacion en 11 de 13 configs: el comando pedia los 14.27 GB del modelo
+EN la GPU de 4 GB y 11 configs murieron en ~2.5 s (exit 1, "fit abortado:
+VRAM insuficiente"); solo sobrevivieron las 2 que llevaban -ncmoe 37.
+Ahora: (a) cada config trae su colocacion (ANCLA/CTRL/RAM/CACHE/SLOTS/
+COMBO-R = -cmoe; NCM37C4 y COMBO-T = -ncmoe 37 verbatim barrido-30);
+(b) CERTIFICADO DE RECETA: el ancla DEBE contener la receta diaria
+exacta (config.txt FLAGS_BASE + FLAGS_GANADORAS) o FATAL antes de medir
+— la auditoria de flags ve que cada token EXISTE en el dump, pero no que
+el comando contenga LA RECETA COMPLETA: por eso paso VERDE y murio;
+(c) regla barrido-30 materializada: TODA config necesita -cmoe/-ncmoe o
+FATAL; (d) ancla muerta = FATAL inmediato (sin baseline no hay sesion)
+y la nota del CSV guarda el forense del log; (e) el resume solo cuenta
+filas validas (ya era asi): re-copiar y repetir el comando re-mide solas
+las configs muertas.
 
 CERTIFICADOS de este barrido (un knob sin certificado = no-op sospechoso):
   - CACHE: lineas de log (SS3.3/SS10.3): warning "cache_reuse is not
@@ -118,7 +136,7 @@ import urllib.error
 import urllib.request
 
 # ------------------------- constantes del rig (RutasArchivos.md) ------------
-VERSION = "barrido-n3-eficiencia v1.2 (2026-10-28, hotfix de campo: dossier_pc con 2 palos de RAM + auditoria AST de formatos)"
+VERSION = "barrido-n3-eficiencia v1.3 (2026-10-28, hotfix de campo 2: colocacion por config + certificado de receta + ancla-muerta=FATAL; 11 configs murieron sin -cmoe en la 1a corrida completa)"
 PROTO = "faseN3-v1"
 
 RUTA_SERVER_DEF = r"D:\llama.cpp\llama-server.exe"
@@ -159,6 +177,31 @@ BASE_FLAGS_FIJAS = [
     "-lm", "none",
     "-lv", "4",
     "--host", HOST_DEF, "--port", str(PUERTO_DEF),
+]
+
+# COLOCACION POR CONFIG (leccion barrido-qwen-30, materializada en v1.3):
+# en b11856 -cmoe y -ncmoe juntos = gana el GENERAL (-cmoe) y anula al
+# -ncmoe; por eso la base NO lleva colocacion y CADA config trae la suya:
+# la ANCLA y todo el resto llevan -cmoe (= la receta diaria: expertos en
+# RAM); NCM37C4 y COMBO-T llevan -ncmoe 37. HOTFIX de campo (28-oct, 1a
+# corrida completa): la v1.2 salio SIN colocacion en 11 de 13 configs ->
+# el comando pedia los 14.27 GB del modelo EN la GPU de 4 GB y el server
+# moria en ~2.5 s (exit 1); solo sobrevivieron las 2 con -ncmoe 37.
+CM = ["-cmoe"]
+
+# CERTIFICADO DE RECETA del ANCLA: tokens EXACTOS de la receta diaria
+# (config.txt FLAGS_BASE + FLAGS_GANADORAS, ultimo valor gana). El ANCLA
+# (id 1) DEBE contenerlos todos ANTES de medir nada: sin receta diaria no
+# hay baseline y el protocolo de decision entero queda sin pata. Leccion
+# del campo 28-oct: la auditoria de flags verifica que cada token del
+# comando EXISTE en el dump, no que el comando traiga LA RECETA COMPLETA
+# (faltaba -cmoe y todo paso VERDE igual).
+CERTIFICADO_RECETA = [
+    ("-ngl", "99"), ("-cmoe", None), ("-c", "16384"),
+    ("-ub", "1024"), ("-b", "4096"),
+    ("-fa", "on"), ("-ctk", "q8_0"), ("-ctv", "q8_0"),
+    ("-t", "4"), ("--prio", "2"), ("--no-mmproj", None),
+    ("-lm", "none"),
 ]
 
 # dosis N3 (verbatim del dump b11856, auditadas 28-oct-2026)
@@ -433,12 +476,17 @@ REPRO_N_PREDICT = 24      # respuestas cortas: manda el TTFT, no el decode
 
 def construir_configs():
     """Construye las configs de la cosecha N3. Cada config = BASE (receta
-    diaria + -lv 4) + flags diff (el ultimo valor gana en llama.cpp)."""
+    diaria + -lv 4) + flags diff (el ultimo valor gana en llama.cpp).
+    La COLOCACION va en el diff POR CONFIG (leccion barrido-30 + hotfix de
+    campo v1.3): add() inyecta -cmoe en toda config que no traiga -ncmoe."""
     configs = []
 
     def add(cid, familia, nombre, flags, hipotesis):
+        fl = list(flags)
+        if "-ncmoe" not in fl:
+            fl += list(CM)   # receta diaria: expertos en RAM (-cmoe)
         configs.append({"id": cid, "familia": familia, "nombre": nombre,
-                        "flags": list(flags), "hipotesis": hipotesis})
+                        "flags": fl, "hipotesis": hipotesis})
 
     add(1, "ANCLA", "N3-ANCLA", [],
         "control de sesion = LA RECETA DIARIA (FLAGS_BASE + FLAGS_GANADORAS "
@@ -504,6 +552,41 @@ def construir_configs():
         "bookend (leccion v1.2.1): re-ancla al cierre; |fin-inicio| > 5% = "
         "la sesion derivo y los deltas se leen con cuidado")
     return configs
+
+
+def verificar_receta(ancla_flags, cert=None):
+    """CERTIFICADO DE RECETA (v1.3): devuelve los items del certificado que
+    FALTAN en los flags finales del ANCLA (base + diff). [] = la receta
+    diaria vive completa. Pares (flag, valor): deben aparecer adyacentes;
+    (flag, None): el token debe existir."""
+    faltan = []
+    tokens = list(ancla_flags or [])
+    for flag, valor in (cert if cert is not None else CERTIFICADO_RECETA):
+        if valor is None:
+            if flag not in tokens:
+                faltan.append(flag)
+        else:
+            ok = False
+            for i, t in enumerate(tokens):
+                if t == flag and i + 1 < len(tokens) and tokens[i + 1] == valor:
+                    ok = True
+                    break
+            if not ok:
+                faltan.append("%s %s" % (flag, valor))
+    return faltan
+
+
+def verificar_colocacion(configs, base_flags=()):
+    """Regla del barrido-30 materializada (v1.3): TODO comando final debe
+    traer su colocacion (-cmoe o -ncmoe). Sin ella el modelo de 14.27 GB
+    no cabe en la GPU de 4 GB (11 configs muertas en el campo 28-oct).
+    Devuelve los nombres de las configs que no la llevan."""
+    malas = []
+    for c in configs:
+        full = list(base_flags or []) + list(c["flags"])
+        if "-cmoe" not in full and "-ncmoe" not in full:
+            malas.append("#%d %s" % (c["id"], c["nombre"]))
+    return malas
 
 
 BLOQUES_DE = {"ancla": [1], "ram": [2, 3, 4], "cache": [5, 6], "slots": [7],
@@ -921,7 +1004,7 @@ def dossier_pc(con_nvidia=True):
         # Los parentesis restauran la concatenacion y el % sobre el literal
         # COMPLETO (cazado en la primera corrida real del prevuelo).
         d["ram_hardware"] = (
-            "%d modulos x %s GB a %s MT/s (dual channel si son 2)"
+            "%d modulos, %s GB en total a %s MT/s (dual channel si son 2)"
             % (len(palos), fmt(sum(caps) / (1024 ** 3), 1),
                "/".join(vels)))
     pf = _ps_json("Get-CimInstance Win32_PageFileUsage | Select-Object Name,"
@@ -1541,6 +1624,9 @@ def medir_config(cfg, contexto):
         log_txt = leer_log_server(log_path)
         if log_txt.get("fit_abort"):
             fila["nota"] += " (fit abortado: VRAM insuficiente para esta config)"
+        # forense en el CSV (v1.3): el campo 28-oct necesito el log en la
+        # mano para diagnosticar sin abrir logs-config a mano
+        fila["nota"] += " | log: %s" % cola_log(log_path, n=3)[:220]
         print(red("    FAIL carga (%s)" % fila["nota"]))
         print(red("    cola del log: %s" % cola_log(log_path)))
         completo.update({"valido": False, "nota": fila["nota"],
@@ -2178,6 +2264,30 @@ def main(argv=None):
     print(green("  VERDE: %d configs, todos los tokens verbatim en el dump, "
                 "cero prohibidas" % len(configs)))
 
+    # ---- certificado de receta + colocacion (v1.3, hotfix de campo) -------
+    # el campo 28-oct paso la auditoria VERDE y aun asi murio 11 configs: la
+    # auditoria ve TOKENS en el dump, no la RECETA COMPLETA del comando.
+    ancla_ref = next((c for c in construir_configs() if c["id"] == 1), None)
+    if ancla_ref is not None:
+        faltan = verificar_receta(list(base_flags) + list(ancla_ref["flags"]))
+        if faltan:
+            raise SystemExit(red(
+                "FATAL: la receta base NO es la diaria certificada: faltan "
+                "%s (config.txt FLAGS_BASE + FLAGS_GANADORAS). Sin la receta "
+                "diaria el ancla no es el ancla: nada se mide."
+                % ", ".join(faltan)))
+        print(green("  VERDE: receta diaria certificada en el ancla "
+                    "(incluida la colocacion -cmoe)"))
+    sin_coloc = verificar_colocacion(configs, base_flags)
+    if sin_coloc:
+        raise SystemExit(red(
+            "FATAL: configs SIN colocacion (-cmoe/-ncmoe): %s (leccion "
+            "barrido-30: sin colocacion el modelo de 14.27 GB no cabe en la "
+            "GPU de 4 GB y el server muere en la carga)"
+            % ", ".join(sin_coloc)))
+    print(green("  VERDE: colocacion por config en %d/%d configs"
+                % (len(configs) - len(sin_coloc), len(configs))))
+
     if args.si:
         matar_server_vivo(args.puerto)
     elif health_ok(args.puerto):
@@ -2289,6 +2399,21 @@ def main(argv=None):
             resultados[cfg["id"]]["decode_ts"] = dec
             completos[cfg["id"]] = completo
             hechas_sesion += 1
+            # ---- ancla muerta = FATAL (v1.3, campo 28-oct) -----------------
+            # sin baseline de sesion el protocolo entero queda sin pata
+            # (bookend imposible, deltas N/D): seguir midiendo es tirar el
+            # dia. La fila queda en el CSV y el resume re-mide sola.
+            if cfg["id"] == 1 and fila.get("valido") != "SI":
+                print(red("  cola del log del ancla: %s"
+                          % (completos.get(1, {}).get("log_cola") or "N/D")))
+                raise SystemExit(red(
+                    "FATAL: el ANCLA (id 1 = la receta diaria) no cargo (%s). "
+                    "Sin ancla no hay baseline: bookend imposible y deltas "
+                    "N/D -> nada mas se mide en esta sesion. Causa tipica: la "
+                    "receta base no coincide con config.txt (colocacion -cmoe "
+                    "ausente = el modelo no cabe en la GPU). Revisar "
+                    "logs-config/01-N3-ANCLA.log; el resume re-mide sola esta "
+                    "config al repetir el comando." % fila.get("nota", "")))
     except KeyboardInterrupt:
         interrumpido = True
         print(yellow("\n  INTERRUMPIDO (Ctrl+C): guardando informe parcial; "

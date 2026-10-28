@@ -14,6 +14,17 @@ datos realistas del rig (2 palos / 1 palo sin MT/s), y auditoria AST
 permanente de cadenas de formato en TODOS los scripts (la clase del crash
 no vuelve: U22-U24).
 
+v1.3 anade: hotfix de campo 2 (la 1a corrida COMPLETA del rig 28-oct: 11
+de 13 configs murieron en ~2.5 s con "fit abortado: VRAM insuficiente";
+solo sobrevivieron las 2 con -ncmoe 37). Causa: la base salio sin la
+colocacion -cmoe de la receta diaria y el comando pedia los 14.27 GB del
+modelo EN la GPU de 4 GB. Vacuna: (a) el FAKE ahora SE NIEGA a arrancar
+sin colocacion (-cmoe/-ncmoe) = reproduce el rig de 4 GB; (b) U25-U27
+certifican la receta diaria completa en el ancla y la colocacion por
+config; (c) E35: ancla muerta = FATAL inmediato con el forense del log en
+la nota del CSV; (d) E36: el resume re-mide solas las filas muertas (la
+recuperacion del campo sin tocar nada a mano).
+
 Comportamiento del fake (reproduce los DOS mundos del hibrido #21831):
   - SI lleva --cache-reuse  -> linea 'restored context checkpoint' por POST
                                y TTFT PLANO (el cache trabaja)
@@ -82,6 +93,14 @@ if "--port" in args: port = int(args[args.index("--port") + 1])
 if "--version" in args:
     print("version: 7000 (b11856)")
     sys.exit(0)
+# rama v1.3: SIN colocacion el rig de 4 GB muere en la carga (el modelo de
+# 14.27 GB no cabe en la GPU) - la v1.2 de campo murio asi 11 veces.
+FAKE_RECHAZA = os.environ.get("FAKE_RECHAZA") == "1"
+if FAKE_RECHAZA or ("-cmoe" not in args and "-ncmoe" not in args):
+    print("llama_model_load_internal: failed to allocate CUDA0 buffer "
+          "(no cabe sin colocacion -cmoe/-ncmoe)", flush=True)
+    print("CUDA error: out of memory", flush=True)
+    sys.exit(1)
 TIENE_REUSE = "--cache-reuse" in args
 NOCACHE = "--no-cache-prompt" in args
 WARN = os.environ.get("FAKE_REUSE_WARN") == "1"
@@ -213,14 +232,17 @@ spec.loader.exec_module(b3)
 cfgs = b3.construir_configs()
 check("U01: 13 configs con ids unicos 1..13",
       len(cfgs) == 13 and [c["id"] for c in cfgs] == list(range(1, 14)))
-check("U02: ancla y bookend sin flags (receta diaria pura)",
-      cfgs[0]["flags"] == [] and cfgs[12]["flags"] == [])
-check("U03: REUSE lleva --cache-reuse 256 y SHIFT lleva shift+reuse",
-      cfgs[4]["flags"] == ["--cache-reuse", "256"]
-      and cfgs[5]["flags"] == ["--context-shift", "--cache-reuse", "256"])
-check("U04: NCM37C4 verbatim del barrido-30",
+check("U02: ancla y bookend llevan SOLO su colocacion (-cmoe = receta diaria)",
+      cfgs[0]["flags"] == ["-cmoe"] and cfgs[12]["flags"] == ["-cmoe"])
+check("U03: REUSE lleva --cache-reuse 256 y SHIFT lleva shift+reuse (+colocacion)",
+      cfgs[4]["flags"] == ["--cache-reuse", "256", "-cmoe"]
+      and cfgs[5]["flags"] == ["--context-shift", "--cache-reuse", "256",
+                               "-cmoe"])
+check("U04: NCM37C4 verbatim del barrido-30 y SIN -cmoe general (leccion: "
+      "el general anula al -ncmoe)",
       cfgs[7]["flags"] == ["-ncmoe", "37", "-c", "4096",
-                           "-ctk", "q4_0", "-ctv", "q4_0"])
+                           "-ctk", "q4_0", "-ctv", "q4_0"]
+      and "-cmoe" not in cfgs[7]["flags"])
 check("U05: COMBO-T = NCM37C4 + cache completa",
       all(t in cfgs[9]["flags"] for t in
           ("-ncmoe", "--cache-ram", "-ctxcp", "-cms", "--cache-reuse",
@@ -385,7 +407,7 @@ try:
 finally:
     b3._ps_json = orig_ps
 check("U22: dossier_pc con 2 palos (rig real) -> ram_hardware sin crash",
-      "2 modulos x 16.0 GB a 3200 MT/s" in (pc2.get("ram_hardware") or "")
+      "2 modulos, 16.0 GB en total a 3200 MT/s" in (pc2.get("ram_hardware") or "")
       and "(dual channel si son 2)" in (pc2.get("ram_hardware") or ""),
       str(pc2.get("ram_hardware")))
 try:
@@ -394,8 +416,26 @@ try:
 finally:
     b3._ps_json = orig_ps
 check("U23: dossier_pc con 1 palo sin MT/s -> '?' y sin crash",
-      "1 modulos x 8.0 GB a ? MT/s" in (pc3.get("ram_hardware") or ""),
+      "1 modulos, 8.0 GB en total a ? MT/s" in (pc3.get("ram_hardware") or ""),
       str(pc3.get("ram_hardware")))
+
+# ---- v1.3: certificado de receta + colocacion (hotfix de campo 2) ----------
+full_ancla = list(b3.BASE_FLAGS_FIJAS) + list(cfgs[0]["flags"])
+_faltan_vacio = b3.verificar_receta(full_ancla)
+_faltan_roto = b3.verificar_receta(["-ngl", "99"])
+check("U25: certificado de receta VERDE en el ancla (base + colocacion)",
+      _faltan_vacio == [] and len(_faltan_roto) == 11
+      and "-cmoe" in _faltan_roto and "-c 16384" in _faltan_roto
+      and "-lm none" in _faltan_roto,
+      "ancla=%s roto=%s" % (_faltan_vacio, _faltan_roto[:4]))
+base_mala = [t for t in full_ancla if t != "-cmoe"]   # LA v1.2 DE CAMPO
+check("U26: receta sin -cmoe -> el certificado la caza (la leccion del campo)",
+      b3.verificar_receta(base_mala) == ["-cmoe"])
+check("U27: colocacion por config en 13/13; una config sin ella se nombra",
+      b3.verificar_colocacion(cfgs, list(b3.BASE_FLAGS_FIJAS)) == []
+      and b3.verificar_colocacion(
+          [{"id": 9, "nombre": "X", "flags": ["-c", "4096"]}],
+          ["-ngl", "99"]) == ["#9 X"])
 
 def _contar_ph(s):
     """Numero de placeholders % en una cadena de formato (%% no cuenta;
@@ -633,7 +673,7 @@ print("--- GUARDARRAILS ---")
 PUERTO7 = _libre()
 S7 = _montar_escenario("puerto-ocupado")
 proceso_falso = subprocess.Popen([sys.executable, S7["fake"],
-                                  "--port", str(PUERTO7)],
+                                  "--port", str(PUERTO7), "-cmoe"],
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL)
 try:
@@ -663,6 +703,35 @@ p8 = subprocess.run(
 check("E27: server inexistente -> FATAL claro",
       p8.returncode != 0 and "no existe el server" in
       (p8.stdout + p8.stderr).decode("utf-8", errors="replace"))
+
+# ================ 7. ancla muerta = FATAL + recuperacion (v1.3) =============
+print("--- ANCLA MUERTA = FATAL (hotfix de campo v1.3) ---")
+PUERTO9 = _libre()
+S9 = _montar_escenario("ancla-muerta", env_extra={"FAKE_RECHAZA": "1"})
+p9 = _correr_barrido(S9, PUERTO9)
+salida9 = p9.stdout.decode("utf-8", errors="replace") + \
+    p9.stderr.decode("utf-8", errors="replace")
+filas9 = _leer_csv(S9)
+check("E35: ancla muerta -> FATAL inmediato, 1 fila invalida con forense",
+      p9.returncode != 0 and "ANCLA" in salida9 and "no cargo" in salida9
+      and len(filas9) == 1 and filas9[0]["valido"] == "NO"
+      and "failed to allocate" in filas9[0]["nota"],
+      "rc=%s filas=%d nota=%s"
+      % (p9.returncode, len(filas9),
+         filas9[0]["nota"][:140] if filas9 else "(sin filas)"))
+
+# la recuperacion del campo: MISMA carpeta, fake sano -> el resume solo
+# cuenta filas SI -> re-mide las 13 y la sesion se recupera sin tocar nada
+S9["env"] = {}
+p10 = _correr_barrido(S9, PUERTO9)
+salida10 = p10.stdout.decode("utf-8", errors="replace")
+filas10 = _leer_csv(S9)
+_validos10 = sorted(int(r["id"]) for r in filas10 if r["valido"] == "SI")
+check("E36: resume tras ancla muerta re-mide las 13 y recupera la sesion",
+      p10.returncode == 0 and _validos10 == list(range(1, 14))
+      and len(filas10) == 14,
+      "rc=%s validos=%s filas=%d"
+      % (p10.returncode, _validos10, len(filas10)))
 
 print("")
 if ok_fallos:
