@@ -191,3 +191,30 @@ Pedido del Director: "tengo mas espacio en D:, ahora planea esos 10 pasos solidi
 **Batería:** `tests/test_campana_mock.py` — 38 checks TODO VERDE (U01-U22 piezas puras: autenticadores del hito PINADOS contra RUTAS.md L738, mediana con ancla por corrida, GGUF fabricado a bytes con/sin nextn, informe append-only; E01-E24 E2E: puertas, cirugía con backup+revert, cierre del N3, dry-run que no frena, humo con server falso en sus DOS mundos —levanta y responde / muere en carga con forense— y guardarrail de server ajeno). **Bugs que la batería cazó en el taller:** (1) la rama idempotente de p2 borraba la referencia al backup → revert ciego (arreglado + fallback al backup más reciente); (2) dry-run de p4 moría por disco chico del taller → ahora avisa sin frenar (en real sigue siendo FATAL); (3) verificar_gguf devolvía bool y paso5 hacía len() → devuelve la lista de claves. Regresión de la casa 5/5 VERDE (abrir 11/11, chatear E2E, barrido, diagnostico, barrido-n3).
 
 **El Director solo necesita:** copiar `campana-10-pasos.py` a D:\ZLia (junto a barrido-n3-eficiencia.py) y correr `py campana-10-pasos.py estado`. La ruta crítica del R34 queda intacta: p1 → p2 → p3 → lanzar p4 de noche → p5 al amanecer.
+
+---
+
+## ANEXO R36 — REVISIÓN "NI UN SOLO BUG" DEL PILOTO (v1.0 → v1.1)
+
+Pedido del Director (28-oct-2026): "yo hago doble click y hace todo automaticamente, dime que hace de forma simplificada, hazle una revision para que no tenga ni un solo bug". Auditoría línea a línea del piloto contra sus compañeros REALES (barrido-n3 v1.3, config.txt de la casa, abrir-qwen-apex.py, tests) — no una relectura: verificación de contratos. **13 hallazgos corregidos**, ninguno de gravedad crítica pero 3 habrían estorbado en el rig:
+
+**Habrían estorbado en la campaña:**
+1. **Puerta p3 bloqueada por un re-run inofensivo** — si el Director re-ejecutaba p2 (rama idempotente), el estado quedaba "YA-PROMOVIDA" y la puerta de p3 solo aceptaba "PROMOVIDA": bloqueo falso justo antes del juez. Fix: la puerta acepta PROMOVIDA/YA-PROMOVIDA.
+2. **Humo con receta distinta a la diaria** — el humo de p5 no replicaba el lanzador de la casa: faltaba el override de expertos cuando EXPERTOS_TRABAJO != 8 (misma regla de abrir-qwen-apex.py), moría con KeyError crudo si faltaba RUTA_SERVER, y un `-m` colado dentro de las flags habría cargado OTRO modelo (el humo habría mentido). Fix: receta espejo del lanzador + limpieza de -m/--model + FATAL nominado.
+3. **Forense del humo destruido** — campana-humo.log se abría en modo "w": el intento #2 borraba el forense del intento #1 (contra la regla de la casa: la evidencia nunca se pisa). Fix: acumulativo con cabecera por intento.
+
+**El resto:**
+4. p2 por substring: "-np 20" hacía pasar el chequeo "-np 2" y la promoción se apilaba si ya había un -np → ahora por tokens; -np distinto de 2 = no se toca nada y queda escrito en el informe.
+5. Higiene p1: D: por debajo del mínimo salía VERDE (avisaba solo C:) → avisan ambos discos con su motivo.
+6. DOBLE CLICK: la ventana se cerraba sola antes de poder leerse → arrancado SIN argumentos, el piloto espera un Enter al mostrar el estado (con argumentos no molesta). Nuevo launcher **CAMPANA.bat** (patrón de la casa: doble click = foto del estado; `CAMPANA.bat p1` = paso concreto).
+7. Ctrl+C en la corrida del barrido (p1) o en el N1 formal (p6) mostraba traceback crudo → pausa limpia rc 130.
+8. Paleta del estado: YA-PROMOVIDA / VERIFICADO-SIN-HUMO / NO-GO / REVERTIDA / INCOMPLETO pintados de rojo (alarma falsa) → verdes/amarillos correctos, rojo solo para FALLO-CERTIFICADO/FALLA.
+9. Estado json viejo o roto (sin pasos/n3, o no-dict) reventaba después → lectura defensiva.
+10. Un hf instalado como .bat/.cmd (shim de pip) no arrancaba en Windows → envuelto en cmd /c.
+11. El veredicto OK/FALLA de p3 no actualizaba pasos["3"] (se quedaba "EN-ESPERA-DEL-JUEZ" para siempre) → actualizado; y re-corridas del mismo tag PISABAN el RESUMEN.md → el anterior se archiva con timestamp.
+12. Cancelaciones (p2/p4/p6) sin rastro en el informe → la memoria append-only ahora también registra lo que el Director NO dejó hacer.
+13. REPO_ALT (repo alternativo, mismo archivo y SHA) estaba muerto → documentado en la ayuda de --repo.
+
+**Paperería cazada de paso:** la ronda 35 anunciaba "38 checks" y la batería ejecutaba en realidad 46 — conteo a la baja corregido (el contador ahora es dinámico).
+
+**Batería:** test_campana_mock.py pasa de 46 a **65 checks ejecutados TODO VERDE** (N01-N14 nuevos: puerta tras YA-PROMOVIDA, -np 20 no engaña, cancelaciones escritas, higiene que avisa en ambos discos, json roto no revienta, helpers puros, paleta, veredicto que actualiza pasos["3"], pausa de doble click, Ctrl+C limpio, forense acumulativo con 4 intentos, RESUMEN archivado). Regresión de la casa 5/5 VERDE (abrir, chatear, barrido, diagnostico, barrido-n3). py_compile OK. test_faseD_n1 SIN TOCAR (el diff confirma: cero cambios fuera del campana, su test y el bat nuevo).

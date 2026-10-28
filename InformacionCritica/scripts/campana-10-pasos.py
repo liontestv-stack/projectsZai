@@ -45,6 +45,44 @@ campana-INFORME.md, campana-sanity-<tag>/, models/. --dir cambia la base.
 Importa barrido-n3-eficiencia.py (mismo directorio) para reutilizar el
 parser GGUF, el SHA256 streaming, el chequeo de RAM y el cliente HTTP:
 si no esta al lado, FATAL (son el mismo paquete del rig).
+
+CHANGELOG v1.1 (2026-10-28, ronda 36 — revision "ni un solo bug" pedida por
+el Director: "yo hago doble click y hace todo automaticamente... hazle una
+revision para que no tenga ni un solo bug"). 13 hallazgos corregidos, todos
+verificados contra los compañeros reales (barrido-n3 v1.3, config.txt de la
+casa, abrir-qwen-apex.py, tests de la casa):
+  1. p3: la puerta moria si p2 se re-ejecutaba (YA-PROMOVIDA no contaba
+     como promovida) — el Director quedaba bloqueado por un re-run inofensivo.
+  2. p1: disco D: por debajo del minimo salia VERDE (higiene que no avisaba);
+     ahora avisan AMBOS discos con su motivo.
+  3. p2: el chequeo "-np 2" era por substring ("-np 20" engañaba) y la
+     promocion se APILABA si ya habia un -np → ahora por tokens; si ya hay
+     un -np distinto de 2, no se toca nada y queda escrito.
+  4. p5: campana-humo.log se SOBREESCRIBIA en cada intento (se perdia el
+     forense del intento anterior) → acumulativo con cabecera por intento.
+  5. p5: el humo NO replicaba la receta de la casa (faltaba el override de
+     expertos si EXPERTOS_TRABAJO != 8), moria feo sin RUTA_SERVER, y un
+     -m pegado dentro de las flags habria cargado OTRO modelo → receta
+     espejo del lanzador + limpieza de -m/--model + FATAL nominado.
+  6. p1/p6: Ctrl+C mostraba traceback crudo → pausa limpia (rc 130).
+  7. DOBLE CLICK: la ventana se cerraba sola antes de poder leerse → si el
+     script se arranca SIN argumentos, espera un Enter al mostrar estado.
+  8. estado: YA-PROMOVIDA / VERIFICADO-SIN-HUMO / NO-GO / REVERTIDA /
+     INCOMPLETO pintados de rojo (alarma falsa) → paleta correcta.
+  9. estado json viejo o roto (sin pasos/n3, o no-dict) reventaba después
+     → lectura defensiva con setdefault.
+ 10. p4: un hf instalado como .bat/.cmd (shim de pip) no arrancaba en
+     Windows (CreateProcess no corre shells) → envuelto en cmd /c.
+ 11. p3: el veredicto OK/FALLA no actualizaba pasos["3"] (quedaba
+     "EN-ESPERA-DEL-JUEZ" para siempre en el estado) → actualizado; y una
+     re-corrida del mismo tag PISABA el RESUMEN.md → el anterior se archiva.
+ 12. p2/p4/p6 cancelados por el Director no dejaban rastro en el informe →
+     la memoria append-only ahora registra tambien las cancelaciones.
+ 13. REPO_ALT (repo alternativo con el mismo archivo y SHA) estaba muerto
+     → documentado en la ayuda de --repo.
+Bateria ampliada: test_campana_mock.py pasa de 46 a 65 checks ejecutados
+TODO VERDE (N01-N14 nuevos; nota: r35 anunciaba "38 checks" y era un conteo
+a la baja — papereria tambien corregida).
 """
 import argparse
 import csv
@@ -60,13 +98,33 @@ import time
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = "campana-10-pasos v1.0 (2026-10-28, piloto de la campana: 10 pasos con puertas, certificados y memoria; pedido del Director 'un .py que haga todo')"
+VERSION = "campana-10-pasos v1.1 (2026-10-28, piloto de la campana tras la revision 'ni un solo bug': 13 fixes; pedido del Director 'que no tenga ni un solo bug')"
+
+
+def _pausa_doble_click(es_tty=None):
+    """Doble click en Windows: la consola se cierra sola al terminar y el
+    Director no alcanza a leer nada. Si el script se arranco SIN argumentos
+    (doble click puro) se espera un Enter antes de cerrar; con argumentos
+    (uso real desde consola/bat) no molesta."""
+    if len(sys.argv) <= 1:
+        if es_tty is None:
+            try:
+                es_tty = sys.stdin.isatty()
+            except Exception:
+                es_tty = False
+        if es_tty:
+            try:
+                input("\n(Enter para cerrar)")
+            except Exception:
+                pass
+
 
 # ---------------- importacion del companero de taller (barrido N3) ----------
 _BARRIDO = os.path.join(AQUI, "barrido-n3-eficiencia.py")
 if not os.path.exists(_BARRIDO):
     print("[FATAL] no encuentro barrido-n3-eficiencia.py junto a mi (%s)." % AQUI)
     print("        El piloto y el barrido viajan JUNTOS en D:\\ZLia.")
+    _pausa_doble_click()
     sys.exit(2)
 _spec = importlib.util.spec_from_file_location("barrido_n3", _BARRIDO)
 bn3 = importlib.util.module_from_spec(_spec)
@@ -131,7 +189,12 @@ def leer_estado(ruta_estado):
     if os.path.exists(ruta_estado):
         try:
             with open(ruta_estado, encoding="utf-8") as f:
-                return json.load(f)
+                datos = json.load(f)
+            if isinstance(datos, dict):
+                # defensa: un json viejo o a medio escribir no revienta despues
+                datos.setdefault("pasos", {})
+                datos.setdefault("n3", {})
+                return datos
         except Exception:
             pass
     return {"version": VERSION, "actualizado": "", "pasos": {}, "n3": {}}
@@ -284,9 +347,13 @@ def paso1(args, rutas, estado):
             print(gray("  disco %s: (no disponible)" % etiqueta))
             continue
         msg = "  disco %s: %.1f GB libres de %.1f" % (etiqueta, libre, total)
-        if etiqueta.startswith("C:") and libre < minimo:
-            print(yellow(msg + yellow("  <- por DEBAJO de %.0f GB de higiene (pagefile en C:)" % minimo)))
-            lineas.append("- disco %s: %.1f GB libres (< %.0f GB de higiene)" % (etiqueta, libre, minimo))
+        if libre < minimo:
+            # AMBOS discos avisan (v1.0 solo miraba C: y D: bajo salia VERDE)
+            detalle = ("higiene: pagefile en C:" if etiqueta.startswith("C:")
+                       else "minimo para la descarga del cuant")
+            print(yellow(msg + yellow("  <- por DEBAJO de %.0f GB (%s)" % (minimo, detalle))))
+            lineas.append("- disco %s: %.1f GB libres (< %.0f GB: %s)"
+                          % (etiqueta, libre, minimo, detalle))
         else:
             print(green(msg))
             lineas.append("- disco %s: %.1f GB libres de %.1f" % (etiqueta, libre, total))
@@ -322,19 +389,24 @@ def paso1(args, rutas, estado):
 
     # -- las 2 corridas de mediana (barrido v1.3; reanudable) --
     if not args.sin_corridas:
-        for carpeta in (b2, b3):
-            if not confirmar("EJECUTAR", "Se lanzara el barrido (~6-8 min) en carpeta '%s' con --solo ancla,slots,anclafin. El rig debe estar QUIETO (sin descargas, apps cerradas)." % carpeta):
-                fatal("mediana incompleta: el Director cancelo la corrida de %s" % carpeta,
-                      ["re-lanza p1 cuando puedas dejar el rig quieto",
-                       "o usa p1 --sin-corridas para cosechar lo ya medido"])
-            cmd = [sys.executable, _BARRIDO, "--logs", carpeta,
-                   "--solo", "ancla,slots,anclafin"]
-            print(cyan("  $ %s" % " ".join(cmd)))
-            rc = subprocess.call(cmd)
-            if rc != 0:
-                fatal("el barrido salio con rc=%d en %s" % (rc, carpeta),
-                      ["mira el final de la salida de arriba (forense)",
-                       "el resume de la casa re-mide solo lo muerto: repite p1"])
+        try:
+            for carpeta in (b2, b3):
+                if not confirmar("EJECUTAR", "Se lanzara el barrido (~6-8 min) en carpeta '%s' con --solo ancla,slots,anclafin. El rig debe estar QUIETO (sin descargas, apps cerradas)." % carpeta):
+                    fatal("mediana incompleta: el Director cancelo la corrida de %s" % carpeta,
+                          ["re-lanza p1 cuando puedas dejar el rig quieto",
+                           "o usa p1 --sin-corridas para cosechar lo ya medido"])
+                cmd = [sys.executable, _BARRIDO, "--logs", carpeta,
+                       "--solo", "ancla,slots,anclafin"]
+                print(cyan("  $ %s" % " ".join(cmd)))
+                rc = subprocess.call(cmd)
+                if rc != 0:
+                    fatal("el barrido salio con rc=%d en %s" % (rc, carpeta),
+                          ["mira el final de la salida de arriba (forense)",
+                           "el resume de la casa re-mide solo lo muerto: repite p1"])
+        except KeyboardInterrupt:
+            print(yellow("\n  INTERRUMPIDO (Ctrl+C): corrida pausada. El resume "
+                         "de la casa re-mide solo lo muerto: repite p1."))
+            return 130
     else:
         print(gray("  (--sin-corridas: cosechando lo que ya hay en las carpetas)"))
 
@@ -394,7 +466,16 @@ def paso2(args, rutas, estado):
     i, linea = _linea_flags_base(ruta)
     if i is None:
         fatal("no encuentro la linea FLAGS_BASE en %s" % ruta)
-    if "-np 2" in linea:
+    # -np se busca por TOKENS, no por substring: "-np 20" no es "-np 2",
+    # y si ya hay un -np distinto, la promocion NO se apila encima
+    tokens = linea.split()
+    ya_np = None
+    for bandera in ("-np", "--parallel"):
+        if bandera in tokens:
+            i = tokens.index(bandera)
+            ya_np = tokens[i + 1] if i + 1 < len(tokens) else "?"
+            break
+    if ya_np == "2":
         print(yellow("  FLAGS_BASE ya contiene -np 2: nada que hacer (idempotente)."))
         previo = estado["pasos"].get("2", {})
         estado["pasos"]["2"] = {"estado": "YA-PROMOVIDA",
@@ -402,6 +483,12 @@ def paso2(args, rutas, estado):
                                 "linea": previo.get("linea", linea)}
         guardar_estado(rutas["estado"], estado)
         return 0
+    if ya_np is not None:
+        print(yellow("  FLAGS_BASE ya trae -np %s (no 2): NO se toca nada." % ya_np))
+        print(yellow("  El numero de slots ya lo decidio otra mano: revisa y decide tu."))
+        informe(rutas["informe"], "P2 promocion ABORTADA: FLAGS_BASE ya trae -np %s" % ya_np,
+                ["- linea: `%s`" % linea, "- config.txt intacto (nada editado)"])
+        return 1
     nueva = linea + " -np 2"
     print("  linea actual : %s" % gray(linea))
     print("  linea nueva  : %s" % green(nueva))
@@ -409,6 +496,8 @@ def paso2(args, rutas, estado):
                 "WorkingSet +965 MiB, SS11.4 (MTP exige -np 1, se decide en p10)."))
     if not confirmar("PROMOVER", "Se editara %s (backup automatico antes)." % ruta):
         print(gray("  cancelado: config.txt intacto."))
+        informe(rutas["informe"], "P2 promocion CANCELADA por el Director",
+                ["- config.txt intacto (nada editado)"])
         return 1
     backup = "%s.bak-campana-p2-%s" % (ruta, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     shutil.copy2(ruta, backup)
@@ -486,12 +575,15 @@ def paso3(args, rutas, estado):
         if v not in ("OK", "FALLA"):
             fatal("veredicto debe ser OK o FALLA")
         estado["n3"]["veredicto_sanity"] = v
+        estado.setdefault("pasos", {}).setdefault("3", {})
         if v == "OK":
             estado["n3"]["cerrado"] = True
+            estado["pasos"]["3"]["estado"] = "OK"
             print(green(bold("  N3 CERRADO con promocion aceptada. Campana desbloqueada hasta p10.")))
             lineas = ["- veredicto del Director: OK", "- N3 CERRADO con -np 2 promovida"]
         else:
             estado["n3"]["cerrado"] = False
+            estado["pasos"]["3"]["estado"] = "FALLA"
             print(red("  FALLA registrada. La casa instruye: p2 --revert (5 segundos) y reportar que fallo."))
             lineas = ["- veredicto del Director: FALLA", "- accion: p2 --revert + registrar que fallo"]
         estado["n3"]["cerrado_en"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -499,7 +591,7 @@ def paso3(args, rutas, estado):
         informe(rutas["informe"], "P3 veredicto del juez -> %s" % v, lineas)
         return 0
     p2 = estado["pasos"].get("2", {})
-    if p2.get("estado") != "PROMOVIDA" and not args.fuerza:
+    if p2.get("estado") not in ("PROMOVIDA", "YA-PROMOVIDA") and not args.fuerza:
         fatal("la puerta p2 no esta PROMOVIDA (estado: %s)" % (p2.get("estado") or "SIN P2"),
               ["promueve con p2 primero (el sanity juzga la receta NUEVA)",
                "o --fuerza si sabes lo que haces (queda escrito)"])
@@ -508,7 +600,7 @@ def paso3(args, rutas, estado):
         fatal("no hay server vivo en el puerto %d" % puerto,
               ["arranca el server como siempre (ABRIR-QWEN.bat) y reintenta",
                "o pasa --puerto si usa otro"])
-    tag = args.tag or ("np2" if p2.get("estado") == "PROMOVIDA" else "libre")
+    tag = args.tag or ("np2" if p2.get("estado") in ("PROMOVIDA", "YA-PROMOVIDA") else "libre")
     carpeta = os.path.join(rutas["base"], "campana-sanity-%s" % tag)
     os.makedirs(carpeta, exist_ok=True)
     print(cyan("  server vivo en %d. %d prompts, 1 por uno..." % (puerto, SANITY_TOTAL)))
@@ -529,6 +621,13 @@ def paso3(args, rutas, estado):
     if fallas:
         print(red("  %d/%d prompts con error HTTP: revisa el log del server." % (fallas, SANITY_TOTAL)))
     ruta_res = os.path.join(carpeta, "RESUMEN.md")
+    if os.path.exists(ruta_res):
+        # re-corrida del mismo tag: el resumen ANTERIOR se archiva (la
+        # evidencia de la casa nunca se pisa; el informe guarda todas)
+        viejo = os.path.join(carpeta, "RESUMEN-%s.md"
+                             % datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        os.replace(ruta_res, viejo)
+        print(gray("  resumen anterior archivado: %s" % os.path.basename(viejo)))
     with open(ruta_res, "w", encoding="utf-8") as f:
         f.write("# Sanity %s — %d prompts (juez: Director)\n\n"
                 "(respuestas completas en prompt-NN-*.txt junto a este archivo)\n\n"
@@ -556,6 +655,27 @@ def _binario_hf():
         if ruta:
             return [ruta]
     return None
+
+
+def _envuelve_gui(cmd, es_windows=None):
+    """En Windows, un ejecutable instalado como .bat/.cmd (shim de pip) no
+    arranca con exec directo: CreateProcess no corre shells. Se envuelve en
+    cmd /c. En Linux/macOS (o un .exe) pasa igual."""
+    if es_windows is None:
+        es_windows = (os.name == "nt")
+    if cmd and es_windows and os.path.splitext(cmd[0])[1].lower() in (".bat", ".cmd"):
+        return ["cmd", "/c"] + cmd
+    return cmd
+
+
+def _quita_modelo_de_flags(flags):
+    """Quita un -m/--model <ruta> pegado dentro de las flags: el modelo del
+    humo va a parte y SIEMPRE es el nuevo (un -m colado cargaria otro cuant
+    y el humo mentiria)."""
+    while "-m" in flags or "--model" in flags:
+        i = flags.index("-m") if "-m" in flags else flags.index("--model")
+        del flags[i:i + 2]
+    return flags
 
 
 def paso4(args, rutas, estado):
@@ -603,11 +723,13 @@ def paso4(args, rutas, estado):
     if not confirmar("DESCARGAR", "Arranca la descarga (%.2f GB). Puede correr sola de noche; "
                                   "Ctrl+C la PAUSA y p4 la retoma." % (MODELO_NUEVO_BYTES / 1024.0 ** 3)):
         print(gray("  cancelado."))
+        informe(rutas["informe"], "P4 descarga CANCELADA por el Director",
+                ["- nada se descargo en este intento"])
         return 1
     env = dict(os.environ)
     env["HF_HOME"] = cache_hf
     try:
-        rc = subprocess.call(cmd, env=env)
+        rc = subprocess.call(_envuelve_gui(cmd), env=env)
     except KeyboardInterrupt:
         print(yellow("\n  INTERRUMPIDO (Ctrl+C): pausada. p4 la retoma mas tarde."))
         return 130
@@ -708,13 +830,35 @@ def paso5(args, rutas, estado):
     if health_ok(puerto):
         fatal("ya hay un server vivo en el puerto %d (guardarrail de la casa)" % puerto,
               ["apaga el server diario antes del humo", "o usa --puerto 9932"])
+    servidor = cfg.get("RUTA_SERVER", "")
+    if not servidor:
+        fatal("config.txt no trae RUTA_SERVER (el humo no sabe QUE server arrancar)",
+              ["revisa config.txt: RUTA_SERVER = ruta del llama-server.exe"])
+    if not os.path.exists(servidor):
+        fatal("el server no esta donde dice config.txt: %s" % servidor,
+              ["revisa RUTA_SERVER en config.txt"])
     flags = (cfg.get("FLAGS_BASE", "") + " " + cfg.get("FLAGS_GANADORAS", "")).split()
-    cmd = [cfg["RUTA_SERVER"], "-m", ruta] + flags + [
+    # el modelo va A PARTE y SIEMPRE es el nuevo (ver _quita_modelo_de_flags)
+    flags = _quita_modelo_de_flags(flags)
+    # MISMA regla del lanzador de la casa (abrir-qwen-apex.py): el override
+    # de expertos SOLO se anade si EXPERTOS_TRABAJO != 8 (8 = de fabrica);
+    # sin esto el humo corria una receta DIFERENTE a la diaria
+    try:
+        k = int(cfg.get("EXPERTOS_TRABAJO", "8"))
+    except Exception:
+        k = 8
+    if k != 8:
+        flags += ["--override-kv", "qwen35moe.expert_used_count=int:%d" % k]
+    cmd = [servidor, "-m", ruta] + flags + [
         "--host", "127.0.0.1", "--port", str(puerto)]
     log_humo = os.path.join(rutas["base"], "campana-humo.log")
     print(cyan("  humo: arrancando server con el modelo NUEVO (puerto %d)..." % puerto))
     print(gray("  $ %s" % " ".join(cmd)))
-    with open(log_humo, "w", encoding="utf-8") as flog:
+    # forense ACUMULATIVO: cada intento anade su cabecera; nada se pisa
+    with open(log_humo, "a", encoding="utf-8") as flog:
+        flog.write("===== intento de humo %s (puerto %d) =====\n"
+                   % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), puerto))
+        flog.flush()
         proc = subprocess.Popen(cmd, stdout=flog, stderr=subprocess.STDOUT)
         try:
             fin = time.time() + 420
@@ -772,9 +916,16 @@ def paso6(args, rutas, estado):
     print(yellow("  corre CON la receta ya promovida (-np 2): sus numeros viven en el mundo final."))
     if not confirmar("LANZAR", "Ocupara el rig ~50-65 min. Sin descargas ni apps en paralelo."):
         print(gray("  cancelado."))
+        informe(rutas["informe"], "P6 N1 formal CANCELADO por el Director",
+                ["- el bat no se lanzo"])
         return 1
     cmd = ["cmd", "/c", bat] if os.name == "nt" else [bat]
-    rc = subprocess.call(cmd)
+    try:
+        rc = subprocess.call(cmd)
+    except KeyboardInterrupt:
+        print(yellow("\n  INTERRUMPIDO (Ctrl+C): N1 formal pausado. El resume de "
+                     "la casa permite repetirlo."))
+        return 130
     if rc != 0:
         fatal("BARRIDO-N1.bat salio con rc=%d" % rc,
               ["revisa su salida/informe; el resume de la casa permite repetirlo"])
@@ -848,6 +999,12 @@ def paso_guiado(n, args, rutas, estado):
 
 # ---------------- estado / plan / main --------------------------------------
 
+VERDES_ESTADO = ("GO", "PROMOVIDA", "YA-PROMOVIDA", "OK", "DESCARGADA",
+                 "VERIFICADO-HUMO-OK", "EJECUTADO", "REGISTRADO")
+AMARILLOS_ESTADO = ("DUDOSO", "PENDIENTE", "EN-ESPERA-DEL-JUEZ", "INCOMPLETO",
+                    "VERIFICADO-SIN-HUMO", "REVERTIDA", "NO-GO")
+
+
 def mostrar_estado(rutas, estado):
     print(bold(cyan("\n=== CAMPANA - %s ===" % estado.get("actualizado", "sin empezar"))))
     print("  informe append-only: %s" % rutas["informe"])
@@ -859,8 +1016,7 @@ def mostrar_estado(rutas, estado):
     for n, titulo in tabla:
         paso = estado["pasos"].get(n, {})
         et = paso.get("estado", "PENDIENTE")
-        estilo = green if et in ("GO", "PROMOVIDA", "OK", "DESCARGADA", "VERIFICADO-HUMO-OK",
-                                 "EJECUTADO", "REGISTRADO") else (yellow if et in ("DUDOSO", "PENDIENTE", "EN-ESPERA-DEL-JUEZ") else red)
+        estilo = green if et in VERDES_ESTADO else (yellow if et in AMARILLOS_ESTADO else red)
         print("   P%-3s %-38s %s" % (n, titulo, estilo(et)))
     n3 = estado.get("n3", {})
     print("  N3: cerrado=%s veredicto_sanity=%s" % (n3.get("cerrado", False),
@@ -886,7 +1042,8 @@ def main():
     ap.add_argument("--veredicto", help="p3: OK | FALLA (cierra el N3)")
     ap.add_argument("--tag", help="p3: etiqueta de la carpeta de sanity")
     ap.add_argument("--repo", default=REPO_DEFAULT,
-                    help="p4: repo HF (def: %s)" % REPO_DEFAULT)
+                    help="p4: repo HF (def: %s; ALT mismo archivo y SHA: %s)"
+                         % (REPO_DEFAULT, REPO_ALT))
     ap.add_argument("--dry-run", action="store_true", help="p4: mostrar sin descargar")
     ap.add_argument("--sin-humo", action="store_true", help="p5: solo certificar, sin server")
     ap.add_argument("--bat", help="p6: ruta de BARRIDO-N1.bat")
@@ -899,7 +1056,9 @@ def main():
     bruto = args.paso.lower()
     paso = bruto[1:] if (bruto.startswith("p") and bruto[1:].isdigit()) else bruto
     if paso == "estado":
-        return mostrar_estado(rutas, estado)
+        rc = mostrar_estado(rutas, estado)
+        _pausa_doble_click()
+        return rc
     if paso == "plan":
         mostrar_estado(rutas, estado)
         print(gray("  detalle completo: plan-siguientes-10-pasos.md en el repo"))

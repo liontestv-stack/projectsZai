@@ -24,8 +24,10 @@ hito N2 PINADOS (bytes 14,069,266,720 + SHA256 36f9ec0e...7150), 20 prompts
 del juez, pasos guiados 7-10, y el dispatch de main.
 """
 import builtins
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -44,9 +46,11 @@ DIR = tempfile.mkdtemp(prefix="campana_test_")
 BASE = os.path.join(DIR, "base")
 os.makedirs(BASE, exist_ok=True)
 ok_fallos = []
+n_checks = [0]
 
 
 def check(nombre, cond, detalle=""):
+    n_checks[0] += 1
     estado = "OK  " if cond else "FALLO"
     print("[%s] %s %s" % (estado, nombre, detalle))
     if not cond:
@@ -447,9 +451,187 @@ except SystemExit:
     check("E24 p6 sin bat = FATAL con pista --bat", True)
 
 print("")
+print("== R36: regresion de la revision ni-un-solo-bug (v1.1) ==")
+
+# N01/N02: la puerta de p3 NO se bloquea si p2 se re-ejecuta (YA-PROMOVIDA)
+builtins.input = lambda *a, **k: "PROMOVER"
+a, r, e = rutas()
+cam.paso2(a, r, e)   # promueve (la config del taller ya no trae -np)
+cam.paso2(a, r, e)   # re-corrida -> rama idempotente
+est = json.load(open(ESTADO, encoding="utf-8"))
+check("N01 re-corrida de p2 deja YA-PROMOVIDA con backup vivo",
+      est["pasos"]["2"]["estado"] == "YA-PROMOVIDA"
+      and est["pasos"]["2"].get("backup"))
+buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(buf):
+        cam.paso3(a, r, e)   # sin server: debe frenar el HEALTH, no la puerta
+except SystemExit:
+    pass
+check("N02 p3 tras YA-PROMOVIDA pasa la puerta (frena el health, no la puerta)",
+      "puerta p2" not in buf.getvalue() and "server vivo" in buf.getvalue())
+
+# N03: "-np 20" NO se confunde con "-np 2" (bug de substring de v1.0)
+cfg20 = (CONFIG_ORIGINAL % "SERVER_PLACEHOLDER").replace(
+    "-lm none", "-lm none -np 20")
+with open(FAKE_CONFIG, "w", encoding="utf-8") as f:
+    f.write(cfg20)
+a, r, e = rutas()
+rc = cam.paso2(a, r, e)
+toks = cam.leer_config(FAKE_CONFIG)["FLAGS_BASE"].split()
+check("N03 -np 20 no cuenta como promovida: rc 1 y config intacta",
+      rc == 1 and toks[toks.index("-np") + 1] == "20")
+
+# N04: un p2 cancelado queda escrito en el informe (memoria append-only)
+with open(FAKE_CONFIG, "w", encoding="utf-8") as f:
+    f.write(CONFIG_ORIGINAL % "SERVER_PLACEHOLDER")
+inf_antes = open(INFORME, encoding="utf-8").read()
+builtins.input = lambda *a, **k: "NO"
+a, r, e = rutas()
+rc = cam.paso2(a, r, e)
+inf_despues = open(INFORME, encoding="utf-8").read()
+toks = cam.leer_config(FAKE_CONFIG)["FLAGS_BASE"].split()
+check("N04 p2 cancelado queda en el informe y config intacta",
+      rc == 1 and "CANCELADA" in inf_despues and len(inf_despues) > len(inf_antes)
+      and "-np" not in toks)
+
+# N05: higiene: D: por debajo del minimo AVISA (v1.0 lo pintaba verde)
+gb_viejo = cam.gb_libres
+cam.gb_libres = lambda p: (5.0, 100.0)
+buf = io.StringIO()
+a, r, e = rutas()
+with contextlib.redirect_stdout(buf):
+    cam.paso1(a, r, e)
+cam.gb_libres = gb_viejo
+check("N05 disco bajo minimo AVISA en ambos (ya no sale verde)",
+      buf.getvalue().count("por DEBAJO") == 2)
+
+# N06: estado json viejo o roto no revienta
+ruta_vieja = os.path.join(DIR, "estado-viejo.json")
+with open(ruta_vieja, "w", encoding="utf-8") as f:
+    f.write('{"version": "vieja"}')
+e6 = cam.leer_estado(ruta_vieja)
+check("N06 json viejo sin pasos/n3 -> claves reparadas",
+      isinstance(e6.get("pasos"), dict) and isinstance(e6.get("n3"), dict))
+with open(ruta_vieja, "w", encoding="utf-8") as f:
+    f.write('["roto"]')
+e6b = cam.leer_estado(ruta_vieja)
+check("N06b json no-dict -> estado limpio",
+      e6b.get("pasos") == {} and e6b.get("n3") == {})
+
+# N07: helpers puros de la v1.1
+check("N07 _envuelve_gui: shim .cmd de Windows va en cmd /c",
+      cam._envuelve_gui(["C:\\x\\hf.cmd", "download"], es_windows=True)
+      == ["cmd", "/c", "C:\\x\\hf.cmd", "download"])
+check("N07b _envuelve_gui: exe/shell pasa igual",
+      cam._envuelve_gui([bin_falso, "download"], es_windows=True)
+      == [bin_falso, "download"])
+check("N07c _quita_modelo_de_flags saca -m colado",
+      cam._quita_modelo_de_flags(["-ngl", "99", "-m", "viejo.gguf", "-fa", "on"])
+      == ["-ngl", "99", "-fa", "on"])
+check("N07d _quita_modelo_de_flags saca --model",
+      cam._quita_modelo_de_flags(["--model", "x.gguf", "-fa", "on"]) == ["-fa", "on"])
+check("N07e flags limpias pasan intactas",
+      cam._quita_modelo_de_flags(["-ngl", "99", "-fa", "on"]) == ["-ngl", "99", "-fa", "on"])
+
+# N08: paleta del estado: YA-PROMOVIDA no es alarma roja
+check("N08 YA-PROMOVIDA es verde; NO-GO/REVERTIDA amarillos; FALLO rojo",
+      "YA-PROMOVIDA" in cam.VERDES_ESTADO
+      and "NO-GO" in cam.AMARILLOS_ESTADO and "REVERTIDA" in cam.AMARILLOS_ESTADO
+      and "FALLO-CERTIFICADO" not in cam.AMARILLOS_ESTADO)
+
+# N09: el veredicto del juez ACTUALIZA pasos["3"] (no espera eterna)
+a, r, e = rutas(veredicto="OK")
+cam.paso3(a, r, e)
+est = json.load(open(ESTADO, encoding="utf-8"))
+check("N09 veredicto OK queda en pasos['3'] y cierra N3",
+      est["pasos"]["3"]["estado"] == "OK" and est["n3"]["cerrado"] is True)
+
+# N10: doble click sin argumentos espera un Enter (y EOF no revienta)
+argv_viejo, input_viejo = sys.argv, builtins.input
+pausas = []
+
+
+def _input_pausa(*a, **k):
+    pausas.append(1)
+    raise EOFError()
+
+
+sys.argv = ["campana-10-pasos.py"]
+builtins.input = _input_pausa
+cam._pausa_doble_click(es_tty=True)
+sys.argv = ["campana-10-pasos.py", "estado"]
+cam._pausa_doble_click(es_tty=True)
+sys.argv = argv_viejo
+builtins.input = input_viejo
+check("N10 doble click espera Enter, EOF no revienta y con args no molesta",
+      len(pausas) == 1)
+
+# N14: Ctrl+C durante la corrida del barrido -> pausa limpia (rc 130)
+_rc_llamadas = []
+
+
+def _call_falso(cmd):
+    _rc_llamadas.append(cmd)
+    raise KeyboardInterrupt()
+
+
+call_viejo = cam.subprocess.call
+cam.subprocess.call = _call_falso
+builtins.input = lambda *a, **k: "EJECUTAR"
+a, r, e = rutas(sin_corridas=False)
+buf = io.StringIO()
+rc = None
+with contextlib.redirect_stdout(buf):
+    try:
+        rc = cam.paso1(a, r, e)
+    except KeyboardInterrupt:
+        rc = "TRACEBACK"
+cam.subprocess.call = call_viejo
+check("N14 Ctrl+C en la corrida -> rc 130 limpio (sin traceback)",
+      rc == 130 and "INTERRUMPIDO" in buf.getvalue() and len(_rc_llamadas) == 1)
+
+# N11: el forense del humo es ACUMULATIVO (nada se pisa entre intentos).
+# Cada humo lanza SU PROPIO server (RUTA_SERVER) en un puerto LIBRE: el
+# guardarrail de la casa exige que el puerto este libre antes de arrancar.
+with open(FAKE_CONFIG, "w", encoding="utf-8") as f:
+    f.write(CONFIG_ORIGINAL % FAKE_SERVER_OK)
+a, r, e = rutas(puerto=esperando(None))
+cam.paso5(a, r, e)
+a, r, e = rutas(puerto=esperando(None))
+cam.paso5(a, r, e)
+log_txt = open(os.path.join(BASE, "campana-humo.log"), encoding="utf-8").read()
+check("N11 forense del humo acumulativo (4 intentos: E20+E23+N11x2)",
+      log_txt.count("===== intento de humo") == 4)
+
+# N12: re-corrida del sanity archiva el RESUMEN anterior (evidencia no se pisa)
+puerto_h2 = esperando(None)
+srv2 = subprocess.Popen([sys.executable, FAKE_SERVER_OK, "--port", str(puerto_h2)],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+for _ in range(30):
+    if cam.health_ok(puerto_h2):
+        break
+    time.sleep(0.2)
+a, r, e = rutas(puerto=puerto_h2, tag="n12")
+cam.paso3(a, r, e)
+cam.paso3(a, r, e)
+carp_s = os.path.join(BASE, "campana-sanity-n12")
+res = sorted(f for f in os.listdir(carp_s) if f.startswith("RESUMEN"))
+check("N12 2a corrida del mismo tag archiva el RESUMEN anterior",
+      len(res) == 2 and res[0].startswith("RESUMEN-") and res[-1] == "RESUMEN.md")
+srv2.terminate()
+srv2.wait(timeout=10)
+
+# N13: el repo alternativo (mismo archivo y SHA) esta documentado
+check("N13 REPO_ALT presente y distinto del default",
+      cam.REPO_ALT == "unsloth/Qwen3.6-35B-A3B-GGUF" and cam.REPO_ALT != cam.REPO_DEFAULT)
+
+print("")
 if ok_fallos:
-    print(cam.red("BATERIA campana: %d FALLOS -> %s" % (len(ok_fallos), ", ".join(ok_fallos))))
+    print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
+                  % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (38 checks: U01-U22 + E01-E24)"))
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U22 + E01-E24 + N01-N14)"
+                % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)
