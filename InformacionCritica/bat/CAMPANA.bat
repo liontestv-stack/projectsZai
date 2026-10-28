@@ -9,12 +9,15 @@ set "SHAESPERADO=77A7AF69777EA3FEB2A848CA5F9B3C6C42252865A92AB4ED0FD0088EC959F90
 echo ==================================================
 echo  CAMPANA - MODO AUTO (archivo unico)
 echo  doble click = trabaja SOLO los pasos 1..6 en orden
-echo  (mide, promueve, juzga, descarga, verifica y mide N1;
+echo  (mide, promueve, juzga y mide N1 - SIN descargas, P4-P5 aparcadas;
 echo   puede tardar ~2-4 h; todo queda en campana-INFORME.md)
 echo  solo mirar: CAMPANA.bat estado   paso manual: CAMPANA.bat pN
 echo ==================================================
 
 rem 1) extraer y decodificar el payload que viaja dentro de este bat
+rem    R44: temporales con nombre UNICO por ejecucion (un resto viejo en
+rem    %TEMP% jamas puede confundir al verificador) y errores de certutil
+rem    VISIBLES (nada tragado a nul: si falla, se ve la causa).
 set "SKIP="
 for /f "usebackq delims=:" %%L in (`findstr /N /B /C:"###PY64###" "%~f0"`) do if not defined SKIP set "SKIP=%%L"
 if not defined SKIP (
@@ -22,12 +25,25 @@ if not defined SKIP (
   pause
   exit /b 1
 )
-set "B64=%TEMP%\campana-payload.b64"
-set "PYTMP=%TEMP%\campana-10-pasos.py"
+set "TAG=%RANDOM%%RANDOM%"
+set "B64=%TEMP%\campana-%TAG%.b64"
+set "PYTMP=%TEMP%\campana-%TAG%.py"
 more +%SKIP% "%~f0" > "%B64%"
-certutil -decode "%B64%" "%PYTMP%" >nul 2>nul
+set "B64SZ=0"
+for %%S in ("%B64%") do set "B64SZ=%%~zS"
+if "%B64SZ%"=="0" (
+  echo [FATAL] extraccion vacia (more no volco el payload). No se ejecuta nada.
+  pause
+  exit /b 1
+)
+certutil -decode "%B64%" "%PYTMP%"
 if errorlevel 1 (
   echo [FATAL] payload ilegible: CAMPANA.bat danado. No se ejecuta nada.
+  pause
+  exit /b 1
+)
+if not exist "%PYTMP%" (
+  echo [FATAL] el decodificador no produjo archivo. No se ejecuta nada.
   pause
   exit /b 1
 )
@@ -45,6 +61,7 @@ if /I not "%SHAOK%"=="%SHAESPERADO%" (
 
 rem 3) instalar la copia verificada y arrancar (sin argumentos = MODO AUTO)
 copy /Y "%PYTMP%" "%PYDEST%" >nul
+del "%B64%" "%PYTMP%" 2>nul
 %PYEXE% "%PYDEST%" %*
 echo.
 pause
