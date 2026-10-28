@@ -1,0 +1,49 @@
+m==============================================================================
+mbarrido-n3-eficiencia v1.3 (2026-10-28, hotfix de campo 2: colocacion por config + certificado de receta + ancla-muerta=FATAL; 11 configs murieron sin -cmoe en la 1a corrida completa)
+m==============================================================================
+  server : D:\llama.cpp\llama-server.exe
+  modelo : D:\ZLia\models\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf
+  logs   : D:\ZLia\faseN3-np2-b3
+  puerto : 9931
+m[0] AUDITORIA DE FLAGS contra el dump b11856...
+m  VERDE: 3 configs, todos los tokens verbatim en el dump, cero prohibidas
+m  VERDE: receta diaria certificada en el ancla (incluida la colocacion -cmoe)
+m  VERDE: colocacion por config en 3/3 configs
+m[0.5] PREVUELO COMPLETO: PC + modelo + nivel (~1-2 min por el sha256 del modelo; --sin-sha256 lo salta)
+  sha256... 2/13 GB
+  sha256... 4/13 GB
+  sha256... 6/13 GB
+  sha256... 8/13 GB
+  sha256... 10/13 GB
+  sha256... 12/13 GB
+m[0.5] PREVUELO COMPLETO (detalle total en el informe, seccion 0)
+  PC     : Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz (4 nucleos / 8 hilos, 3600 MHz max)
+           2 modulos, 16.0 GB en total a 2666 MT/s (dual channel si son 2) · Microsoft Windows 11 Home Single Language · 64 bits · build 26200 (version 10.0.26200)
+           libre 13388 MiB de 16317 MiB (18% en uso) · plan: Máximo rendimiento
+           comepanes de RAM: explorer 138 MB, MsMpEng 117 MB, powershell 77 MB, Secure System 62 MB
+  MODELO : Qwen3.6 35B A3B Uncensored Heretic Native MTP Preserved · 14273277376 bytes (bytes OK) · server build OK
+           sha256: e4eae0e289b36039faa26f95...
+  NIVEL  : Orden aprobado (ronda 12): N1 -> N3 -> N2 -> N4 -> RUTA 0 + N5. Estado hoy: N1 medido (k=8 techo 21.53 / k=4 +...
+           refs [M]: 21.53 ancla · 22.49 NCM · 21.57 CRAM · 21.39 SHIFT · k=4 28.85-29.13
+m[1] CORRIDA: 3 configs (pausa termica 60 s cada 8)
+m  [01] N3-ANCLA: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+m    repro TTFT: 6 turnos crecientes (stream)...
+    TTFT t2=4.26 s -> tfin=5.06 s (PLANO)
+    decode m17.32 t/s | prefill 16 tok/s | agg 18 tok/s | mVALIDO m
+m  [07] N3-NP2: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m21.37 t/s | prefill 20 tok/s | agg 21 tok/s | mVALIDO m
+m  [13] N3-ANCLA-FIN: lanzando server...
+m    midiendo: 4 pasadas x 256 tokens (temp 0, prompts distintos)...
+    sanity auto: m3/3
+    decode m17.60 t/s | prefill 16 tok/s | agg 18 tok/s | mVALIDO m
+m[2] INFORME...
+m  D:\ZLia\faseN3-np2-b3\faseN3-INFORME.md
+m  D:\ZLia\faseN3-np2-b3\faseN3-resultados.csv
+m  D:\ZLia\faseN3-np2-b3\faseN3-datos.json
+m  D:\ZLia\faseN3-np2-b3\faseN3-consola.log
+
+mPara pasar al analisis: faseN3-INFORME.md + faseN3-resultados.csv (+ carpeta logs-config si se pide).

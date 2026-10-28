@@ -1,0 +1,589 @@
+{
+ "version": "barrido-n3-eficiencia v1.3 (2026-10-28, hotfix de campo 2: colocacion por config + certificado de receta + ancla-muerta=FATAL; 11 configs murieron sin -cmoe en la 1a corrida completa)",
+ "proto": "faseN3-v1",
+ "fecha": "2026-10-28 17:24:53",
+ "contexto": {
+  "ruta_server": "D:\\llama.cpp\\llama-server.exe",
+  "ruta_modelo": "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+  "dir_logs": "D:\\ZLia\\faseN3-np2-b3",
+  "pin": "version: 0.7.0-dev (build 11856, commit 3642238cc) built with Clang 20.1.8 for Windows x86_64",
+  "bytes_modelo": 14273277376,
+  "carga_timeout": 600,
+  "con_sanity": true,
+  "sin_nvidia": false,
+  "sin_ttft": false,
+  "sin_probe": false,
+  "puerto": 9931,
+  "base_flags_str": "-m D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf -ngl 99 -c 16384 -ub 1024 -b 4096 -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj -lm none -lv 4 --host 127.0.0.1 --port 9931",
+  "base_flags": [
+   "-m",
+   "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+   "-ngl",
+   "99",
+   "-c",
+   "16384",
+   "-ub",
+   "1024",
+   "-b",
+   "4096",
+   "-fa",
+   "on",
+   "-ctk",
+   "q8_0",
+   "-ctv",
+   "q8_0",
+   "-t",
+   "4",
+   "--prio",
+   "2",
+   "--no-mmproj",
+   "-lm",
+   "none",
+   "-lv",
+   "4",
+   "--host",
+   "127.0.0.1",
+   "--port",
+   "9931"
+  ],
+  "prevuelo": {
+   "pc": {
+    "so": "Microsoft Windows 11 Home Single Language · 64 bits · build 26200 (version 10.0.26200)",
+    "cpu": "Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz (4 nucleos / 8 hilos, 3600 MHz max)",
+    "ram_hardware": "2 modulos, 16.0 GB en total a 2666 MT/s (dual channel si son 2)",
+    "pagefile": "C:\\pagefile.sys reservado 3840 MB · en uso 1039 MB · pico 3389 MB",
+    "discos": "C: libre 15/223 GB | D: libre 200/931 GB",
+    "gpu": "NVIDIA GeForce GTX 1650 · driver 610.88 · 4096 MiB · 37 C",
+    "plan_energia": "Máximo rendimiento",
+    "ram_ahora": "libre 13388 MiB de 16317 MiB (18% en uso)",
+    "ram_comepanes": "explorer 138 MB, MsMpEng 117 MB, powershell 77 MB, Secure System 62 MB"
+   },
+   "modelo": {
+    "ruta": "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+    "bytes": 14273277376,
+    "bytes_esperados": 14273277376,
+    "bytes_ok": true,
+    "server_version": "version: 0.7.0-dev (build 11856, commit 3642238cc) built with Clang 20.1.8 for Windows x86_64",
+    "build_esperado": "11856",
+    "build_ok": true,
+    "sha256": "e4eae0e289b36039faa26f955ca021025754e0c56130a16746749bb1491118d4",
+    "gguf": {
+     "gguf_version": 3,
+     "general.architecture": "qwen35moe",
+     "general.file_type": 12,
+     "general.name": "Qwen3.6 35B A3B Uncensored Heretic Native MTP Preserved",
+     "general.size_label": "35B-A3B",
+     "qwen35moe.attention.head_count": 16,
+     "qwen35moe.attention.head_count_kv": 2,
+     "qwen35moe.attention.key_length": 256,
+     "qwen35moe.block_count": 41,
+     "qwen35moe.context_length": 262144,
+     "qwen35moe.embedding_length": 2048,
+     "qwen35moe.expert_count": 256,
+     "qwen35moe.expert_feed_forward_length": 512,
+     "qwen35moe.expert_used_count": 8,
+     "qwen35moe.nextn_predict_layers": 1,
+     "tokenizer.ggml.model": "gpt2"
+    }
+   },
+   "nivel": {
+    "campana": "Orden aprobado (ronda 12): N1 -> N3 -> N2 -> N4 -> RUTA 0 + N5. Estado hoy: N1 medido (k=8 techo 21.53 / k=4 +41% = 28.85-29.13 / k=3 falla aritmetica / k=2 colapso; falta barrido formal v1.2.1 + sanity 20 prompts) - N3 EN CURSO (esta corrida) - N2, N4 y RUTA 0 + N5 pendientes.",
+    "refs": [
+     [
+      "ORO-UB1K (receta diaria, ancla del barrido-30 id 32)",
+      "21.53 t/s [M]"
+     ],
+     [
+      "NCM37C4 (colocacion campeona, id 14, SIN UB1K encima)",
+      "22.49 t/s [M]"
+     ],
+     [
+      "ORO-CRAM512 (decode intacto, -7.7 GB RAM)",
+      "21.57 t/s [M]"
+     ],
+     [
+      "ORO-SHIFT (shift + reuse 256, sin coste)",
+      "21.39 t/s [M]"
+     ],
+     [
+      "k=4 CHARLA (D-EXP4 / D-EXP4-UB1K, +41%)",
+      "28.85 / 29.13 t/s [M]"
+     ],
+     [
+      "Suelo k=8 con la MISMA receta otro dia",
+      "17.36 / 17.80 [M]"
+     ],
+     [
+      "Techo de la familia flags k=8 (sweep LMNONE)",
+      "21.50 [M]"
+     ],
+     [
+      "Ruido declarado / dispersion entre corridas",
+      "+/-0.3-0.5 t/s · 9.4 pp (thc1006 v4)"
+     ]
+    ],
+    "muertos": [
+     "ngram spec: acceptance 0.00-0.16 [M] - muerto",
+     "afinidad CPU-GPU (-ot): -9..-38% [M] - muerto",
+     "FIT-C (cuant cache f16->q): -38% [M] - muerto",
+     "repack off: -5% [M] - muerto",
+     "KV q5_1: 0% de cambio [M] - muerto",
+     "POLL: ruido · TB8: muerto"
+    ],
+    "pendientes": [
+     "Stack UB1K x NCM37C4 (SS13-1): PRIMER dato = id 8 de esta corrida (el 22.49 historico fue SIN UB1K)",
+     "Combo ganadores juntos (SS8.1/SS11.7): ids 9 (COMBO-R, seguro), 10 (COMBO-T, expectativa 22.5-23.5 [T]) y 11 (NP2-C, slots)",
+     "Cache del hibrido con certificados (SS3.3/SS13): ids 5/6 con lineas de log + repro TTFT de 6 turnos; NOCACHE (id 12) es el control que DEBE crecer"
+    ],
+    "protocolo": [
+     "Bookend (id 13): |fin-inicio| > 5% = la sesion derivo -> leer los deltas con cuidado (leccion v1.2.1)",
+     "Mediana de 3 antes de proclamar ganancias (thc1006 v4); deltas <5pp no se persiguen",
+     "Un knob sin certificado = no-op sospechoso (barrido-30)",
+     "PROMOCION: candidatas -> UNA linea de FLAGS_BASE en config.txt (la aprueba el Director, config central ronda 20)",
+     "Cache NO-SOPORTADO/ROTO en b11856 = MOTIVO DE RUTA 0 (build nuevo), no un fracaso",
+     "El sanity manual de 20 prompts sigue siendo el juez de calidad"
+    ],
+    "dia": "Ronda 28: el diagnostico midio 17.29 t/s (dia lento dentro del lab) con RAM al 97% (0.40 GB libres) = CULPABLE del dia confirmado. Antes de medir: cerrar apps; si no, el barrido mide el pagefile, no la receta.",
+    "configs_hoy": [
+     {
+      "id": 1,
+      "nombre": "N3-ANCLA",
+      "familia": "ANCLA"
+     },
+     {
+      "id": 7,
+      "nombre": "N3-NP2",
+      "familia": "SLOTS"
+     },
+     {
+      "id": 13,
+      "nombre": "N3-ANCLA-FIN",
+      "familia": "ANCLA-FIN"
+     }
+    ]
+   }
+  }
+ },
+ "runs": [
+  {
+   "id": 1,
+   "nombre": "N3-ANCLA",
+   "familia": "ANCLA",
+   "flags": [
+    "-m",
+    "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+    "-ngl",
+    "99",
+    "-c",
+    "16384",
+    "-ub",
+    "1024",
+    "-b",
+    "4096",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "-t",
+    "4",
+    "--prio",
+    "2",
+    "--no-mmproj",
+    "-lm",
+    "none",
+    "-lv",
+    "4",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "9931",
+    "-cmoe"
+   ],
+   "hipotesis": "control de sesion = LA RECETA DIARIA (FLAGS_BASE + FLAGS_GANADORAS de config.txt, auditoria R24): baseline de todos los deltas; sin cache-reuse el hibrido puede mostrar 'forcing full re-processing' (#21831): ese es el comportamiento de HOY, no un fallo del barrido",
+   "log": "D:\\ZLia\\faseN3-np2-b3\\logs-config\\01-N3-ANCLA.log",
+   "ram0": [
+    13394,
+    16317
+   ],
+   "load_s": 37.9,
+   "prefill_ts": 16.51029218594287,
+   "dec_r2_a_r4": [
+    17.197048366057857,
+    17.3043277512965,
+    17.46876259848871
+   ],
+   "decode_ts": 17.323379571947687,
+   "pasadas": [
+    {
+     "pasada": 1,
+     "prompt_per_second": 16.51029218594287,
+     "predicted_per_second": 16.864900900519572,
+     "predicted_n": 256,
+     "s_wall": 16.7
+    },
+    {
+     "pasada": 2,
+     "prompt_per_second": 36.50301149844862,
+     "predicted_per_second": 17.197048366057857,
+     "predicted_n": 256,
+     "s_wall": 15.6
+    },
+    {
+     "pasada": 3,
+     "prompt_per_second": 33.79433092052539,
+     "predicted_per_second": 17.3043277512965,
+     "predicted_n": 256,
+     "s_wall": 15.4
+    },
+    {
+     "pasada": 4,
+     "prompt_per_second": 37.44804084332988,
+     "predicted_per_second": 17.46876259848871,
+     "predicted_n": 256,
+     "s_wall": 15.5
+    }
+   ],
+   "sanity": [
+    {
+     "pregunta": "Cuanto es 17 x 23? Responde solo el numero.",
+     "esperado": [
+      "391"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\n391"
+    },
+    {
+     "pregunta": "Quien escribio Don Quijote? Responde muy corto.",
+     "esperado": [
+      "cervantes"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMiguel de Cervantes."
+    },
+    {
+     "pregunta": "Que planeta es conocido como el planeta rojo? Responde muy corto.",
+     "esperado": [
+      "marte"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMarte."
+    }
+   ],
+   "repro_ttft": {
+    "turnos": 6,
+    "ttfts": [
+     3.869518995285034,
+     4.261093378067017,
+     4.426915407180786,
+     5.09876275062561,
+     4.418048858642578,
+     5.059297561645508
+    ],
+    "t1_fria": 3.869518995285034,
+    "t2": 4.261093378067017,
+    "tfin": 5.059297561645508,
+    "detalle": [
+     {
+      "turno": 1,
+      "ttft_s": 3.87,
+      "chunks": 22,
+      "s_wall": 4.9,
+      "respuesta": "\n\n<think>\n\n</think>\n\nEl farero encendía la lámpara al anochecer."
+     },
+     {
+      "turno": 2,
+      "ttft_s": 4.261,
+      "chunks": 25,
+      "s_wall": 5.5,
+      "respuesta": "\n\n<think>\n\n</think>\n\nCada faro tiene un ritmo único para que el marinero pueda identificarlo y saber su"
+     },
+     {
+      "turno": 3,
+      "ttft_s": 4.427,
+      "chunks": 25,
+      "s_wall": 5.7,
+      "respuesta": "\n\n<think>\n\n</think>\n\nLa luz ahora es eléctrica y automática, lo que permite una mayor visibilidad y seguridad durante la"
+     },
+     {
+      "turno": 4,
+      "ttft_s": 5.099,
+      "chunks": 25,
+      "s_wall": 6.4,
+      "respuesta": "\n\n<think>\n\n</think>\n\nLos faros ayudan a evitar peligros como los arrecifes y las rocas sumergidas cerca"
+     },
+     {
+      "turno": 5,
+      "ttft_s": 4.418,
+      "chunks": 25,
+      "s_wall": 5.6,
+      "respuesta": "\n\n<think>\n\n</think>\n\nCuando la luz se volvió eléctrica, el farero ya no necesitaba encenderla manualmente,"
+     },
+     {
+      "turno": 6,
+      "ttft_s": 5.059,
+      "chunks": 25,
+      "s_wall": 6.3,
+      "respuesta": "\n\n<think>\n\n</think>\n\nPorque los faros son una redundancia vital: si falla el GPS o la bateria,"
+     }
+    ]
+   },
+   "agg": {
+    "tokens_s": 17.572656577776524,
+    "tokens": 192
+   },
+   "ram1": [
+    775,
+    16317
+   ],
+   "ram_proc_mib": 12259.9,
+   "cache_estado": "NO-APLICA"
+  },
+  {
+   "id": 7,
+   "nombre": "N3-NP2",
+   "familia": "SLOTS",
+   "flags": [
+    "-m",
+    "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+    "-ngl",
+    "99",
+    "-c",
+    "16384",
+    "-ub",
+    "1024",
+    "-b",
+    "4096",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "-t",
+    "4",
+    "--prio",
+    "2",
+    "--no-mmproj",
+    "-lm",
+    "none",
+    "-lv",
+    "4",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "9931",
+    "-np",
+    "2",
+    "-cmoe"
+   ],
+   "hipotesis": "2 slots: throughput agregado +14%% [M SS4] con concurrencia real; -c 16384 se reparte (8192 por slot, sobra para chat); SOLO sin spec (SS11.4: MTP exige -np 1, aqui no hay spec); certificado = probe concurrente de 2 pedidos",
+   "log": "D:\\ZLia\\faseN3-np2-b3\\logs-config\\07-N3-NP2.log",
+   "ram0": [
+    13567,
+    16317
+   ],
+   "load_s": 33.8,
+   "prefill_ts": 20.116514854034566,
+   "dec_r2_a_r4": [
+    21.05579190337918,
+    21.39085521645784,
+    21.667330848246262
+   ],
+   "decode_ts": 21.371325989361093,
+   "pasadas": [
+    {
+     "pasada": 1,
+     "prompt_per_second": 20.116514854034566,
+     "predicted_per_second": 20.120886284799074,
+     "predicted_n": 256,
+     "s_wall": 13.9
+    },
+    {
+     "pasada": 2,
+     "prompt_per_second": 39.331545260775705,
+     "predicted_per_second": 21.05579190337918,
+     "predicted_n": 256,
+     "s_wall": 12.8
+    },
+    {
+     "pasada": 3,
+     "prompt_per_second": 38.78746684595096,
+     "predicted_per_second": 21.39085521645784,
+     "predicted_n": 256,
+     "s_wall": 12.5
+    },
+    {
+     "pasada": 4,
+     "prompt_per_second": 44.08931319137554,
+     "predicted_per_second": 21.667330848246262,
+     "predicted_n": 256,
+     "s_wall": 12.5
+    }
+   ],
+   "sanity": [
+    {
+     "pregunta": "Cuanto es 17 x 23? Responde solo el numero.",
+     "esperado": [
+      "391"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\n391"
+    },
+    {
+     "pregunta": "Quien escribio Don Quijote? Responde muy corto.",
+     "esperado": [
+      "cervantes"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMiguel de Cervantes."
+    },
+    {
+     "pregunta": "Que planeta es conocido como el planeta rojo? Responde muy corto.",
+     "esperado": [
+      "marte"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMarte."
+    }
+   ],
+   "agg": {
+    "tokens_s": 20.730743748486812,
+    "tokens": 192
+   },
+   "ram1": [
+    435,
+    16317
+   ],
+   "ram_proc_mib": 13176.2,
+   "cache_estado": "NO-APLICA"
+  },
+  {
+   "id": 13,
+   "nombre": "N3-ANCLA-FIN",
+   "familia": "ANCLA-FIN",
+   "flags": [
+    "-m",
+    "D:\\ZLia\\models\\Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-I-MINI.gguf",
+    "-ngl",
+    "99",
+    "-c",
+    "16384",
+    "-ub",
+    "1024",
+    "-b",
+    "4096",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "-t",
+    "4",
+    "--prio",
+    "2",
+    "--no-mmproj",
+    "-lm",
+    "none",
+    "-lv",
+    "4",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "9931",
+    "-cmoe"
+   ],
+   "hipotesis": "bookend (leccion v1.2.1): re-ancla al cierre; |fin-inicio| > 5% = la sesion derivo y los deltas se leen con cuidado",
+   "log": "D:\\ZLia\\faseN3-np2-b3\\logs-config\\13-N3-ANCLA-FIN.log",
+   "ram0": [
+    13636,
+    16317
+   ],
+   "load_s": 33.9,
+   "prefill_ts": 16.300205447789466,
+   "dec_r2_a_r4": [
+    17.694036797351586,
+    17.679932486231145,
+    17.420215073391024
+   ],
+   "decode_ts": 17.598061452324586,
+   "pasadas": [
+    {
+     "pasada": 1,
+     "prompt_per_second": 16.300205447789466,
+     "predicted_per_second": 17.388556570463855,
+     "predicted_n": 256,
+     "s_wall": 16.2
+    },
+    {
+     "pasada": 2,
+     "prompt_per_second": 38.130323579792105,
+     "predicted_per_second": 17.694036797351586,
+     "predicted_n": 256,
+     "s_wall": 15.2
+    },
+    {
+     "pasada": 3,
+     "prompt_per_second": 34.985073035504854,
+     "predicted_per_second": 17.679932486231145,
+     "predicted_n": 256,
+     "s_wall": 15.1
+    },
+    {
+     "pasada": 4,
+     "prompt_per_second": 38.91408936490909,
+     "predicted_per_second": 17.420215073391024,
+     "predicted_n": 256,
+     "s_wall": 15.5
+    }
+   ],
+   "sanity": [
+    {
+     "pregunta": "Cuanto es 17 x 23? Responde solo el numero.",
+     "esperado": [
+      "391"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\n391"
+    },
+    {
+     "pregunta": "Quien escribio Don Quijote? Responde muy corto.",
+     "esperado": [
+      "cervantes"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMiguel de Cervantes."
+    },
+    {
+     "pregunta": "Que planeta es conocido como el planeta rojo? Responde muy corto.",
+     "esperado": [
+      "marte"
+     ],
+     "ok": true,
+     "truncado": false,
+     "respuesta": "\n\n<think>\n\n</think>\n\nMarte."
+    }
+   ],
+   "agg": {
+    "tokens_s": 17.76286243408184,
+    "tokens": 192
+   },
+   "ram1": [
+    418,
+    16317
+   ],
+   "ram_proc_mib": 13241.2,
+   "cache_estado": "NO-APLICA"
+  }
+ ]
+}

@@ -229,3 +229,31 @@ Pedido del Director: "realiza una verificacion de seguridad del archivo". Cuatro
 2. **REPO_ALT desautenticado [F — el único ROJO]:** `unsloth/Qwen3.6-35B-A3B-GGUF` sirve el MISMO nombre de archivo pero **SIN el módulo MTP**: 13,211,155,424 B (13.21 GB), SHA256 `9c964e65…88fbe`, y CERO variantes -MTP entre sus 23 GGUF. La nota de r35/r36 "mismo archivo, mismo SHA" era FALSA (el N2 lo tenía escrito: el sin-MTP pesa 858 MB menos = el módulo nextn). Haberlo usado habría costado una descarga nocturna de 13 GB que p5 rechaza por SHA. **Fix (campana v1.2):** p4 rechaza el repo ALT con FATAL nominado ANTES de descargar (--fuerza lo salta dejándolo escrito); el fallback real es re-ejecutar p4 contra el repo por defecto (hf retoma donde iba).
 3. **Aclaración del "13 GB":** la cifra "13.2 GB" del PASO 6 es la foto vieja de la variante sin-MTP (ronda 33, antes de los inventarios al byte de las rondas 6-8). El objetivo del hito cerrado por SHA es el de **14.07 GB con nextn dentro**: RAM ≈ igual que hoy; la ganancia = calidad-por-byte (frontera Pareto: unsloth 14/26 posiciones, mudler/APEX ninguna [F]) + el draft de la fase E incluido sin segunda descarga.
 4. **Cadena local intacta:** git status limpio; constantes del script == docs (comparación programática); batería 65 → **67 checks TODO VERDE** (E13b/E13c nuevos) + regresión de la casa 5/5 + py_compile OK; configs/barridos/bats SIN TOCAR.
+
+---
+
+## Anexo R40 — Llegó b3: el Director ejecutó P1 y la mediana de NP2 va 2/3 (2026-10-29)
+
+**Qué llegó de campo** ("ten" + 4 archivos): la corrida completa de `D:\ZLia\faseN3-np2-b3` (consola, datos.json, INFORME.md, resultados.csv) del 2026-10-28 17:18-17:24, barrido-n3-eficiencia v1.3 con `--solo ancla,slots,anclafin` — la huella exacta de P1 (su 3ª corrida de la mediana). Preflight limpio: modelo APEX-I-MINI con bytes y SHA256 `e4eae0e2…` certificados, build 11856 OK, higiene OK (RAM 18% en uso al iniciar, comepanes chicos, plan Máximo rendimiento). Evidencia copiada al repo: `evidencia/faseN3-np2-b3-20261028/`.
+
+**Números de b3 [M]** (4 pasadas × 256 tokens, temp 0, mediana de pasadas 2-4):
+
+| config | decode t/s | vs ancla | dato clave |
+|---|---|---|---|
+| 1 N3-ANCLA (receta diaria) | 17.32 (dispers 1.6%) | — | TTFT repro 4.26→5.06 s PLANO; 5 líneas #21831 = repro multi-turno SIN cache-reuse (comportamiento de hoy, no modo ROTO) |
+| 7 N3-NP2 (`-np 2 -cmoe`) | 21.37 (dispers 2.9%) | **+23.4%** | probe concurrente agg 20.73 vs 17.57 tok/s = **+18.0%** (la hipótesis SS4 prometía +14%); VRAM 2211/4096 |
+| 13 N3-ANCLA-FIN | 17.60 | +1.6% | bookend ESTABLE (≤5%): la sesión no derivó; los deltas se leen limpios |
+
+Sanity auto 3/3 en las tres configs (391 / Cervantes / Marte). El prefill también sube: 16.5 → 20.1 tok/s frío (+22%).
+
+**El día estaba LENTO y aun así NP2 ganó [M]:** el ancla 17.32 aterrizó en el suelo histórico (17.36-17.80; −19.6% vs ORO-UB1K 21.53) con la firma de la ronda 28: RAM al 95-97% tras cargar (775/435/418 MiB libres) y pagefile con pico de 3389 MB. Regla anti-cruce de sesiones: el "21.37 de hoy ≈ 21.53 de ORO" es una coincidencia llamativa, NO una comparación válida (otro día). Lo único válido: los deltas DENTRO de cada sesión.
+
+**Cruce con b1 (la otra corrida, ya en el repo — `evidencia/faseN3-20261028`, del 28-oct por la mañana):** ancla 17.44 → NP2 21.41 = **+22.8%** [M], bookend +1.7% ESTABLE, y el control NOCACHE midió +0.9% (ruido puro: el control se comporta como debe). Dos sesiones distintas (mañana y tarde) clavan el mismo delta ~+23% con dispersión interna ≤2.9%: **el efecto no es ruido de un día**.
+
+**Estado de la mediana P1 (GO ≥+15% / NO-GO <+5% / DUDOSO entre medias):** 2 de 3 deltas: b1 +22.8% y b3 +23.4%. La mediana de tres con esos dos anclados **no puede bajar de +22.8% pase lo que pase en b2** → GO matemático pendiente de cosecha formal. Único modo de romperlo: que b2 no coseche (sin ancla o sin NP2 válidas → INCOMPLETO). Falta para sellar en el repo: el CSV de b2 (el rig ya lo tiene si P1 lo corrió antes de b3) o la línea "VEREDICTO P1" del campana-INFORME.md.
+
+**Misterio registrado (observación, no hecho):** la hipótesis SS4 prometía la ganancia de slots SOLO con 2 sesiones a la vez; aquí el decode de UN stream también aceleró ~+23% (b1 y b3). Mecanismo no explicado: KV repartida 2×8192, VRAM −142 MiB sistemática en ambas sesiones (2238→2096 y 2353→2211), RAM de proceso +~0.9 GB (12101→13066 y 12260→13176). No proclamar mecanismo; lo que sí está certificado con su probe es la ganancia concurrente (+18% agregado).
+
+**Coste conocido de NP2:** +~0.9 GB de RAM de proceso; en 16 GB ya saturados (95-97% con el modelo cargado) es el riesgo del día normal — exactamente por eso el protocolo exige la mediana completa antes de la cirugía p2.
+
+**Siguiente paso del rig:** doble click en CAMPANA.bat → si P1 ya quedó cosechado, la foto muestra su veredicto y ofrece p2 (la ÚNICA cirugía: `-np 2` a FLAGS_BASE, con backup y `--revert`). Si P1 sigue PENDIENTE/INCOMPLETO: `py campana-10-pasos.py p1 --sin-corridas` cosecha lo ya medido; y si b2 no existe, una pasada de `py barrido-n3-eficiencia.py --logs D:\ZLia\faseN3-np2-b2 --solo ancla,slots,anclafin` y cosechar de nuevo. Después: p3 (el sanity de 20 prompts del Director) cierra el N3.

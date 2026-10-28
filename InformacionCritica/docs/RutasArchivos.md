@@ -197,3 +197,9 @@ Ejecución real del script en la máquina del Director (D:\llama.cpp\bin-new):
 - MODO CAMPANA (arranque sin argumentos): foto del estado + `_siguiente_paso` (primero no-VERDE; antes de p4 exige N3 cerrado) + `QUE_HACE_PASO` (descripción en cristiano con duración) + confirmación **SI escrita** para ejecutar; la aceptación queda en campana-INFORME.md; puertas y confirmaciones internas de cada paso intactas. `estado` explicito y `CAMPANA.bat pN` sin cambios; CAMPANA.bat actualizado solo en el banner.
 - Batería 68 → 73 checks TODO VERDE (U16/U17 + E25/E26/E27). Regresión casa 5/5 VERDE; py_compile OK; configs/barridos/bats SIN TOCAR.
 - Para el rig: re-copiar campana-10-pasos.py v1.4 + CAMPANA.bat a D:\ZLia; doble click = foto + oferta; escribir SI ejecuta el paso que toca.
+
+## Registro 40-a — Evidencia de campo b3: 3ª corrida de la mediana P1 de NP2 (LAIA, 2026-10-29)
+- Origen: `D:\ZLia\faseN3-np2-b3` (2026-10-28 17:18-17:24), barrido-n3-eficiencia v1.3 con `--solo ancla,slots,anclafin` (huella de P1). 4 archivos recibidos del Director ("ten") y copiados byte-a-byte a `investigacion/niveles-velocidad/evidencia/faseN3-np2-b3-20261028/` (faseN3-consola.log, faseN3-datos.json, faseN3-INFORME.md, faseN3-resultados.csv).
+- Modelo certificado en el preflight de la corrida: APEX-I-MINI 14,273,277,376 B OK, SHA256 `e4eae0e289b36039faa26f955ca021025754e0c56130a16746749bb1491118d4`, build 11856 OK, qwen35moe con k=8 de fábrica y nextn_predict_layers=1.
+- Resultados b3: N3-ANCLA 17.32 t/s · N3-NP2 21.37 t/s (+23.4%) · N3-ANCLA-FIN 17.60 (+1.6%, bookend ESTABLE); probe concurrente agg 20.73 vs 17.57 tok/s (+18.0%); sanity auto 3/3 ×3; VRAM 2211/4096; RAM proc 13176 MiB.
+- Mediana P1 al cierre de esta ronda: b1 +22.8% (`evidencia/faseN3-20261028`), b3 +23.4%, b2 pendiente de cosecha (el rig la tiene). Umbral GO +15% → GO matemático si b2 cosecha. Análisis completo: Anexo R40 del plan.
