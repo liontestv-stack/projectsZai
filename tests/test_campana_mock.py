@@ -904,12 +904,31 @@ check("E33b main --ofrecer -> MODO CAMPANA de r39", rc == 6)
 cam.modo_auto, cam.modo_campana = _ma, _mc
 sys.argv = argv_viejo
 
+# E34: archivo unico (r42) — el payload del CAMPANA.bat ES el py, byte-a-byte
+import base64 as _b64
+_ruta_bat = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
+                                         "bat", "CAMPANA.bat"))
+_bat = open(_ruta_bat, "rb").read().decode("ascii")
+_lns = _bat.split("\r\n")
+_marcas = [i for i, ln in enumerate(_lns) if ln.startswith("###PY64###")]
+check("E34a bat unico: marcador ###PY64### aparece UNA vez", len(_marcas) == 1)
+if len(_marcas) == 1:
+    _py_bat = _b64.b64decode("".join(_lns[_marcas[0] + 1:]))
+    _py_real = open(SCRIPT, "rb").read()
+    check("E34a bat unico: payload byte-a-byte el py", _py_bat == _py_real)
+    _sha = hashlib.sha256(_py_bat).hexdigest().upper()
+    check("E34b bat unico: SHA incrustado == SHA real del payload",
+          _sha in _bat and _sha == hashlib.sha256(_py_real).hexdigest().upper())
+else:
+    check("E34a bat unico: payload byte-a-byte el py", False)
+    check("E34b bat unico: SHA incrustado == SHA real del payload", False)
+
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U24 + E01-E33 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U24 + E01-E34 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)
