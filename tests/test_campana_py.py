@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Ronda 48 - pruebas de CAMPANA.py v1.7.1 LA MALETA (archivo unico de verdad).
-U26: existe, tiene el bloque R45/R46, cuerpo byte-idéntico al v1.7.1 y el viejo
+"""Ronda 48-49 - pruebas de CAMPANA.py v1.7.2 LA MALETA (archivo unico).
+U26: existe, tiene el bloque R45/R46, cuerpo byte-idéntico al v1.7.2 y el viejo
      bloque main no sobrevive.
 U27: arranque REAL por subproceso en lab (con barrido+config): rc=0 y sin
      FATAL de auto-verificacion (el guardian deja pasar solo al integro).
@@ -14,6 +14,9 @@ U30: (r48, auditoria antibugs) payload corrupto -> la ruta protegida del
      crudo rc=1 que cerraba la ventana del doble click sin causa).
 U31: (r48) self-heal del dump sin rama ciega: dump viejo -> REEMPLAZADO por
      el certificado; dump solo en ../configs -> nota honesta sin copia local.
+U32: (r49, repaso antibugs) el import del companero tiene RED (chmod 000 ->
+     causa visible + rc=1, no ventana callada); el guard imprime SIEMPRE el
+     texto de un sys.exit("texto") (antes se perdia); higiene del tmp.
 """
 import hashlib
 import os
@@ -29,7 +32,7 @@ FUENTE = os.path.join(SCRIPTS, "campana-10-pasos.py")
 BARRIDO = os.path.join(SCRIPTS, "barrido-n3-eficiencia.py")
 CONFIG = os.path.join(RAIZ, "InformacionCritica", "configs", "config.txt")
 BLOQUE_VIEJO = 'if __name__ == "__main__":\n    sys.exit(main())\n'
-HUELLA_FUENTE = "1D6CFB99E03375F81740C09885A4A63B9245C96DE531353F9EB7DFD506ACF6D8"
+HUELLA_FUENTE = "12DA5AE150AC7F302DBB56B653FB3D6EBF5E49F50070332DA41C3F354563E127"
 
 resultado = []
 
@@ -46,7 +49,7 @@ def main():
 
     check("U26a CAMPANA.py existe y lleva el bloque R45",
           "ARRANQUE REFORZADO (CAMPANA.py" in texto)
-    check("U26b cuerpo byte-idéntico al v1.7.1 certificado (SHA %s...)"
+    check("U26b cuerpo byte-idéntico al v1.7.2 certificado (SHA %s...)"
           % HUELLA_FUENTE[:8],
           hashlib.sha256(fuente).hexdigest().upper() == HUELLA_FUENTE
           and texto.startswith(fuente.decode("utf-8")[:-len(BLOQUE_VIEJO)]))
@@ -170,9 +173,42 @@ def main():
         shutil.rmtree(lab_d, ignore_errors=True)
         shutil.rmtree(outer, ignore_errors=True)
 
+    # U32 (r49, repaso antibugs): el import del companero con RED.
+    # U32a REAL: companero ilegible (chmod 000) -> la red del despliegue da
+    # causa visible + rc=1 (la maleta no puede verificar su SHA). U32b/U32c:
+    # estructura de las redes en el archivo vivo.
+    lab_f = tempfile.mkdtemp(prefix="lab-import-net-")
+    try:
+        shutil.copy(CAMPANA, os.path.join(lab_f, "CAMPANA.py"))
+        r9 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+                            capture_output=True, cwd=lab_f, timeout=180)
+        assert r9.returncode == 0, "lab base rc=%d" % r9.returncode
+        os.chmod(os.path.join(lab_f, "barrido-n3-eficiencia.py"), 0o000)
+        r10 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+                             capture_output=True, cwd=lab_f, timeout=180)
+        salida10 = (r10.stdout + r10.stderr).decode("utf-8", errors="replace")
+        check("U32a companero ilegible (chmod 000) -> causa visible + rc=1 "
+              "(nada muere callado)",
+              r10.returncode == 1 and "despliegue imposible" in salida10
+              and "Traceback" in salida10)
+        os.chmod(os.path.join(lab_f, "barrido-n3-eficiencia.py"), 0o644)
+    finally:
+        shutil.rmtree(lab_f, ignore_errors=True)
+
+    check("U32b el import del companero queda DENTRO de la red (try con las "
+          "3 ramas + pausa)",
+          "\n    _spec.loader.exec_module(bn3)" in texto
+          and texto.count("except SystemExit as _import_exc:") == 1
+          and texto.count("Ctrl+C durante la importacion del companero") == 1
+          and texto.count("importacion de barrido-n3-eficiencia.py imposible") == 1)
+    check("U32c el guard imprime SIEMPRE el texto de sys.exit (causa no se "
+          "pierde, r49)",
+          texto.count("isinstance(exc.code, str) and exc.code.strip()") == 1
+          and texto.count('print("[FATAL] %s" % exc.code)') == 1)
+
     print()
     if all(resultado):
-        print("BATERIA campana-py: TODO VERDE (%d checks: U26-U31)" %
+        print("BATERIA campana-py: TODO VERDE (%d checks: U26-U32)" %
               len(resultado))
         return 0
     print("BATERIA campana-py: HAY FALLAS (%d/%d)" %

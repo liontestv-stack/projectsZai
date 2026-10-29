@@ -156,6 +156,27 @@ cosas dejando siempre un log; prioridad es seguridad ante malware"). MODO AUTO:
      el FIN DE TURNO con todo escrito. Re-doble-click retoma donde quedó.
 Bateria 73 -> 84 checks (U18/U19 + E28-E33).
 
+CHANGELOG v1.7.2 (2026-10-30, ronda 49 — repaso de la solucion de bugs
+(pedido del Director: "solucion de bugs repasa"). Baterias baseline TODO
+VERDE (94+11+5+faseD+PTY+py_compile+pyflakes) y auditoria fresca: 3
+hallazgos nuevos sobre el arranque, todos del mismo sindrome "morir
+callado" que la casa ya extirpo dos veces (r46 wrapper, r48 maleta):
+  1. IMPORT DEL COMPANERO CON RED (el medio): exec_module + aliasing de
+     utilidades corrian a nivel de modulo SIN try/except: un Ctrl+C o un
+     error de disco/lectura/permisos cerraba la ventana del doble click
+     sin causa ni pausa. Ahora: causa visible + pausa garantizada + rc
+     fieles (int->int, texto->1, exit() pelado del companero = 1).
+  2. CAUSA PERDIDA EN sys.exit("texto"): el guard global capturaba el
+     SystemExit y NO imprimia el mensaje (el comentario asumia que
+     fatal() ya lo habia hecho: falso en el caso general) -> ventana en
+     blanco. Ahora el texto se imprime SIEMPRE (fix en el bloque final
+     del generador).
+  3. HIGIENE DEL TMP DE MALETA: un fallo a mitad de escritura (disco
+     lleno, archivo bloqueado) dejaba el tmp de la maleta huerfano a
+     medias; ahora el fallo limpia el tmp y la causa sube igual.
+  4. COSMETICO: la red de la maleta imprimia "[FATAL] None" si el
+     SystemExit no traia motivo; ahora imprime un motivo honesto.
+
 CHANGELOG v1.7.1 (2026-10-29, ronda 48 — auditoria antibugs del Director:
 "dale otra revisada antibugs"). Siete hallazgos sobre la maleta r47 y su
 herencia, cazados y verificados:
@@ -5920,9 +5941,20 @@ def _maleta_escribe(ruta, nombre, sha):
     # R48: escritura atomica (patron guardar_estado): un disco lleno a
     # mitad de escritura ya no deja un payload truncado disfrazado de bueno.
     _tmp = ruta + ".maleta-tmp"
-    with open(_tmp, "wb") as f:
-        f.write(datos)
-    os.replace(_tmp, ruta)
+    try:
+        with open(_tmp, "wb") as f:
+            f.write(datos)
+        os.replace(_tmp, ruta)
+    except BaseException:
+        # R49: higiene - un fallo a mitad (disco lleno, archivo bloqueado)
+        # no deja el tmp huerfano ocupando disco ni confundiendo una
+        # inspeccion posterior; la causa sube igual (la red del despliegue
+        # la muestra con pausa garantizada).
+        try:
+            os.remove(_tmp)
+        except Exception:
+            pass
+        raise
 
 
 def _existe_cerca(nombre, aqui):
@@ -5973,11 +6005,12 @@ def _despliega_maleta():
 
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = ("campana-10-pasos v1.7.1 LA MALETA (2026-10-29, ronda 48: auditoria "
-           "antibugs - despliegue de maleta con pausa garantizada, self-heal del "
-           "dump sin rama ciega, prevuelo honesto con P4 aparcada; archivo unico "
-           "r47: los companeros de rig viajan dentro; P6 sin bat; doble click = "
-           "pasos 1..6 sin preguntas y SIN descarga)")
+VERSION = ("campana-10-pasos v1.7.2 LA MALETA (2026-10-30, ronda 49: repaso "
+           "antibugs - import del companero con red y pausa garantizada, causa "
+           "SIEMPRE visible en sys.exit de texto, higiene del tmp de maleta; "
+           "herencia r48: maleta con pausa, self-heal del dump, prevuelo "
+           "honesto; archivo unico r47: los companeros viajan dentro; P6 sin "
+           "bat; doble click = pasos 1..6 sin preguntas y SIN descarga)")
 
 # R43 — decision del Director (delego: "elige una", elegida A): el cuant
 # vigente SC117 APEX-I-Mini ya trae heretic + MTP nativo, asi que p4 (descarga
@@ -6017,7 +6050,12 @@ def _pausa_doble_click(es_tty=None):
 try:
     _notas_maleta = _despliega_maleta()
 except SystemExit as _maleta_exc:
-    print("[FATAL] %s" % _maleta_exc.code)
+    _codigo = _maleta_exc.code
+    # R49: motivo honesto - un SystemExit sin texto imprimia "[FATAL] None".
+    print("[FATAL] %s" % (_codigo if isinstance(_codigo, str)
+                          and _codigo.strip()
+                          else "salida sin motivo del despliegue de la "
+                               "maleta"))
     print("        PARADA LIMPIA: no se ejecuta nada (integridad del paquete).")
     _pausa_doble_click()
     sys.exit(3)
@@ -6045,14 +6083,52 @@ if not os.path.exists(_BARRIDO):
     print("        El piloto y el barrido viajan JUNTOS en D:\\ZLia.")
     _pausa_doble_click()
     sys.exit(2)
-_spec = importlib.util.spec_from_file_location("barrido_n3", _BARRIDO)
-bn3 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(bn3)
+# R49 (auditoria antibugs): este import corre a nivel de modulo, IGUAL
+# que el despliegue de la maleta: sin red, un Ctrl+C o un error de disco/
+# lectura/permisos durante exec_module cerraba la ventana del doble click
+# sin causa ni pausa (la clase exacta de incidente que la r48 extirpo de
+# la maleta: aqui quedo desnudo). Ahora: causa visible + pausa garantizada
+# + rc fieles (int->int, texto->1; un exit() pelado del companero SIEMPRE
+# es un defecto del instrumento: rc 1, nunca 0).
+try:
+    _spec = importlib.util.spec_from_file_location("barrido_n3", _BARRIDO)
+    bn3 = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(bn3)
 
-c, bold, red = bn3._c, bn3.bold, bn3.red
-green, yellow, cyan, gray = bn3.green, bn3.yellow, bn3.cyan, bn3.gray
-health_ok, ram_sistema = bn3.health_ok, bn3.ram_sistema
-sha256_archivo, gguf_metadatos = bn3.sha256_archivo, bn3.gguf_metadatos
+    c, bold, red = bn3._c, bn3.bold, bn3.red
+    green, yellow, cyan, gray = bn3.green, bn3.yellow, bn3.cyan, bn3.gray
+    health_ok, ram_sistema = bn3.health_ok, bn3.ram_sistema
+    sha256_archivo, gguf_metadatos = bn3.sha256_archivo, bn3.gguf_metadatos
+except SystemExit as _import_exc:
+    _codigo = _import_exc.code
+    if isinstance(_codigo, str) and _codigo.strip():
+        print("[FATAL] el companero barrido-n3-eficiencia.py pidio salir al "
+              "importarse: %s" % _codigo)
+    elif _codigo:
+        print("[FATAL] el companero barrido-n3-eficiencia.py pidio salir al "
+              "importarse (codigo %s)." % _codigo)
+    else:
+        print("[FATAL] el companero barrido-n3-eficiencia.py se quedo callado "
+              "al importarse (salida sin motivo).")
+    print("        PARADA LIMPIA: el instrumento del rig no arranca limpio.")
+    print("        Un re-doble-click re-despliega la maleta: el instrumento "
+          "que difiera se reemplaza por el certificado.")
+    _pausa_doble_click()
+    sys.exit(_codigo if isinstance(_codigo, int) else 1)
+except KeyboardInterrupt:
+    print("\n[PARADO] Ctrl+C durante la importacion del companero: nada "
+          "ejecutado.")
+    _pausa_doble_click()
+    sys.exit(130)
+except Exception:
+    import traceback
+    traceback.print_exc()
+    print("[FATAL] importacion de barrido-n3-eficiencia.py imposible (archivo "
+          "danado, permisos o bloqueado; arriba la causa).")
+    print("        Un re-doble-click re-despliega la maleta y lo cura si "
+          "difiere del certificado.")
+    _pausa_doble_click()
+    sys.exit(1)
 
 # ---------------- constantes del hito N2 (autenticadores cerrados) ----------
 MODELO_NUEVO_NOMBRE = "Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf"

@@ -1021,12 +1021,29 @@ check("E34c archivo unico ACTIVO: CAMPANA.py existe con bloque R45 y el "
       os.path.exists(_ruta_activa) and _bat_activo_fuera
       and b"ARRANQUE REFORZADO (CAMPANA.py" in open(_ruta_activa, "rb").read())
 
+# E39-E41 (r49, repaso antibugs "solucion de bugs repasa"): tres redes nuevas
+# del sindrome "morir callado", verificadas sobre el archivo vivo y la fuente.
+_texto_activo = open(_ruta_activa, encoding="utf-8").read()
+check("E39 fuente v1.7.2: VERSION y CHANGELOG de la ronda 49 en fuente y "
+      "archivo unico",
+      "v1.7.2 LA MALETA" in cam.VERSION and "CHANGELOG v1.7.2" in _texto_activo
+      and "repaso" in cam.VERSION)
+check("E40 el import del companero esta DENTRO de la red r49 (exec_module "
+      "indentado + 3 ramas con pausa)",
+      "\n    _spec.loader.exec_module(bn3)" in _texto_activo
+      and _texto_activo.count("except SystemExit as _import_exc:") == 1
+      and _texto_activo.count("Ctrl+C durante la importacion del companero") == 1)
+check("E41 higiene del tmp de maleta (fallo limpia el tmp, r49) + guard "
+      "imprime sys.exit de texto",
+      _texto_activo.count("os.remove(_tmp)") == 1
+      and _texto_activo.count("isinstance(exc.code, str) and exc.code.strip()") == 1)
+
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E38 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E41 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

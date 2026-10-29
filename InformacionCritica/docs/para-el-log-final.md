@@ -128,3 +128,18 @@ Huella nueva del paquete:
 |---|---|---|---|
 | **CAMPANA.py v1.7.1 (la maleta auditada)** | SIEMPRE — unico descargable | 529,241 | 3AB319AE...D60D |
 Fuente viva: campana-10-pasos.py v1.7.1 (1D6CFB99...F6D8). La maleta despliega igual que la r47 (mismos 4 companeros, mismas SHAs de payloads); lo que cambia es que NADA cierra la ventana sin causa, el dump viejo siempre se autocura y el AUTO no exige descargas que no va a hacer.
+
+
+## 10. Anexo r49: repaso de la solucion de bugs — CAMPANA.py v1.7.2 (pedido del Director: "solucion de bugs repasa")
+Baterias baseline TODO VERDE (94+11+5+faseD+PTY+py_compile+pyflakes) y auditoria fresca: los 3 hallazgos nuevos son del mismo sindrome "morir callado" que la casa ya extirpo del wrapper (r46) y de la maleta (r48) — esta vez el import del companero quedo desnudo.
+1. IMPORT CON RED (medio): exec_module + aliasing de utilidades corrian a nivel de modulo sin try/except: un Ctrl+C o un error de disco/lectura/permisos cerraba la ventana del doble click sin causa ni pausa. Ahora: causa visible + pausa garantizada + rc fieles (int->int, texto->1; un exit() pelado del companero SIEMPRE es defecto del instrumento: rc 1, nunca 0 — ahi None no cuenta como exito).
+2. CAUSA SIEMPRE VISIBLE (menor): el guard global tragaba el texto de un sys.exit("texto") capturado (el comentario asumia que fatal() ya lo habia impreso; falso en el caso general) -> ventana en blanco. Ahora el texto se imprime SIEMPRE (fix en el bloque final del generador).
+3. HIGIENE DEL TMP (menor): un fallo a mitad de escritura de payload dejaba el tmp de la maleta huerfano; ahora el fallo lo limpia y la causa sube igual.
+4. Cosmetico: "[FATAL] None" ahora es motivo honesto.
+Leccion de la ronda: la familia "morir callado" vive donde hay codigo a nivel de modulo sin red — wrapper (r46), maleta (r48), import (r49): quedan auditados los tres caminos de arranque.
+Baterias al cierre: campana 97/97 + campana-py 14/14 + mocks de la casa 5/5 + faseD VERDE + PTY 1 pausa + py_compile + pyflakes.
+Huella nueva del paquete:
+| Archivo | Cuándo | Bytes | SHA256 corto |
+|---|---|---|---|
+| **CAMPANA.py v1.7.2 (la maleta repasada)** | SIEMPRE — unico descargable | 533,605 | 65D33CBA...DA4B1 |
+Fuente viva: campana-10-pasos.py v1.7.2 (12DA5AE1...3E127). La maleta despliega igual que la r47/r48 (mismos 4 companeros, mismas SHAs de payloads); lo que cambia es que el TERCER camino de arranque (el import) ya tambien tiene red, el texto de un sys.exit nunca se pierde y el tmp no queda huerfano.
