@@ -86,3 +86,17 @@ clava) y el p5 certifica el SHA256 del modelo antes de usar nada.
 5. Regla de la casa intacta: los instrumentos finos de N2/N4/Ruta 0/N5 se
    fabrican CUANDO se llega a cada nivel, con los resultados del nivel
    anterior — no antes.
+
+## 7. Anexo r46-b: inventario COMPLETO de dependencias (pedido del Director: "hay dependencias no informadas, cuales mas requiere")
+Cuidado repartido tras el aviso del Director — el paquete de D:\ZLia son SEIS archivos del repo, no uno:
+| # | Archivo | Para qué | Cuándo | Bytes | SHA256 corto |
+|---|---|---|---|---|---|
+| 1 | CAMPANA.py | el piloto | SIEMPRE | 86,158 | 12EDB74A...9CF7 |
+| 2 | barrido-n3-eficiencia.py | motor: se IMPORTA al arrancar (colores, parser GGUF, SHA256 streaming, RAM, cliente HTTP); sin él FATAL | SIEMPRE | 110,813 | FDD277AB...AF68 |
+| 3 | config.txt | receta diaria: RUTA_SERVER, RUTA_MODELO, FLAGS_BASE/GANADORAS; el prevuelo lo exige y P2 lo edita | SIEMPRE | 1,274 | 746BC346...8EEC |
+| 4 | llama-flags-nuevo.txt | dump de flags b11856, fuente de verdad de la auditoría de flags; barrido-n3 hace FATAL sin él (junto al barrido o en configs/) | SIEMPRE | 122,440 | 20449FFD...4FAAD |
+| 5 | BARRIDO-N1.bat | P6: N1 formal | SOLO P6 (si falta, el AUTO para limpio antes del N1) | 318 | 4FEAA264...4958 |
+| 6 | barrido-n1-expertos.py | P6: el bat NO es autocontenido, lo envuelve a él | SOLO P6 | 85,457 | 80C35ECB...78D0 |
+Ya en el rig y NO descargables del repo: D:\llama.cpp\llama-server.exe (build b11856 pinado, el barrido AVISA si el pin no clava), el modelo D:\ZLia\models\...APEX-I-MINI.gguf (14,273,277,376 B, e4eae0e2...118d4) y Python 3 (solo stdlib: argparse, csv, datetime, importlib, json, os, shutil, statistics, subprocess, sys, time, urllib, hashlib, re, struct, threading — CERO pip install).
+Dependencias creadas por el propio script (no se descargan): campana-estado.json, campana-INFORME.md, campana-sanity-<tag>/, models/, backups de config.txt.
+Lección al registro: el arnés PTY de la r46 probó arranque sin barrido y sin config, pero NO sin dump de flags — cazado por la pregunta del Director (el dump sí está en la cocina del rig desde las rondas de barrido; de ahí que los tests del lab no tropezaran con ello).
