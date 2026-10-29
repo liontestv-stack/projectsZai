@@ -143,3 +143,14 @@ Huella nueva del paquete:
 |---|---|---|---|
 | **CAMPANA.py v1.7.2 (la maleta repasada)** | SIEMPRE — unico descargable | 533,605 | 65D33CBA...DA4B1 |
 Fuente viva: campana-10-pasos.py v1.7.2 (12DA5AE1...3E127). La maleta despliega igual que la r47/r48 (mismos 4 companeros, mismas SHAs de payloads); lo que cambia es que el TERCER camino de arranque (el import) ya tambien tiene red, el texto de un sys.exit nunca se pierde y el tmp no queda huerfano.
+## Anexo R50 — LA SEGUNDA OLLA (2026-10-30)
+Correccion del Director sobre la r49: "era crear otro de 6 a 10, no borrar el antiguo campana". La v2 NO reemplaza: nace como CAMPANA-v2.py, archivo hermano, y CAMPANA.py v1.7.2 queda byte-intacta (verificado antes y despues de la cirugia). Barrido AST + lectura completa del cuerpo: 10 hallazgos nuevos (mina latente de indices en paso2, config.txt sin escritura atomica, revert sin red de evidencia/verificacion, estado corrupto descartado en silencio, el bucle del AUTO sin red contra Exception generica, tmp huerfano de guardar_estado, rama inalcanzable sin nombre honesto, higiene que mentia en posix, _chat_uno sin reintento ante tics del server, "13 GB" a mano). Detalle completo y pruebas: Registro 50-a en RutasArchivos.md.
+Regla de convivencia de las dos ollas: el mundo (campana-estado.json, campana-INFORME.md, config.txt, models/) es el MISMO y compartido — usar UNA u OTRA, nunca ambas a la vez. Ambas despliegan la misma maleta (mismos 4 companeros, mismas SHAs) y tienen guardian de huella propia.
+Baterias al cierre: contra la vieja 97/97 + 14/14; contra la nueva 110/110 + 18/18 (con E42-E52 y U26b-v2/U33 nuevos); casa 5/5 + faseD + PTY ambas (1 pausa, rc=2) + py_compile + pyflakes.
+Huellas del paquete tras la r50:
+| Archivo | Rol | Bytes | SHA256 crudo (certutil) |
+|---|---|---|---|
+| **CAMPANA.py v1.7.2** | olla ANTIGUA — intacta, sigue valida | 533,605 | 65D33CBA...DA4B1 |
+| **CAMPANA-v2.py v2.0** | olla NUEVA — 10 hallazgos corregidos | 542,365 | 52996E67...B1E86 |
+| campana-10-pasos.py v1.7.2 | fuente de la olla antigua (repo) | 529,885 | 12DA5AE1...3E127 |
+Nota de huellas: la auto-huella interna del guardian de cada olla (EE62935F...E12EB en la v2; 4FBF323A...DDF en la v1.7.2) NO es el sha crudo del archivo: excluye la linea del SHA por diseno. Para verificar la descarga con certutil se usa el CRUDO de la tabla.

@@ -38,10 +38,21 @@ import sys
 import tempfile
 import time
 import types
+import urllib.error
+import urllib.request
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
-SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
-                                      "scripts", "campana-10-pasos.py"))
+# R50: modo objetivo — con CAMPANA_OBJETIVO (env) apuntando a otra olla
+# (p.ej. CAMPANA-v2.py) TODA la bateria corre contra ESA olla; sin la
+# variable, todo queda EXACTAMENTE como siempre (fuente v1.7.2).
+_OBJETIVO = os.environ.get("CAMPANA_OBJETIVO") or ""
+if _OBJETIVO:
+    SCRIPT = (_OBJETIVO if os.path.isabs(_OBJETIVO) else
+              os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
+                                           "scripts", _OBJETIVO)))
+else:
+    SCRIPT = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
+                                          "scripts", "campana-10-pasos.py"))
 DIR = tempfile.mkdtemp(prefix="campana_test_")
 BASE = os.path.join(DIR, "base")
 os.makedirs(BASE, exist_ok=True)
@@ -1012,22 +1023,27 @@ else:
     check("E34a bat RETIRADO: payload == py v1.6 certificado (huella historica)",
           False)
     check("E34b bat RETIRADO: SHA incrustado == SHA del payload", False)
-_ruta_activa = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
-                                            "scripts", "CAMPANA.py"))
+_ruta_activa = (SCRIPT if _OBJETIVO else os.path.abspath(
+    os.path.join(RAIZ, "..", "InformacionCritica", "scripts", "CAMPANA.py")))
 _bat_activo_fuera = not os.path.exists(os.path.abspath(
     os.path.join(RAIZ, "..", "InformacionCritica", "bat", "CAMPANA.bat")))
-check("E34c archivo unico ACTIVO: CAMPANA.py existe con bloque R45 y el "
-      "viejo CAMPANA.bat ya no esta en bat/",
+check("E34c archivo unico ACTIVO: %s existe con bloque R45 y el "
+      "viejo CAMPANA.bat ya no esta en bat/" % os.path.basename(_ruta_activa),
       os.path.exists(_ruta_activa) and _bat_activo_fuera
       and b"ARRANQUE REFORZADO (CAMPANA.py" in open(_ruta_activa, "rb").read())
 
 # E39-E41 (r49, repaso antibugs "solucion de bugs repasa"): tres redes nuevas
 # del sindrome "morir callado", verificadas sobre el archivo vivo y la fuente.
 _texto_activo = open(_ruta_activa, encoding="utf-8").read()
-check("E39 fuente v1.7.2: VERSION y CHANGELOG de la ronda 49 en fuente y "
-      "archivo unico",
-      "v1.7.2 LA MALETA" in cam.VERSION and "CHANGELOG v1.7.2" in _texto_activo
-      and "repaso" in cam.VERSION)
+if _OBJETIVO:
+    check("E39-v2 VERSION y CHANGELOG de la ronda 50 en el objetivo",
+          "v2.0 LA MALETA" in cam.VERSION and "CHANGELOG v2.0" in _texto_activo
+          and "SEGUNDA" in cam.VERSION)
+else:
+    check("E39 fuente v1.7.2: VERSION y CHANGELOG de la ronda 49 en fuente y "
+          "archivo unico",
+          "v1.7.2 LA MALETA" in cam.VERSION and "CHANGELOG v1.7.2" in _texto_activo
+          and "repaso" in cam.VERSION)
 check("E40 el import del companero esta DENTRO de la red r49 (exec_module "
       "indentado + 3 ramas con pausa)",
       "\n    _spec.loader.exec_module(bn3)" in _texto_activo
@@ -1038,12 +1054,195 @@ check("E41 higiene del tmp de maleta (fallo limpia el tmp, r49) + guard "
       _texto_activo.count("os.remove(_tmp)") == 1
       and _texto_activo.count("isinstance(exc.code, str) and exc.code.strip()") == 1)
 
+# ========== R50 (SEGUNDA OLLA): E42-E52 — solo contra el objetivo nuevo ======
+if _OBJETIVO:
+    # E42/E46/E49/E50/E51: estructura de los parches r50 en el archivo vivo.
+    check("E42 paso2 cirugia ATOMICA de config.txt (tmp + os.replace + higiene)",
+          "os.replace(_tmp_cfg, ruta)" in _texto_activo
+          and _texto_activo.count("os.remove(_tmp_cfg)") == 1)
+    check("E46 mina latente desactivada: pos_token propio, `i` sigue siendo "
+          "indice de LINEA",
+          "pos_token = tokens.index(bandera)" in _texto_activo
+          and "i = tokens.index(bandera)" not in _texto_activo)
+    check("E49 _auto_paso3: rama de server vivo = defensa en profundidad "
+          "con nombre honesto",
+          "[defensa en profundidad] server vivo" in _texto_activo)
+    check("E50 higiene honesta: discos derivados (sin C:/D: falsos en posix)",
+          "_discos_hig" in _texto_activo
+          and 'else "/", DISCO_HIGIENE_GB' not in _texto_activo)
+    check("E51 el streaming SHA dice el tamano REAL del certificado",
+          'SHA256 en streaming (%.2f GB' in _texto_activo
+          and "13 GB, ~1-2 min" not in _texto_activo)
+
+    # E43 (behavioral): _p2_revert con red — evidencia + atomicidad + check.
+    _dir_r50 = os.path.join(DIR, "r50-revert")
+    os.makedirs(_dir_r50, exist_ok=True)
+    _cfg_r50 = os.path.join(_dir_r50, "config.txt")
+    _backup_r50 = _cfg_r50 + ".bak-campana-p2-20260101-000000"
+    _cfg_actual = ("# config del Director (ajuste a mano r50)\n"
+                   "RUTA_SERVER = x\nFLAGS_BASE = -ngl 99 -np 2\n")
+    _cfg_origen = "# config original\nRUTA_SERVER = x\nFLAGS_BASE = -ngl 99\n"
+    with open(_cfg_r50, "w", encoding="utf-8") as f:
+        f.write(_cfg_actual)
+    with open(_backup_r50, "w", encoding="utf-8") as f:
+        f.write(_cfg_origen)
+    _r_r50 = {"config": _cfg_r50, "estado": os.path.join(_dir_r50, "e.json"),
+              "informe": os.path.join(_dir_r50, "informe.md"),
+              "base": _dir_r50, "models": os.path.join(_dir_r50, "models")}
+    _e_r50 = {"version": cam.VERSION, "actualizado": "",
+              "pasos": {"2": {"estado": "PROMOVIDA", "backup": _backup_r50}},
+              "n3": {}}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _rc43 = cam._p2_revert(_r_r50, _e_r50)
+    _evidencias = [f for f in os.listdir(_dir_r50) if ".bak-antes-revert-" in f]
+    check("E43 revert con red: backup byte-a-byte + evidencia del config "
+          "actual + FLAGS_BASE verificado",
+          _rc43 == 0 and open(_cfg_r50, encoding="utf-8").read() == _cfg_origen
+          and len(_evidencias) == 1
+          and open(os.path.join(_dir_r50, _evidencias[0]),
+                   encoding="utf-8").read() == _cfg_actual)
+
+    # E44 (behavioral): estado corrupto NO se descarta en silencio.
+    _dir_e44 = os.path.join(DIR, "r50-estado-podrido")
+    os.makedirs(_dir_e44, exist_ok=True)
+    _ruta_e44 = os.path.join(_dir_e44, "campana-estado.json")
+    _podrido = '{"pasos": {"1": {"estado": "GO"}}, "n3": {'
+    with open(_ruta_e44, "w", encoding="utf-8") as f:
+        f.write(_podrido)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _e44 = cam.leer_estado(_ruta_e44)
+    _podridos = [f for f in os.listdir(_dir_e44) if ".corrupto-" in f]
+    check("E44 estado corrupto: estado fresco + evidencia .corrupto-<ts> "
+          "con el contenido original",
+          _e44.get("pasos") == {} and len(_podridos) == 1
+          and open(os.path.join(_dir_e44, _podridos[0]),
+                   encoding="utf-8").read() == _podrido)
+    with open(_ruta_e44, "w", encoding="utf-8") as f:
+        f.write('{"pasos": [1, 2], "n3": "no"}')
+    _e44b = cam.leer_estado(_ruta_e44)
+    check("E44b defensa de tipos: pasos/n3 SIEMPRE dict",
+          isinstance(_e44b["pasos"], dict) and isinstance(_e44b["n3"], dict))
+
+    # E45 (behavioral): guardar_estado limpia su tmp si os.replace falla.
+    _replace_viejo = os.replace
+    _dir_e45 = os.path.join(DIR, "r50-estado-tmp")
+    os.makedirs(_dir_e45, exist_ok=True)
+    _ruta_e45 = os.path.join(_dir_e45, "campana-estado.json")
+
+    def _replace_roto(a, b, *a2, **k2):
+        raise OSError("disco lleno (simulado r50)")
+
+    os.replace = _replace_roto
+    try:
+        try:
+            cam.guardar_estado(_ruta_e45, {"pasos": {}, "n3": {}})
+            _subio45 = False
+        except OSError:
+            _subio45 = True
+    finally:
+        os.replace = _replace_viejo
+    check("E45 guardar_estado: la causa sube y NO queda .tmp huerfano",
+          _subio45 and not os.path.exists(_ruta_e45 + ".tmp"))
+
+    # E47 (behavioral): reintento de red en _chat_uno (1 vez; 4xx no se repite).
+    _urlopen_viejo = urllib.request.urlopen
+    _sleep_viejo = time.sleep
+    _llamadas = []
+
+    class _RespFalsa:
+        def __init__(self, datos):
+            self._d = datos
+
+        def read(self):
+            return self._d
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _urlopen_cae_una(req, timeout=None):
+        _llamadas.append(1)
+        if len(_llamadas) == 1:
+            raise urllib.error.URLError("tic del server (simulado)")
+        return _RespFalsa(b'{"choices":[{"message":{"content":"OK r50"}}],'
+                          b'"timings":{"predicted_per_second":9.5}}')
+
+    time.sleep = lambda s: None
+    urllib.request.urlopen = _urlopen_cae_una
+    try:
+        contenido, tps = cam._chat_uno(1, "prueba")
+    finally:
+        urllib.request.urlopen = _urlopen_viejo
+        time.sleep = _sleep_viejo
+    check("E47 reintento de red: URLError -> la 2da bala sirve (sin falla)",
+          contenido == "OK r50" and tps == 9.5 and len(_llamadas) == 2)
+    _llamadas.clear()
+
+    def _urlopen_404(req, timeout=None):
+        _llamadas.append(1)
+        raise urllib.error.HTTPError("http://x", 404, "Not Found", None, None)
+
+    urllib.request.urlopen = _urlopen_404
+    try:
+        try:
+            cam._chat_uno(1, "prueba")
+            _subio404 = False
+        except urllib.error.HTTPError:
+            _subio404 = True
+    finally:
+        urllib.request.urlopen = _urlopen_viejo
+    check("E47b 4xx NO se repite: UNA llamada y la causa sube",
+          _subio404 and len(_llamadas) == 1)
+
+    # E48 (behavioral): error generico a mitad de turno -> evidencia en el
+    # informe (la familia "morir callado" extirpada del bucle del AUTO).
+    _prev48, _hok48, _p1_48 = (cam._prevuelo_auto, cam.health_ok,
+                               cam.PASOS_AUTO.get(1))
+    cam._prevuelo_auto = lambda *a2, **k2: ([], [])
+
+    def _paso_explode(a2, r2, e2):
+        raise ValueError("paso que explota (simulado r50)")
+
+    cam.PASOS_AUTO[1] = _paso_explode
+    _estado_fresco()
+    e2 = cam.leer_estado(ESTADO)
+    buf, buf_err = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf_err):
+            rc48 = cam.modo_auto(a, r, e2)
+    finally:
+        cam._prevuelo_auto = _prev48
+        cam.health_ok = _hok48
+        if _p1_48 is not None:
+            cam.PASOS_AUTO[1] = _p1_48
+        else:
+            cam.PASOS_AUTO.pop(1, None)
+        cam.AUTO["on"] = False
+        cam.AUTO["aceptadas"] = []
+    _informe48 = open(r["informe"], encoding="utf-8").read()
+    check("E48 error generico en el turno: rc=1, traceback visible Y "
+          "evidencia en el informe",
+          rc48 == 1 and "paso que explota" in buf_err.getvalue()
+          and "AUTO INTERRUMPIDO (error inesperado)" in _informe48)
+
+    # E52: la olla ANTIGUA queda INTACTA (el pedido del Director literal).
+    _vieja = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
+                                          "scripts", "CAMPANA.py"))
+    check("E52 la olla ANTIGUA queda INTACTA (CAMPANA.py 65D33CBA...DA4B1)",
+          hashlib.sha256(open(_vieja, "rb").read()).hexdigest().upper()
+          == "65D33CBAB667A70C7652BE7E9EF3B0DAADE39354C5AC5CEF42ECA50E045DA4B1")
+
 print("")
 if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E41 + N01-N15)"
-                % n_checks[0]))
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E41 + N01-N15%s)"
+                % (n_checks[0],
+                   " + E42-E52 (r50, segunda olla)" if _OBJETIVO else "")))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

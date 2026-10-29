@@ -17,6 +17,11 @@ U31: (r48) self-heal del dump sin rama ciega: dump viejo -> REEMPLAZADO por
 U32: (r49, repaso antibugs) el import del companero tiene RED (chmod 000 ->
      causa visible + rc=1, no ventana callada); el guard imprime SIEMPRE el
      texto de un sys.exit("texto") (antes se perdia); higiene del tmp.
+R50: modo OBJETIVO — con CAMPANA_OBJETIVO (env) apuntando a otra olla
+     (CAMPANA-v2.py) la bateria prueba ESA olla: auto-certificacion interna
+     del integro + la olla ANTIGUA y su fuente quedan INTACTAS (U26b2/b3)
+     + marcadores de la ronda 50 (U33). Sin la variable, TODO igual que
+     siempre (CAMPANA.py v1.7.2).
 """
 import hashlib
 import os
@@ -27,7 +32,11 @@ import tempfile
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(RAIZ, "InformacionCritica", "scripts")
-CAMPANA = os.path.join(SCRIPTS, "CAMPANA.py")
+# R50: modo objetivo (env CAMPANA_OBJETIVO); por defecto, la olla de siempre.
+OBJETIVO = os.environ.get("CAMPANA_OBJETIVO") or "CAMPANA.py"
+MODO_V2 = OBJETIVO != "CAMPANA.py"
+CAMPANA = OBJETIVO if os.path.isabs(OBJETIVO) else os.path.join(SCRIPTS, OBJETIVO)
+NOMBRE = os.path.basename(CAMPANA)
 FUENTE = os.path.join(SCRIPTS, "campana-10-pasos.py")
 BARRIDO = os.path.join(SCRIPTS, "barrido-n3-eficiencia.py")
 CONFIG = os.path.join(RAIZ, "InformacionCritica", "configs", "config.txt")
@@ -47,21 +56,40 @@ def main():
     texto = datos.decode("utf-8")
     fuente = open(FUENTE, "rb").read()
 
-    check("U26a CAMPANA.py existe y lleva el bloque R45",
+    check("U26a %s existe y lleva el bloque R45" % NOMBRE,
           "ARRANQUE REFORZADO (CAMPANA.py" in texto)
-    check("U26b cuerpo byte-idéntico al v1.7.2 certificado (SHA %s...)"
-          % HUELLA_FUENTE[:8],
-          hashlib.sha256(fuente).hexdigest().upper() == HUELLA_FUENTE
-          and texto.startswith(fuente.decode("utf-8")[:-len(BLOQUE_VIEJO)]))
+    if not MODO_V2:
+        check("U26b cuerpo byte-idéntico al v1.7.2 certificado (SHA %s...)"
+              % HUELLA_FUENTE[:8],
+              hashlib.sha256(fuente).hexdigest().upper() == HUELLA_FUENTE
+              and texto.startswith(fuente.decode("utf-8")[:-len(BLOQUE_VIEJO)]))
+    else:
+        # R50 (segunda olla): la v2 no tiene fuente aparte -> auto-
+        # certificacion interna (mismo algoritmo del guardian) + prueba de
+        # que la olla ANTIGUA y su fuente quedan INTACTAS (no se borra nada).
+        _pos0 = datos.find(b'SHA_AUTOCHEQUEO = "') + len(b'SHA_AUTOCHEQUEO = "')
+        _sha_emb = datos[_pos0:datos.find(b'"', _pos0)].decode("ascii")
+        _objeto = datos.replace(
+            ('SHA_AUTOCHEQUEO = "%s"' % _sha_emb).encode("utf-8"),
+            b'SHA_AUTOCHEQUEO = "@@AUTOCHEQUEO@@"')
+        check("U26b-v2 auto-certificacion interna del integro (guardian pasa)",
+              len(_sha_emb) == 64
+              and hashlib.sha256(_objeto).hexdigest().upper() == _sha_emb)
+        check("U26b2-v2 la olla ANTIGUA queda INTACTA (65D33CBA...DA4B1)",
+              hashlib.sha256(open(os.path.join(SCRIPTS, "CAMPANA.py"),
+                                  "rb").read()).hexdigest().upper()
+              == "65D33CBAB667A70C7652BE7E9EF3B0DAADE39354C5AC5CEF42ECA50E045DA4B1")
+        check("U26b3-v2 la fuente v1.7.2 queda INTACTA (12DA5AE1...E127)",
+              hashlib.sha256(fuente).hexdigest().upper() == HUELLA_FUENTE)
     check("U26c el viejo bloque main no sobrevive",
           BLOQUE_VIEJO not in texto)
 
     lab = tempfile.mkdtemp(prefix="lab-u27-")
     try:
-        shutil.copy(CAMPANA, os.path.join(lab, "CAMPANA.py"))
+        shutil.copy(CAMPANA, os.path.join(lab, NOMBRE))
         shutil.copy(BARRIDO, lab)
         shutil.copy(CONFIG, lab)
-        r1 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r1 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab, timeout=120)
         salida1 = (r1.stdout + r1.stderr).decode("utf-8", errors="replace")
         check("U27a arranque REAL del integro: rc=0", r1.returncode == 0)
@@ -86,12 +114,12 @@ def main():
     # U29: LA MALETA — lab SOLO (solo CAMPANA.py) + config pre-existente
     lab_m = tempfile.mkdtemp(prefix="lab-maleta-")
     try:
-        shutil.copy(CAMPANA, os.path.join(lab_m, "CAMPANA.py"))
+        shutil.copy(CAMPANA, os.path.join(lab_m, NOMBRE))
         # U29b primero: un config tuyo NUNCA se pisa (P2 es su dueno)
         config_tuyo = os.path.join(lab_m, "config.txt")
         with open(config_tuyo, "w", encoding="utf-8") as f:
             f.write("RUTA_SERVER = D:\\el_de_mi_casa\\llama-server.exe\n")
-        r3 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r3 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab_m, timeout=180)
         salida3 = (r3.stdout + r3.stderr).decode("utf-8", errors="replace")
         desplegados = [n for n in ("barrido-n3-eficiencia.py",
@@ -113,8 +141,8 @@ def main():
     # y la ventana del doble click se cerraba sin causa legible).
     lab_c = tempfile.mkdtemp(prefix="lab-payload-roto-")
     try:
-        shutil.copy(CAMPANA, os.path.join(lab_c, "CAMPANA.py"))
-        ruta_rota = os.path.join(lab_c, "CAMPANA.py")
+        shutil.copy(CAMPANA, os.path.join(lab_c, NOMBRE))
+        ruta_rota = os.path.join(lab_c, NOMBRE)
         texto_roto = open(ruta_rota, encoding="utf-8").read()
         ancla = "'barrido-n1-expertos.py': ('"
         i0 = texto_roto.index(ancla)
@@ -124,7 +152,7 @@ def main():
         texto_roto = texto_roto[:pos] + sust + texto_roto[pos + 1:]
         with open(ruta_rota, "w", encoding="utf-8") as f:
             f.write(texto_roto)
-        r6 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r6 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab_c, timeout=180)
         salida6 = (r6.stdout + r6.stderr).decode("utf-8", errors="replace")
         check("U30 payload corrupto -> PARADA LIMPIA con causa y rc=3 "
@@ -138,13 +166,13 @@ def main():
     lab_d = tempfile.mkdtemp(prefix="lab-dump-viejo-")
     outer = tempfile.mkdtemp(prefix="lab-repo-layout-")
     try:
-        shutil.copy(CAMPANA, os.path.join(lab_d, "CAMPANA.py"))
+        shutil.copy(CAMPANA, os.path.join(lab_d, NOMBRE))
         dump_repo = os.path.join(RAIZ, "InformacionCritica", "configs",
                                  "llama-flags-nuevo.txt")
         with open(os.path.join(lab_d, "llama-flags-nuevo.txt"), "w",
                   encoding="utf-8") as f:
             f.write("# dump viejo del taller (NO certificado)\n")
-        r7 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r7 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab_d, timeout=180)
         salida7 = (r7.stdout + r7.stderr).decode("utf-8", errors="replace")
         check("U31a dump viejo en disco -> self-heal al certificado (nota "
@@ -159,11 +187,11 @@ def main():
         cfgs = os.path.join(outer, "configs")
         os.makedirs(lab_e)
         os.makedirs(cfgs)
-        shutil.copy(CAMPANA, os.path.join(lab_e, "CAMPANA.py"))
+        shutil.copy(CAMPANA, os.path.join(lab_e, NOMBRE))
         shutil.copy(dump_repo, os.path.join(cfgs, "llama-flags-nuevo.txt"))
         with open(os.path.join(cfgs, "config.txt"), "w", encoding="utf-8") as f:
             f.write("RUTA_SERVER = D:\\rig\\llama-server.exe\n")
-        r8 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r8 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab_e, timeout=180)
         salida8 = (r8.stdout + r8.stderr).decode("utf-8", errors="replace")
         check("U31b dump solo en ../configs: nota honesta, sin copia local",
@@ -179,12 +207,12 @@ def main():
     # estructura de las redes en el archivo vivo.
     lab_f = tempfile.mkdtemp(prefix="lab-import-net-")
     try:
-        shutil.copy(CAMPANA, os.path.join(lab_f, "CAMPANA.py"))
-        r9 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        shutil.copy(CAMPANA, os.path.join(lab_f, NOMBRE))
+        r9 = subprocess.run([sys.executable, NOMBRE, "estado"],
                             capture_output=True, cwd=lab_f, timeout=180)
         assert r9.returncode == 0, "lab base rc=%d" % r9.returncode
         os.chmod(os.path.join(lab_f, "barrido-n3-eficiencia.py"), 0o000)
-        r10 = subprocess.run([sys.executable, "CAMPANA.py", "estado"],
+        r10 = subprocess.run([sys.executable, NOMBRE, "estado"],
                              capture_output=True, cwd=lab_f, timeout=180)
         salida10 = (r10.stdout + r10.stderr).decode("utf-8", errors="replace")
         check("U32a companero ilegible (chmod 000) -> causa visible + rc=1 "
@@ -206,10 +234,23 @@ def main():
           texto.count("isinstance(exc.code, str) and exc.code.strip()") == 1
           and texto.count('print("[FATAL] %s" % exc.code)') == 1)
 
+    if MODO_V2:
+        # U33 (r50): marcadores de la SEGUNDA OLLA dentro del objetivo.
+        check("U33a-v2 VERSION y CHANGELOG de la ronda 50 en el objetivo",
+              "v2.0 LA MALETA" in texto and "CHANGELOG v2.0" in texto
+              and "SEGUNDA" in texto)
+        check("U33b-v2 los 10 hallazgos r50 estan dentro (marcas de los parches)",
+              all(m in texto for m in (
+                  "pos_token", ".campana-tmp", "bak-antes-revert-",
+                  ".corrupto-", "AUTO INTERRUMPIDO (error inesperado)",
+                  "[defensa en profundidad]", "_discos_hig",
+                  "reintentos=1", 'SHA256 en streaming (%.2f GB')))
+
     print()
     if all(resultado):
-        print("BATERIA campana-py: TODO VERDE (%d checks: U26-U32)" %
-              len(resultado))
+        print("BATERIA campana-py: TODO VERDE (%d checks: U26-U32%s)" %
+              (len(resultado),
+               " + U26b2/U33 (r50, segunda olla)" if MODO_V2 else ""))
         return 0
     print("BATERIA campana-py: HAY FALLAS (%d/%d)" %
           (resultado.count(False), len(resultado)))
