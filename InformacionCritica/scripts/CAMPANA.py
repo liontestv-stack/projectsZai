@@ -1599,7 +1599,7 @@ def main():
 # errores con causa visible y pausa garantizada al terminar o fallar.
 # Este archivo es el campana-10-pasos.py v1.6 INTEGRO (SHA de fuente
 # 77A7AF69...9F901) salvo este bloque final.
-SHA_AUTOCHEQUEO = "9648D411131099A893B93168CA12E96E531C45CB823FAC953DD9E6B739C7282E"
+SHA_AUTOCHEQUEO = "C5426C3461808228C87C2537304E7F63CC0CFB6065D2066733A6B9D487D08937"
 
 
 def _autoverifica_huella():
@@ -1624,6 +1624,16 @@ def _autoverifica_huella():
         return False, "no se pudo leer el propio archivo: %r" % (exc,)
 
 
+# R46 auditoria total (6 hallazgos corregidos en este bloque):
+#   a) DOBLE PAUSA cazada: en MODO AUTO el v1.6 YA pausa dentro de main()
+#      y el wrapper pausaba OTRA vez -> el Director tenia que dar 2 Enter.
+#      Ahora la ruta normal NO vuelve a pausar; las rutas de error SI.
+#   b) Ctrl+C (KeyboardInterrupt) antes NO se capturaba: la ventana se
+#      cerraba sin causa en plena medicion (la clase exacta del
+#      incidente 44). Ahora: aviso visible + pausa + rc=130.
+#   c) sys.exit("texto") salia rc=0 (error contado como exito). Ahora:
+#      None->0, int->int, texto->1.
+#   d) Excepcion inesperada salia rc=2 heredado; ahora rc=1 explicito.
 if __name__ == "__main__":
     rc = 2
     try:
@@ -1633,16 +1643,21 @@ if __name__ == "__main__":
             print(red("         PARADA LIMPIA: no se ejecuta nada."))
             print(red("         Re-descarga CAMPANA.py del repo y verifica su huella."))
             rc = 3
+            _pausa_doble_click()  # FATAL de huella: ventana abierta SIEMPRE
         else:
-            rc = main()
+            rc = main()  # v1.6 ya pausa el doble click al terminar AUTO
     except SystemExit as exc:
-        rc = exc.code if isinstance(exc.code, int) else 0
+        rc = exc.code if isinstance(exc.code, int) \
+            else (0 if exc.code is None else 1)
+        _pausa_doble_click()  # sys.exit inesperado: la causa ya se imprimio
+    except KeyboardInterrupt:
+        print(red("\n[PARADO] Ctrl+C: lo hecho queda guardado en el informe."))
+        rc = 130
         _pausa_doble_click()
     except Exception:
         import traceback
         traceback.print_exc()
         print(red("\n[FATAL] error inesperado de Python (arriba esta la causa)."))
-        _pausa_doble_click()
-    else:
+        rc = 1
         _pausa_doble_click()
     sys.exit(rc)

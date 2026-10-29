@@ -943,24 +943,37 @@ cam._prevuelo_auto, cam.health_ok, cam._auto_paso3 = (_prev_viejo, _hok_viejo,
 cam.PASOS_AUTO.clear()
 cam.PASOS_AUTO.update(_PASOS_VIEJOS)
 
-# E34: archivo unico (r42) — el payload del CAMPANA.bat ES el py, byte-a-byte
+# E34: archivo unico (r42) — DESDE r45 el bat esta RETIRADO (bat/retirado/,
+# solo integridad historica) y el archivo unico ACTIVO es CAMPANA.py.
+# Auditoria r46: E34 re-apuntado al retirado (antes crasheaba con
+# FileNotFoundError desde que el bat se movio) + E34c nuevo para el activo.
 import base64 as _b64
 _ruta_bat = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
-                                         "bat", "CAMPANA.bat"))
+                                         "bat", "retirado", "CAMPANA.bat"))
 _bat = open(_ruta_bat, "rb").read().decode("ascii")
 _lns = _bat.split("\r\n")
 _marcas = [i for i, ln in enumerate(_lns) if ln.startswith("###PY64###")]
-check("E34a bat unico: marcador ###PY64### aparece UNA vez", len(_marcas) == 1)
+check("E34a bat RETIRADO (r42-r44): marcador ###PY64### aparece UNA vez",
+      len(_marcas) == 1)
 if len(_marcas) == 1:
     _py_bat = _b64.b64decode("".join(_lns[_marcas[0] + 1:]))
     _py_real = open(SCRIPT, "rb").read()
-    check("E34a bat unico: payload byte-a-byte el py", _py_bat == _py_real)
+    check("E34a bat RETIRADO: payload byte-a-byte el py v1.6",
+          _py_bat == _py_real)
     _sha = hashlib.sha256(_py_bat).hexdigest().upper()
-    check("E34b bat unico: SHA incrustado == SHA real del payload",
+    check("E34b bat RETIRADO: SHA incrustado == SHA real del payload",
           _sha in _bat and _sha == hashlib.sha256(_py_real).hexdigest().upper())
 else:
-    check("E34a bat unico: payload byte-a-byte el py", False)
-    check("E34b bat unico: SHA incrustado == SHA real del payload", False)
+    check("E34a bat RETIRADO: payload byte-a-byte el py v1.6", False)
+    check("E34b bat RETIRADO: SHA incrustado == SHA real del payload", False)
+_ruta_activa = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
+                                            "scripts", "CAMPANA.py"))
+_bat_activo_fuera = not os.path.exists(os.path.abspath(
+    os.path.join(RAIZ, "..", "InformacionCritica", "bat", "CAMPANA.bat")))
+check("E34c archivo unico ACTIVO: CAMPANA.py existe con bloque R45 y el "
+      "viejo CAMPANA.bat ya no esta en bat/",
+      os.path.exists(_ruta_activa) and _bat_activo_fuera
+      and b"ARRANQUE REFORZADO (CAMPANA.py" in open(_ruta_activa, "rb").read())
 
 print("")
 if ok_fallos:
