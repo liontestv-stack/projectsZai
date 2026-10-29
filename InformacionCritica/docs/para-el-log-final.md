@@ -100,3 +100,12 @@ Cuidado repartido tras el aviso del Director — el paquete de D:\ZLia son SEIS 
 Ya en el rig y NO descargables del repo: D:\llama.cpp\llama-server.exe (build b11856 pinado, el barrido AVISA si el pin no clava), el modelo D:\ZLia\models\...APEX-I-MINI.gguf (14,273,277,376 B, e4eae0e2...118d4) y Python 3 (solo stdlib: argparse, csv, datetime, importlib, json, os, shutil, statistics, subprocess, sys, time, urllib, hashlib, re, struct, threading — CERO pip install).
 Dependencias creadas por el propio script (no se descargan): campana-estado.json, campana-INFORME.md, campana-sanity-<tag>/, models/, backups de config.txt.
 Lección al registro: el arnés PTY de la r46 probó arranque sin barrido y sin config, pero NO sin dump de flags — cazado por la pregunta del Director (el dump sí está en la cocina del rig desde las rondas de barrido; de ahí que los tests del lab no tropezaran con ello).
+
+## 8. Anexo r47: LA MALETA — vuelve a ser UN archivo (pedido del Director: "demasiados links... un link para descargar campana desde git para actualizarlo y ya")
+CAMPANA.py v1.7 es archivo unico de VERDAD: los cuatro companeros de rig viajan DENTRO (base64 + SHA256) y se despliegan solos en el primer arranque. El inventario de SEIS archivos del anexo r46-b queda REEMPLAZADO por este:
+| # | Archivo | Cuándo | Bytes | SHA256 corto |
+|---|---|---|---|---|
+| 1 | **CAMPANA.py v1.7 (la maleta)** | SIEMPRE — unico descargable | 523,598 | B1748E3D...FAA7C |
+Ya en el rig (fuera del repo): llama-server b11856, modelo APEX-I-MINI (14.27 GB, e4eae0e2...118d4), Python 3 stdlib-only.
+Que despliega la maleta al primer arranque (verificado contra SHA incrustado ANTES de escribir; config.txt NUNCA se pisa si ya existe — P2 es su dueno; instrumentos que difieren se re-reemplazan con nota visible): barrido-n3-eficiencia.py (FDD277AB...AF68), barrido-n1-expertos.py (80C35ECB...78D0), llama-flags-nuevo.txt (20449FFD...4FAAD), config.txt semilla (746BC346...8EEC).
+Fuente viva: campana-10-pasos.py v1.7 (SHA 56478C64...53C95). P6 SIN bat: lanza barrido-n1-expertos.py directo con el mismo python (--bat queda como respaldo). Bonus de la auditoria: cazado un "formato orfano" heredado de v1.6 (docstring de modo_auto formateado con %) que el test U24 llevaba sin ver — corregido en fuente y generado.

@@ -456,13 +456,14 @@ try:
 except SystemExit:
     check("E23 server muerto en carga = FATAL con forense", True)
 
-# P6: bat inexistente -> FATAL
+# P6: instrumento inexistente (la maleta lo despliega en el rig) -> FATAL
 a, r, e = rutas()
 try:
     cam.paso6(a, r, e)
-    check("E24 p6 sin bat = FATAL", False)
+    check("E24 p6 sin instrumento = FATAL", False)
 except SystemExit:
-    check("E24 p6 sin bat = FATAL con pista --bat", True)
+    check("E24 p6 sin instrumento = FATAL (maleta lo despliega; --bat respaldo)",
+          True)
 
 print("")
 print("== R36: regresion de la revision ni-un-solo-bug (v1.1) ==")
@@ -953,19 +954,23 @@ _ruta_bat = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
 _bat = open(_ruta_bat, "rb").read().decode("ascii")
 _lns = _bat.split("\r\n")
 _marcas = [i for i, ln in enumerate(_lns) if ln.startswith("###PY64###")]
+# Auditoria r47: el bat retirado lleva el py v1.6 DENTRO; la fuente viva ya es
+# v1.7 (maleta), asi que la integridad historica se compara contra la huella
+# v1.6 CERTIFICADA (77A7AF69...), no contra la fuente corriente.
+HUELLA_V1_6 = "77A7AF69777EA3FEB2A848CA5F9B3C6C42252865A92AB4ED0FD0088EC959F901"
 check("E34a bat RETIRADO (r42-r44): marcador ###PY64### aparece UNA vez",
       len(_marcas) == 1)
 if len(_marcas) == 1:
     _py_bat = _b64.b64decode("".join(_lns[_marcas[0] + 1:]))
-    _py_real = open(SCRIPT, "rb").read()
-    check("E34a bat RETIRADO: payload byte-a-byte el py v1.6",
-          _py_bat == _py_real)
     _sha = hashlib.sha256(_py_bat).hexdigest().upper()
-    check("E34b bat RETIRADO: SHA incrustado == SHA real del payload",
-          _sha in _bat and _sha == hashlib.sha256(_py_real).hexdigest().upper())
+    check("E34a bat RETIRADO: payload == py v1.6 certificado (huella historica)",
+          _sha == HUELLA_V1_6)
+    check("E34b bat RETIRADO: SHA incrustado == SHA del payload",
+          _sha in _bat)
 else:
-    check("E34a bat RETIRADO: payload byte-a-byte el py v1.6", False)
-    check("E34b bat RETIRADO: SHA incrustado == SHA real del payload", False)
+    check("E34a bat RETIRADO: payload == py v1.6 certificado (huella historica)",
+          False)
+    check("E34b bat RETIRADO: SHA incrustado == SHA del payload", False)
 _ruta_activa = os.path.abspath(os.path.join(RAIZ, "..", "InformacionCritica",
                                             "scripts", "CAMPANA.py"))
 _bat_activo_fuera = not os.path.exists(os.path.abspath(
