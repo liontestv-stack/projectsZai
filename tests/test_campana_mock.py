@@ -944,6 +944,47 @@ cam._prevuelo_auto, cam.health_ok, cam._auto_paso3 = (_prev_viejo, _hok_viejo,
 cam.PASOS_AUTO.clear()
 cam.PASOS_AUTO.update(_PASOS_VIEJOS)
 
+# E36-E37 (r48, auditoria antibugs): el prevuelo REAL ya no exige hf ni 16 GB
+# con P4 aparcada (Anexo R43): el AUTO anuncia "este turno NO descarga nada"
+# y antes lo mataba en rigs sin hf o con disco justo. Nadie lo habia cazado
+# porque hasta aqui TODOS los tests parcheaban _prevuelo_auto entero.
+_prev_mocks = (cam.health_ok, cam.ram_sistema, cam.gb_libres, cam._binario_hf,
+               cam.P4_APARCADA)
+cam.health_ok = lambda p: False          # rig quieto (el prevuelo lo exige)
+cam.ram_sistema = lambda: (8192, 16384)  # RAM al 50%: ni fatal ni aviso
+cam.gb_libres = lambda p: (5.0, 100.0)   # disco JUSTO (5 GB < 16): antes fatal
+cam._binario_hf = lambda: None           # sin hf: antes fatal
+with open(FAKE_CONFIG, "w", encoding="utf-8") as f:
+    f.write("# config del taller (r48)\nRUTA_SERVER = %s\n"
+            "FLAGS_BASE = -ngl 99 -np 2\n" % sys.executable)  # existe de verdad
+a, r, e = rutas()
+_fatales36, _avisos36 = cam._prevuelo_auto(a, r, e)
+check("E36 prevuelo REAL con P4 aparcada: sin hf y disco justo NO bloquean",
+      cam.P4_APARCADA and _fatales36 == [])
+cam.P4_APARCADA = False
+_fatales37, _ = cam._prevuelo_auto(a, r, e)
+check("E37 prevuelo REAL con P4 despierta: hf y disco vuelven a ser puerta",
+      any("hf" in x for x in _fatales37)
+      and any("disco" in x for x in _fatales37))
+(cam.health_ok, cam.ram_sistema, cam.gb_libres, cam._binario_hf,
+ cam.P4_APARCADA) = _prev_mocks
+
+# E38 (r48): _rutas resuelve config.txt en layout de repo (fallback
+# ../configs, patron del dump desde la ronda 21) — antes la maleta respetaba
+# ../configs pero el cuerpo no lo miraba: AUTO muerto con "no esta config.txt"
+# teniendola al lado. En layout plano sigue mandando la de junto al piloto.
+_outer38 = os.path.join(DIR, "layout-repo")
+os.makedirs(os.path.join(_outer38, "scripts"), exist_ok=True)
+os.makedirs(os.path.join(_outer38, "configs"), exist_ok=True)
+with open(os.path.join(_outer38, "configs", "config.txt"), "w",
+          encoding="utf-8") as f:
+    f.write("RUTA_SERVER = x\n")
+_r_repo = cam._rutas(args(dir=os.path.join(_outer38, "scripts")))
+_r_plano = cam._rutas(args(dir=BASE))
+check("E38 _rutas: fallback ../configs en layout repo; base en layout plano",
+      _r_repo["config"] == os.path.join(_outer38, "configs", "config.txt")
+      and _r_plano["config"] == os.path.join(BASE, "config.txt"))
+
 # E34: archivo unico (r42) — DESDE r45 el bat esta RETIRADO (bat/retirado/,
 # solo integridad historica) y el archivo unico ACTIVO es CAMPANA.py.
 # Auditoria r46: E34 re-apuntado al retirado (antes crasheaba con
@@ -985,7 +1026,7 @@ if ok_fallos:
     print(cam.red("BATERIA campana: %d/%d FALLOS -> %s"
                   % (len(ok_fallos), n_checks[0], ", ".join(ok_fallos))))
     sys.exit(1)
-print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E35 + N01-N15)"
+print(cam.green("BATERIA campana: TODO VERDE (%d checks: U01-U25 + E01-E38 + N01-N15)"
                 % n_checks[0]))
 shutil.rmtree(DIR, ignore_errors=True)
 sys.exit(0)

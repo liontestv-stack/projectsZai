@@ -156,6 +156,43 @@ cosas dejando siempre un log; prioridad es seguridad ante malware"). MODO AUTO:
      el FIN DE TURNO con todo escrito. Re-doble-click retoma donde quedó.
 Bateria 73 -> 84 checks (U18/U19 + E28-E33).
 
+CHANGELOG v1.7.1 (2026-10-29, ronda 48 — auditoria antibugs del Director:
+"dale otra revisada antibugs"). Siete hallazgos sobre la maleta r47 y su
+herencia, cazados y verificados:
+  1. DESPLIEGUE CON PAUSA GARANTIZADA (el grave): _despliega_maleta() corria
+     a nivel de modulo SIN red de errores y ANTES de que existiera la pausa
+     del doble click: un payload corrupto (SystemExit) o un error de disco/
+     permisos/archivo bloqueado cerraba la ventana SIN causa legible — la
+     clase exacta de incidente que la r46 extirpo del wrapper. Ahora el
+     despliegue lleva su propio try/except: causa visible + pausa garantizada
+     + rc fiel (3 = integridad de payload, 130 = Ctrl+C, 1 = resto).
+  2. SELF-HEAL DEL DUMP SIN RAMA CIEGA: si el dump local diferia del
+     certificado y existia ../configs, la r47 lo dejaba VIEJO en silencio
+     creyendo "barrido usa ese" — FALSO: barrido-n3 prefiere el dump de SU
+     PROPIO directorio (RUTA_DUMP_DEF primero; ../configs solo fallback).
+     Ahora el dump que difiere SIEMPRE se reemplaza por el certificado con
+     nota visible; ../configs solo se respeta si aqui falta (con nota).
+  3. SEMILLA SIN CONTRADICCION (fix en el cuerpo, no en la maleta): la semilla
+     no se plantaba si existia ../configs/config.txt, pero el cuerpo SOLO
+     resolvia config.txt junto al piloto -> en layout de repo el AUTO moria
+     con "no esta config.txt" teniendola al lado. Ahora _rutas aplica el
+     fallback ../configs (mismo patron que el dump desde la ronda 21); asi la
+     maleta no planta config.txt DENTRO del repo y el AUTO vive en ambos
+     layouts. P2 sigue siendo el dueno: lo primero que existe es lo que edita.
+  4. PREVUELO AUTO HONESTO CON P4 APARCADA: el prevuelo exigia el cliente hf
+     y 16 GB libres aunque P4-P5 estan APARCADAS (Anexo R43) y el propio AUTO
+     imprime "este turno NO descarga nada": un rig sin hf o con disco justo
+     no podia ni medir. Ahora hf y disco solo se exigen si P4_APARCADA=False
+     (cuando la descarga vuelva, las puertas vuelven solas).
+  5. ESCRITURA ATOMICA de payloads (tmp + os.replace, patron guardar_estado):
+     un disco lleno a mitad de escritura ya no deja un payload truncado
+     disfrazado de archivo bueno (la semilla nunca se repara sola).
+  6. COMENTARIO RANCIO del bloque final corregido: decia cuerpo v1.6
+     (77A7AF69...) cuando el cuerpo ya era v1.7; el docstring del generador
+     citaba otra huella vieja. Solo documentacion: cero codigo.
+  7. COSMETICO: el estado de p6 guardaba la ruta del .py bajo la clave "bat";
+     ahora se llama "instrumento" (evidencia exacta).
+
 CHANGELOG v1.7 (2026-10-29, ronda 47 — pedido del Director: "demasiados
 links... otra solucion modificando campana.py... un link para descargar
 campana desde git para actualizarlo y ya"). LA MALETA — archivo unico de
@@ -5880,8 +5917,12 @@ def _maleta_escribe(ruta, nombre, sha):
         raise SystemExit("[FATAL] maleta: el payload de %s NO clava con su SHA "
                          "incrustado. Re-descarga CAMPANA.py del repo oficial."
                          % nombre)
-    with open(ruta, "wb") as f:
+    # R48: escritura atomica (patron guardar_estado): un disco lleno a
+    # mitad de escritura ya no deja un payload truncado disfrazado de bueno.
+    _tmp = ruta + ".maleta-tmp"
+    with open(_tmp, "wb") as f:
         f.write(datos)
+    os.replace(_tmp, ruta)
 
 
 def _existe_cerca(nombre, aqui):
@@ -5895,41 +5936,48 @@ def _despliega_maleta():
     for nombre, (sha, modo) in sorted(_MALETA.items()):
         ruta = os.path.join(aqui, nombre)
         if modo == "semilla":
+            # R48: sin cambio de fondo (la r47 ya lo hacia bien aqui): si
+            # existe junto al piloto es del Director (P2) y JAMAS se toca; si
+            # solo existe en ../configs (layout de repo) tampoco se planta
+            # una copia DENTRO del repo — el cuerpo la resuelve con el
+            # fallback r48 de _rutas (FIX-C).
             if os.path.exists(ruta) or _existe_cerca(nombre, aqui):
-                continue  # el config del Director (o el de repo): NO se toca
+                continue
         elif os.path.exists(ruta):
             if _maleta_sha(ruta) == sha:
                 continue  # intacto en disco: nada que hacer
-            if modo == "dump" and not os.path.exists(
-                    os.path.join(aqui, "..", "configs", nombre)):
-                notas.append("  %s: difiere del certificado -> REEMPLAZADO "
-                             "por el de la maleta" % nombre)
-                _maleta_escribe(ruta, nombre, sha)
-                continue
-            if modo == "dump":
-                continue  # hay dump en ../configs: barrido usa ese
+            # R48: dump incluido — SIEMPRE self-heal. La r47 dejaba el dump
+            # viejo si habia ../configs creyendo que "barrido usa ese", pero
+            # barrido-n3 prefiere el dump de SU PROPIO dir (RUTA_DUMP_DEF
+            # primero; ../configs es solo fallback): dejar el viejo en
+            # silencio podia usar flags NO certificadas.
             notas.append("  %s: difiere del certificado -> REEMPLAZADO por el "
                          "de la maleta" % nombre)
             _maleta_escribe(ruta, nombre, sha)
             continue
         elif modo == "dump" and _existe_cerca(nombre, aqui):
-            continue  # layout de repo: barrido lo encuentra en ../configs
+            # layout de repo: aqui falta pero ../configs lo tiene (barrido lo
+            # encuentra ahi como fallback). R48: con nota, no en silencio.
+            notas.append("  %s: falta junto al piloto; se usara el de "
+                         "../configs (fallback nativo del barrido)" % nombre)
+            continue
         notas.append("  %s: desplegado de la maleta (SHA verificado)" % nombre)
         _maleta_escribe(ruta, nombre, sha)
     return notas
 
 
-_notas_maleta = _despliega_maleta()
-if _notas_maleta:
-    print("MALETA (R47): companeros desplegados/verificados:")
-    for _n in _notas_maleta:
-        print(_n)
+# (R48) el despliegue de la maleta ya NO corre aqui: baja a la seccion de
+# importacion del companero, DESPUES de que exista _pausa_doble_click — antes,
+# un payload corrupto o un error de disco cerraba la ventana del doble click
+# sin causa legible (la clase exacta de incidente que la r46 extirpo).
 
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-VERSION = ("campana-10-pasos v1.7 LA MALETA (2026-10-29, ronda 47: archivo unico de "
-           "verdad - los companeros de rig viajan dentro y se despliegan solos; "
-           "P6 sin bat; P4-P5 aparcadas r43; doble click = pasos 1..6 sin preguntas y SIN descarga)")
+VERSION = ("campana-10-pasos v1.7.1 LA MALETA (2026-10-29, ronda 48: auditoria "
+           "antibugs - despliegue de maleta con pausa garantizada, self-heal del "
+           "dump sin rama ciega, prevuelo honesto con P4 aparcada; archivo unico "
+           "r47: los companeros de rig viajan dentro; P6 sin bat; doble click = "
+           "pasos 1..6 sin preguntas y SIN descarga)")
 
 # R43 — decision del Director (delego: "elige una", elegida A): el cuant
 # vigente SC117 APEX-I-Mini ya trae heretic + MTP nativo, asi que p4 (descarga
@@ -5960,6 +6008,34 @@ def _pausa_doble_click(es_tty=None):
                 input("\n(Enter para cerrar)")
             except Exception:
                 pass
+
+
+# ---------------- R48: despliegue de la maleta con pausa garantizada --------
+# Auditoria antibugs r48 (hallazgo grave): este despliegue corria sin red y
+# antes de que existiera la pausa del doble click. Ahora la ventana NUNCA se
+# cierra sola: causa visible + pausa + rc fiel (3 integridad, 130 Ctrl+C, 1).
+try:
+    _notas_maleta = _despliega_maleta()
+except SystemExit as _maleta_exc:
+    print("[FATAL] %s" % _maleta_exc.code)
+    print("        PARADA LIMPIA: no se ejecuta nada (integridad del paquete).")
+    _pausa_doble_click()
+    sys.exit(3)
+except KeyboardInterrupt:
+    print("\n[PARADO] Ctrl+C durante el despliegue de la maleta: nada ejecutado.")
+    _pausa_doble_click()
+    sys.exit(130)
+except Exception:
+    import traceback
+    traceback.print_exc()
+    print("[FATAL] maleta: despliegue imposible (disco lleno, permisos o "
+          "archivo bloqueado; arriba la causa).")
+    _pausa_doble_click()
+    sys.exit(1)
+if _notas_maleta:
+    print("MALETA (R47): companeros desplegados/verificados:")
+    for _n in _notas_maleta:
+        print(_n)
 
 
 # ---------------- importacion del companero de taller (barrido N3) ----------
@@ -6027,11 +6103,21 @@ SANITY_PROMPTS = [
 
 def _rutas(args):
     base = os.path.abspath(args.dir) if args.dir else AQUI
+    # R48 (auditoria): fallback de layout de repo para config.txt, mismo
+    # patron que el dump desde la ronda 21: si junto al piloto no esta,
+    # ../configs si puede tenerlo (antes la maleta respetaba ../configs pero
+    # el cuerpo no lo miraba: AUTO muerto con "no esta config.txt").
+    config = args.config or os.path.join(base, "config.txt")
+    if not args.config and not os.path.exists(config):
+        _cfg_repo = os.path.abspath(os.path.join(base, "..", "configs",
+                                                 "config.txt"))
+        if os.path.exists(_cfg_repo):
+            config = _cfg_repo  # abspath: sin ".." sucio en mensajes/evidencia
     return {
         "base": base,
         "estado": os.path.join(base, "campana-estado.json"),
         "informe": os.path.join(base, "campana-INFORME.md"),
-        "config": args.config or os.path.join(base, "config.txt"),
+        "config": config,
         "models": os.path.join(base, "models"),
     }
 
@@ -6828,7 +6914,7 @@ def paso6(args, rutas, estado):
     if rc != 0:
         fatal("barrido-n1-expertos.py salio con rc=%d" % rc,
               ["revisa su salida/informe; el resume de la casa permite repetirlo"])
-    estado["pasos"]["6"] = {"estado": "EJECUTADO", "bat": n1}
+    estado["pasos"]["6"] = {"estado": "EJECUTADO", "instrumento": n1}
     guardar_estado(rutas["estado"], estado)
     informe(rutas["informe"], "P6 N1 formal -> EJECUTADO",
             ["- instrumento: %s" % n1, "- rc: %d" % rc,
@@ -7023,14 +7109,21 @@ def _prevuelo_auto(args, rutas, estado):
             fatales.append("config.txt sin RUTA_SERVER (p3/p5 no pueden arrancar server)")
         elif not os.path.exists(cfg["RUTA_SERVER"]):
             fatales.append("RUTA_SERVER no existe en disco: %s" % cfg["RUTA_SERVER"])
-    if not _binario_hf():
-        fatales.append("sin cliente de HuggingFace (hf): la descarga de p4 no puede "
-                       "correr (instala con: pip install -U \"huggingface_hub[cli]\")")
-    base_disco = rutas["models"] if os.path.isdir(rutas["models"]) else rutas["base"]
-    libre, _tot = gb_libres(base_disco)
-    if libre is not None and libre < DISCO_MIN_GB:
-        fatales.append("disco sin espacio para la descarga de 14.07 GB (%.1f GB "
-                       "libres, minimo %.0f)" % (libre, DISCO_MIN_GB))
+    # R48 (auditoria): hf y disco solo bloquean si la descarga (p4) corre.
+    # Con P4 aparcada (Anexo R43) el turno NO descarga nada: exigir hf/16 GB
+    # aqui mataba el AUTO en rigs sin hf o con disco justo, contradiciendo
+    # el aviso "este turno NO descarga nada". Si P4 vuelve, las puertas
+    # vuelven solas.
+    if not P4_APARCADA:
+        if not _binario_hf():
+            fatales.append("sin cliente de HuggingFace (hf): la descarga de p4 "
+                           "no puede correr (instala con: pip install -U "
+                           "\"huggingface_hub[cli]\")")
+        base_disco = rutas["models"] if os.path.isdir(rutas["models"]) else rutas["base"]
+        libre, _tot = gb_libres(base_disco)
+        if libre is not None and libre < DISCO_MIN_GB:
+            fatales.append("disco sin espacio para la descarga de 14.07 GB (%.1f GB "
+                           "libres, minimo %.0f)" % (libre, DISCO_MIN_GB))
     n1 = args.bat or os.path.join(rutas["base"], "barrido-n1-expertos.py")
     if not os.path.exists(n1):
         avisos.append("barrido-n1-expertos.py no encontrado (la maleta lo "
@@ -7327,9 +7420,9 @@ def main():
 # ARRANQUE REFORZADO (CAMPANA.py, pedido del Director: "todo sera .py"):
 # auto-verificacion de huella propia (herencia del guardian del bat),
 # errores con causa visible y pausa garantizada al terminar o fallar.
-# Este archivo es el campana-10-pasos.py v1.6 INTEGRO (SHA de fuente
-# 77A7AF69...9F901) salvo este bloque final.
-SHA_AUTOCHEQUEO = "D9A702F079EDBAD1BBFA240F8159F16E26411714B53020B022BD4573CD7AA09E"
+# Este archivo es el campana-10-pasos.py v1.7.1 INTEGRO (SHA de fuente
+# 1D6CFB99...F6D8) salvo este bloque final.
+SHA_AUTOCHEQUEO = "982107C967119675838139C2EEBFB035C84219C64CF6D2D33146F6A8B8FBAD95"
 
 
 def _autoverifica_huella():
@@ -7355,7 +7448,7 @@ def _autoverifica_huella():
 
 
 # R46 auditoria total (6 hallazgos corregidos en este bloque):
-#   a) DOBLE PAUSA cazada: en MODO AUTO el v1.6 YA pausa dentro de main()
+#   a) DOBLE PAUSA cazada: en MODO AUTO el piloto YA pausa dentro de main()
 #      y el wrapper pausaba OTRA vez -> el Director tenia que dar 2 Enter.
 #      Ahora la ruta normal NO vuelve a pausar; las rutas de error SI.
 #   b) Ctrl+C (KeyboardInterrupt) antes NO se capturaba: la ventana se
@@ -7375,7 +7468,7 @@ if __name__ == "__main__":
             rc = 3
             _pausa_doble_click()  # FATAL de huella: ventana abierta SIEMPRE
         else:
-            rc = main()  # v1.6 ya pausa el doble click al terminar AUTO
+            rc = main()  # el piloto ya pausa el doble click al terminar AUTO
     except SystemExit as exc:
         rc = exc.code if isinstance(exc.code, int) \
             else (0 if exc.code is None else 1)

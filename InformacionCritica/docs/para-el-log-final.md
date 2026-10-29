@@ -109,3 +109,22 @@ CAMPANA.py v1.7 es archivo unico de VERDAD: los cuatro companeros de rig viajan 
 Ya en el rig (fuera del repo): llama-server b11856, modelo APEX-I-MINI (14.27 GB, e4eae0e2...118d4), Python 3 stdlib-only.
 Que despliega la maleta al primer arranque (verificado contra SHA incrustado ANTES de escribir; config.txt NUNCA se pisa si ya existe — P2 es su dueno; instrumentos que difieren se re-reemplazan con nota visible): barrido-n3-eficiencia.py (FDD277AB...AF68), barrido-n1-expertos.py (80C35ECB...78D0), llama-flags-nuevo.txt (20449FFD...4FAAD), config.txt semilla (746BC346...8EEC).
 Fuente viva: campana-10-pasos.py v1.7 (SHA 56478C64...53C95). P6 SIN bat: lanza barrido-n1-expertos.py directo con el mismo python (--bat queda como respaldo). Bonus de la auditoria: cazado un "formato orfano" heredado de v1.6 (docstring de modo_auto formateado con %) que el test U24 llevaba sin ver — corregido en fuente y generado.
+
+## 9. Anexo r48: auditoria antibugs de la maleta — CAMPANA.py v1.7.1 (pedido del Director: "dale otra revisada antibugs")
+Siete hallazgos sobre la maleta r47 y su herencia, corregidos y probados:
+| # | Hallazgo | Clase | Fix | Prueba nueva |
+|---|---|---|---|---|
+| 1 | Despliegue de maleta sin red de errores y ANTES de que existiera la pausa: payload corrupto o disco/permisos cerraban la ventana sin causa | grave (r47) | try/except propio: causa visible + pausa garantizada + rc fieles (3/130/1) | U30 (payload manoseado -> rc=3) |
+| 2 | Dump que diferia + ../configs existente se dejaba VIEJO en silencio ("barrido usa ese" era FALSO: barrido prefiere SU dir) | media (r47) | dump difiere -> SIEMPRE self-heal con nota; ../configs solo si aqui falta (con nota) | U31a/U31b |
+| 3 | La semilla respetaba ../configs pero el cuerpo no lo miraba: layout repo = AUTO muerto "no esta config.txt" | media (r47) | _rutas con fallback ../configs (patron dump ronda 21), abspath | E38 |
+| 4 | Prevuelo AUTO exigia hf y 16 GB con P4 APARCADA (el turno "NO descarga nada") | heredada r43 | hf/disco solo si P4_APARCADA=False | E36/E37 |
+| 5 | Escritura de payloads no atomica: disco lleno = payload truncado que la semilla no repara | baja (r47) | tmp + os.replace (patron guardar_estado) | patron ya probado |
+| 6 | Comentarios rancios: bloque final decia cuerpo v1.6 (77A7AF69); docstring del generador con otra huella | doc (r47) | corregidos al regenerar | revision manual |
+| 7 | estado p6 guardaba el .py bajo la clave "bat" | cosmetica (r47) | clave "instrumento" | revision manual |
+Herramienta: el auditor de formatos del area tenia el regex roto (lL]? sin corchete -> 180 falsos positivos "aridad 0"); corregido: diff HEAD vs r48 = 0 hallazgos en ambos.
+Baterias al cierre: campana 94/94 + campana-py 11/11 + mocks de la casa 5/5 + faseD VERDE + PTY 1 pausa + py_compile + pyflakes.
+Huella nueva del paquete:
+| Archivo | Cuándo | Bytes | SHA256 corto |
+|---|---|---|---|
+| **CAMPANA.py v1.7.1 (la maleta auditada)** | SIEMPRE — unico descargable | 529,241 | 3AB319AE...D60D |
+Fuente viva: campana-10-pasos.py v1.7.1 (1D6CFB99...F6D8). La maleta despliega igual que la r47 (mismos 4 companeros, mismas SHAs de payloads); lo que cambia es que NADA cierra la ventana sin causa, el dump viejo siempre se autocura y el AUTO no exige descargas que no va a hacer.
