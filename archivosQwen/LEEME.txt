@@ -1,0 +1,79 @@
+ARCHIVOSQWEN: el kit de uso diario (lo importante, a mano)
+===========================================================
+Fecha: 2026-10-31 · Ronda 55 · pedido del Director ("haz una nueva carpeta,
+archivosQwen, que sean los importantes como config, abrir modelo, hablar
+modelo").
+
+Que es esto
+-----------
+Los archivos que se usan TODOS los dias para abrir el modelo y hablar con
+el, reunidos en una sola carpeta plana. NO es un backup (para eso esta
+backup\abrir-qwen-apex\): es el kit de mano. Los vivos siguen en
+InformacionCritica\ y en el rig.
+
+Contenido (6 archivos + este LEEME)
+-----------------------------------
+LA RECETA
+- config.txt              LA CONFIG CENTRAL: FLAGS_BASE con -np 2 (promocion
+                          R53, campeon del N3: mediana 21.45 t/s, +19.8%),
+                          SAMPLING think, FLAGS_GANADORAS, rutas y puerto.
+
+ABRIR EL MODELO
+- abrir-qwen-apex.py      v3.1 — el lanzador (toda la config sale de
+                          config.txt; avisa y sale si no la encuentra)
+- ABRIR-QWEN.bat          doble click = perfil TRABAJO (8 expertos, fabrica)
+- ABRIR-QWEN-CHARLA.bat   doble click = perfil CHARLA (4 expertos, ~+41% t/s)
+
+HABLAR CON EL MODELO
+- chatear-qwen.py         el chat de consola (ES, muestra t/s)
+- CHATEAR-QWEN.bat        doble click para hablar
+
+Huellas SHA256 (verificadas origen vs kit al copiar)
+----------------------------------------------------
+0118458cf16990644dd733f076ef2b910a05ea6f3835f2f2263c5d6db5036a09  config.txt
+c4fd4a6ccb186b967f14b87869cb9163a26907269b233686c3df9e327503c015  abrir-qwen-apex.py
+2724ce74eb8a706eb28daf545b96a51cb79b7888f89607734f91484cc08195da  ABRIR-QWEN.bat
+8c66b70138b7911cb2bcf6b216531534a6a449b385178363ae07372df2c7ff41  ABRIR-QWEN-CHARLA.bat
+a9151cc41c5226cd8bc6ef7fa4f26a305954cd48547523231a1fed823dbbfff3  chatear-qwen.py
+190b47135191f34278757108175c3abaedb606acd1b6ebbce61b59cb258264cd  CHATEAR-QWEN.bat
+
+Origen en el repo
+-----------------
+InformacionCritica/configs/config.txt
+InformacionCritica/scripts/abrir-qwen-apex.py
+InformacionCritica/bat/ABRIR-QWEN.bat
+InformacionCritica/bat/ABRIR-QWEN-CHARLA.bat
+InformacionCritica/scripts/chatear-qwen.py
+InformacionCritica/bat/CHATEAR-QWEN.bat
+
+Orden de busqueda del config (los dos .py)
+------------------------------------------
+1) variable de entorno CONFIG_TXT (tests/avanzado)
+2) D:\ZLia\config.txt          <- ruta oficial del rig; si existe, GANA
+3) config.txt junto al script  <- por eso este kit funciona de una pieza
+4) configs\ del repo (layout Ronda 21)
+
+Como usar en el rig
+-------------------
+1. Copiar el contenido de esta carpeta a D:\ZLia\ (o, si el resto ya vive
+   alli, solo config.txt -> D:\ZLia\config.txt).
+2. Doble click en ABRIR-QWEN.bat (o ABRIR-QWEN-CHARLA.bat). En la ventana
+   debe verse el comando con -np 2 al final de FLAGS_BASE y 2 slots.
+3. Con el server arriba: doble click en CHATEAR-QWEN.bat.
+4. Para cerrar: cierra la ventana del server.
+
+Notas de la casa
+----------------
+- La receta vive SOLO en config.txt: los scripts no llevan flags dentro.
+  Si se edita la receta, se edita en InformacionCritica\configs\ y se
+  re-copia aqui (este kit queda como foto del dia 2026-10-31).
+- PASO 4 pendiente del N3: este kit ya trae el config de R53; llevarlo a
+  D:\ZLia\config.txt + reiniciar el server = receta nueva viva. Despues,
+  sanity de 20 prompts -> CIERRE del N3.
+- CMS1024 (-cms 1024, +5.2%) sigue APARCADA como plan B: no se apila con
+  NP2 sin medirlas juntas.
+- MTP/speculative (duelo del N5, paso 10) exigiria -np 1: si el spec gana,
+  la receta cambia de manos.
+- Reversible: quitar "-np 2" de la linea FLAGS_BASE de config.txt.
+- El kit NO se edita desde aqui: es una copia a mano; los vivos estan en
+  InformacionCritica\ (scripts y bat) y el backup en backup\.
