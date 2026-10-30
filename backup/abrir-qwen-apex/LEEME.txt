@@ -1,0 +1,50 @@
+BACKUP: abrir-qwen-apex (la receta promovida NP2)
+===================================================
+Fecha: 2026-10-30 · Ronda 53 · pedido del Director ("crea una carpeta que
+sea backup y pon abrirqwen apex").
+
+Que es esto
+-----------
+Copia byte-identica del paquete que ABRE EL MODELO en el rig, tomada justo
+despues de promocionar `-np 2` en FLAGS_BASE (campeon del N3: mediana de 3
+= 21.45 t/s, +19.8% vs ancla propia; aprobacion del Director).
+
+Contenido (4 archivos)
+----------------------
+- abrir-qwen-apex.py        v3.1 — el lanzador (toda la config sale de config.txt)
+- ABRIR-QWEN.bat            doble click = perfil TRABAJO (8 expertos, fabrica)
+- ABRIR-QWEN-CHARLA.bat     doble click = perfil CHARLA (4 expertos, +41% t/s)
+- config.txt                LA RECETA: FLAGS_BASE lleva `-np 2` al final
+
+Huellas SHA256 (verificadas origen vs backup al copiar)
+-------------------------------------------------------
+0118458cf16990644dd733f076ef2b910a05ea6f3835f2f2263c5d6db5036a09  config.txt             (receta promovida: ... -lm none -np 2)
+c4fd4a6ccb186b967f14b87869cb9163a26907269b233686c3df9e327503c015  abrir-qwen-apex.py     (v3.1, solo docstring vs v3.0)
+2724ce74eb8a706eb28daf545b96a51cb79b7888f89607734f91484cc08195da  ABRIR-QWEN.bat
+8c66b70138b7911cb2bcf6b216531534a6a449b385178363ae07372df2c7ff41  ABRIR-QWEN-CHARLA.bat
+
+Origen en el repo
+-----------------
+InformacionCritica/scripts/abrir-qwen-apex.py
+InformacionCritica/bat/ABRIR-QWEN.bat
+InformacionCritica/bat/ABRIR-QWEN-CHARLA.bat
+InformacionCritica/configs/config.txt
+
+Como restaurar en el rig
+------------------------
+1. Copiar los 4 archivos a D:\ZLia\ respetando el mismo orden:
+   - abrir-qwen-apex.py  -> junto a los .bat (D:\ZLia\)
+   - los dos .bat        -> D:\ZLia\
+   - config.txt          -> D:\ZLia\config.txt   (solo si quieres ESTA receta)
+2. Doble click en ABRIR-QWEN.bat (o ABRIR-QWEN-CHARLA.bat).
+3. Para hablar: CHATEAR-QWEN.bat. Para cerrar: cierra la ventana del server.
+
+Notas de la casa
+----------------
+- Si D:\ZLia\config.txt YA existe, el despliegue de la maleta (CAMPANA.py)
+  NUNCA lo pisa; este backup es la via manual para llevarle la receta nueva.
+- CMS1024 (-cms 1024, +5.2%) sigue APARCADA como plan B: no se apila con
+  NP2 sin medirlas juntas.
+- Reversible: quitar "-np 2" de la linea FLAGS_BASE de config.txt.
+- El backup NO se ejecuta desde aqui: es una copia de seguridad; el
+  abridor vivo vive en InformacionCritica\ y en el rig.
