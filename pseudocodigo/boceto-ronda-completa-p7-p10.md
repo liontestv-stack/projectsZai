@@ -1,4 +1,4 @@
-# BOCETO — PSEUDOCÓDIGO DE LA RONDA COMPLETA + EXPERIMENTOS DENSIFICADOS (ronda 62, AUDITADO Y FORTALECIDO en ronda 63, 2026-10-31)
+# BOCETO — PSEUDOCÓDIGO DE LA RONDA COMPLETA + EXPERIMENTOS DENSIFICADOS (ronda 62, auditado en r63 y RE-AUDITADO en r64, 2026-10-31)
 
 > **Qué es este archivo:** el boceto que pidió el Director ("en una nueva carpeta realiza
 > pseudocodigo... tratara sobre toda la ronda y los experimentos densificados, en un solo
@@ -18,8 +18,12 @@
 > contrastadas función por función contra el código fuente (hallazgos F1-F12 en §9 BITÁCORA;
 > trampas nuevas T11-T14). El boceto describe la CONDUCTA real, incluido un cosmético de la
 > olla anotado (P9 dice "1 corrida" y corre MED3) — la olla sigue byte-intacta.
+> **Re-auditoría r64:** segunda pasada por lo que quedó sin contrastar — hornilla fina
+> (_arranca_server/_chat_uno/_auto_apaga/_cuenta_en_log), utilidades (mediana, health_ok,
+> sin_tildes, gb_libres) y docstring de cabecera: hallazgos F13-F24 y trampas T15-T18.
 > **Convención del pseudocódigo:** `FUN` = función/paso; `PUERTA ROJA` = frena el turno
-> con causa escrita (nunca se salta sola); `MED3` = mediana de 3 corridas; `→` = escribe
+> con causa escrita (nunca se salta sola); `MED3` = mediana de MEDIANAS (3 corridas y cada
+> corrida = mediana de los t/s de sus prompts, reportados por el server); `→` = escribe
 > en estado/informe/CSV; los comentarios `#` son las reglas de la casa que evitan bugs.
 
 ---
@@ -28,10 +32,14 @@
 
 ```
 PUERTO_DEF           = 9932     # hornilla propia de la segunda olla (la 1ª usa 9931)
-CORRIDAS_DEF         = 3        # mediana de 3 ANTES de proclamar (regla)
-M_PROMPTS_DEF        = 8        # prompts de medida por corrida (fijos y deterministas)
+CORRIDAS_DEF         = 3        # mediana de 3 ANTES de proclamar (regla); mediana()
+                                #   filtra no-numéricos: 2 vivas → promedio, 0 → sin datos
+M_PROMPTS_DEF        = 8        # prompts de medida por corrida (fijos y deterministas;
+                                #   --m-prompts corta los PRIMEROS N de la lista, no mezcla)
 MAX_TOKENS           = 220      # mismo corte que el sanity de la casa
-TIMEOUT_PROMPT       = 180      # por prompt
+TEMP/TOP_K/TOP_P     = 1.0/20/0.95  # sampling FIJO del medidor [M _chat_uno]: IGUAL para
+                                #   todas las dosis → es lo que hace comparables las corridas
+TIMEOUT_PROMPT       = 180      # por prompt (1 reintento de 3 s SOLO si red/timeout/5xx)
 TIMEOUT_CARGA        = 420      # carga del modelo (7 min)
 KEEP_MIN_PP          = 5.0      # no perseguir deltas < 5 pp (regla transversal)
 N2_META_PP           = 8.0      # salida del N2: >= +8% t/s [N2 s5]
@@ -109,6 +117,12 @@ errores,vram_mb,pageouts,spot_ok,acciones), nunca se pisa: se suma — y logs
 server-<ETIQUETA>-c<k>.log · tablas editables: campana-6a10-p7-candidatas.txt ·
 campana-6a10-p8-escalera.txt · campana-6a10-p10/brazos.txt
 
+HORNILLA (convivencia) [M _arranca_server/_auto_apaga]: NUNCA levanta ni apaga servers
+ajenos — solo los hijos que ella misma arranca (el charlatán diario se respeta) · logs
+de server en APPEND (acumulan sesiones, cabecera "===== server de campana-6a10") ·
+health poll cada 2 s, tope 7 min; si muere en la carga o no hay health → auto-apaga y
+el peldaño queda como DATO (viva=False), no como accidente.
+
 TABLA DE RC (los 5 del guardián): 0 = verde · 2 = puerta roja/FATAL/DUDOSO/FALLA
 (fatal() SIEMPRE sale rc=2) · 1 = excepción inesperada o sys.exit("texto") ·
 130 = Ctrl+C (lo hecho queda escrito) · 3 = huella manipulada (PARADA LIMPIA).
@@ -149,6 +163,7 @@ FUN paso7():
   3) SANITY cambio de cuant (tool-calling OBLIGATORIO, 12 prompts; --sin-sanity queda escrito):
         server vivo → se USA, no se toca; si no → arrancar PROPIO y auto-apagar al final
         calentar plancha → 12 prompts → guardar respuestas → RESUMEN.md
+        (el RESUMEN.md de una vuelta anterior se ROTA a RESUMEN-<sello>.md, no se borra)
         chequeo anclas: 17×23=391 · color "verde" · "Valparaíso" · TODO con carne
   4) VEREDICTO N2:
         sanity FALLA                → FALLA (rc=2)
@@ -189,7 +204,9 @@ FUN paso8():
                                                   # y la frontera queda UN peldaño antes
         m = MED3(acciones); por cada corrida capturar:
             t/s del medidor · VRAM usada (nvidia-smi) · contador "pageout" del log · errores
-        cae_cliff = (sin datos) O (server muerto) O (m < ANCLA × 0.70)
+        cae_cliff = (sin datos) O (≥1 corrida muerta, muertos>0) O (m < ANCLA × 0.70)
+        # [M] basta UNA corrida muerta de las 3 para declarar el cliff; la mediana se
+        #   calcula con las vivas (2 → promedio de ambas), pero muertos>0 manda
         SI cae_cliff: CLIFF en peldaño → stop  (jamás se compra el traje que rasga [F cliff×10: 12.70→1.28])
         SI NO: frontera = peldaño; avisar si VRAM > 3712 MB
         # VRAM = certificado BLANDO [M _vram_usada_mb]: nvidia-smi ausente → None →
@@ -266,7 +283,11 @@ FUN paso9():
   6) RE-ANCLA del mundo nuevo: MED3 con la receta vigente (build nuevo = mundo nuevo)
        # (cosmético cazado r63: el print de la olla dice "1 corrida" pero _lanza_corridas
        #  corre --corridas=3; el boceto describe la CONDUCTA: MED3. Olla byte-intacta.)
-  VEREDICTO: receta viva + reuse muerto → MOTIVO-CERRADO | receta viva → GO | sin datos → DUDOSO
+  VEREDICTO [M — el sondeo tiene TRES salidas, no dos]:
+       receta viva + reuse MUERTO (0 líneas)    → MOTIVO-CERRADO
+       receta viva + reuse VIVO                 → GO (la familia ORO-SHIFT vuelve a la mesa)
+       receta viva + reuse INDETERMINADO (el server del sondeo no levantó) → GO con reuse "?"
+       receta sin datos (re-ancla vacía)        → DUDOSO, rc=2
   → estado["9"], informe, dumps de help, rc
 ```
 
@@ -285,7 +306,8 @@ FUN paso10():
             |                                    |          | n-max y p-min SIEMPRE explícitos
     C-KVOFF | B + add:--kv-unified,off           | inactiva | fallback #25345: se activa SOLA si B < 90% de A
 
-  1) PARA cada brazo ACTIVO: MED3 (3 corridas × 8 prompts; la "mediana de medianas" del plan)
+  1) PARA cada brazo ACTIVO: MED3 (misma mecánica de TODA la olla [M]: mediana de 3 medianas
+       de corrida; cada corrida = mediana de los t/s de los prompts que reporta el server)
        + SPOT ES POR CORRIDA (5 prompts: anclas 391/verde/Valparaíso + tool + trampa "no lo
        sé"; el brazo queda elegible solo con spot limpio en TODAS sus corridas) [M _corrida]
        → fila (mediana, spot, errores, muertos)
@@ -410,6 +432,14 @@ T13 VRAM (nvidia-smi) = certificado BLANDO: ausente → aviso, nunca frena; el c
 T14 cirugía exacta [M _acciona]: add → al final (último valor gana) · del → borra TODAS las
     apariciones del token · delpair → flag+valor (si lo que sigue no es flag) · sub:viejo>nuevo
     → sustituye TODAS las apariciones · acción desconocida → se ignora y queda en el informe
+T15 el sampling del medidor es FIJO (temp 1.0 / top_k 20 / top_p 0.95 / max_tokens 220):
+    jamás cambiarlo entre dosis — es lo que hace comparables las corridas [M _chat_uno]
+T16 el reintento (1, con 3 s de espera) es SOLO para red/timeout/5xx; un 4xx NO se repite
+    (herencia r50) [M _chat_uno]
+T17 mediana() filtra los no-numéricos: 2 corridas vivas → promedio de ambas; 0 vivas → sin
+    datos; pero en P8 basta 1 muerta para el cliff (muertos>0 manda) [M mediana + paso8]
+T18 la hornilla jamás toca servers ajenos (solo sus hijos) y los logs de server acumulan en
+    APPEND — no esperar logs "limpios" por sesión [M _auto_apaga/_arranca_server]
 ```
 
 ---
@@ -450,3 +480,22 @@ T14 cirugía exacta [M _acciona]: add → al final (último valor gana) · del �
 | F12 | Faltaba la semántica exacta de la cirugía de flags | T14: add/del/delpair/sub — sub y del pisan TODAS las apariciones; desconocida → informe | _acciona |
 
 EFICIENCIA añadida (misma información, menos lectura para operar): runbook de una lectura (§1), MUNDO PROPIO, TABLA DE RC y CLI como bloques de consulta rápida — preparar una sesión ya no exige re-derivar nada del código. NINGÚN criterio del plan cambió: cliff-1, MED3, ≥ +5 pp, ≥ +8 pp, 3712 MB, fallback 90%, spot limpio — todo INTACTO (el boceto sigue espejando R61).
+
+**R64 (2026-10-31) — SEGUNDA RONDA DE REVISIÓN** (pedido del Director: "segunda ronda de revision del pseudocodigo"). Esta pasada cubrió lo que la r63 NO había contrastado: hornilla fina (_arranca_server/_chat_uno/_auto_apaga/_cuenta_en_log), utilidades (mediana/health_ok/sin_tildes/gb_libres/sha256_archivo) y el docstring de cabecera. HALLAZGOS CORREGIDOS:
+
+| # | Inconsistencia/omisión encontrada (antes) | Fortaleza (ahora) | Fuente verificada [M] |
+|---|---|---|---|
+| F13 | "Mediana de medianas" aparecía SOLO en P10 | Es la mecánica de TODA la olla: corrida = mediana de los t/s de sus prompts; total = mediana de las 3 medianas (el docstring lo dice palabra por palabra) | _corrida + _lanza_corridas + docstring |
+| F14 | Cliff descrito como "server muerto" a secas | Basta ≥1 corrida muerta (muertos>0) de las 3 para declarar cliff; la mediana se calcula con las vivas | paso8 (cae_cliff) |
+| F15 | Sondeo reuse de P9 con DOS salidas | TRES: VIVO / MUERTO (0 líneas) / INDETERMINADO (server del sondeo no levantó → GO con reuse "?") | _sondea_reuse + veredicto paso9 |
+| F16 | mediana() sin semántica exacta | Filtra no-numéricos; 3 → central; 2 vivas → promedio; 0 → None (sin datos) | mediana() |
+| F17 | El sampling del medidor NO estaba en constantes | FIJO: temp 1.0 / top_k 20 / top_p 0.95 / max_tokens 220 — igual para toda dosis (comparabilidad) | _chat_uno |
+| F18 | Reintentos sin especificar | 1 reintento de 3 s SOLO red/timeout/5xx; un 4xx NO se repite (herencia r50) | _chat_uno |
+| F19 | Logs de server sin política dicha | APPEND: acumulan sesiones con cabecera "===== server de campana-6a10" | _arranca_server |
+| F20 | Regla de convivencia de servers sin escribir | La hornilla NUNCA levanta/apaga servers ajenos: solo sus hijos | _auto_apaga + docstring |
+| F21 | Arranque del server sin detalle | Health poll cada 2 s, tope 7 min; muere en carga o sin health → auto-apaga + peldaño DATO (viva=False) | _arranca_server |
+| F22 | --m-prompts sin semántica | Corta los PRIMEROS N de la lista fija de 8 (no mezcla) | _corrida (PROMPTS_MEDIDA[:N]) |
+| F23 | Rotación del RESUMEN.md del sanity sin citar | El RESUMEN viejo se ROTA a RESUMEN-<sello>.md (no se borra: evidencia) | _p7_sanity |
+| F24 | Warm-up del sondeo reuse de P9 sin citar | El sondeo también calienta plancha antes de sus 2 prompts | _sondea_reuse |
+
+Trampas nuevas T15-T18 (sampling fijo, reintento solo 5xx, mediana de vivas + muertos>0 manda, hornilla/servers ajenos + logs append). La re-auditoría confirma que el "MED3" del boceto era correcto en espíritu pero incompleto en mecánica (F13) — ahora la convención del encabezado lo define exacto. NINGÚN criterio cambió (cliff-1, ≥ +5 pp, ≥ +8 pp, 3712 MB, fallback 90%: INTACTOS); las tres ollas siguen byte-intactas.
