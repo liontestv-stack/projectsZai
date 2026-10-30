@@ -1,4 +1,4 @@
-# BOCETO — PSEUDOCÓDIGO DE LA RONDA COMPLETA + EXPERIMENTOS DENSIFICADOS (ronda 62, 2026-10-31)
+# BOCETO — PSEUDOCÓDIGO DE LA RONDA COMPLETA + EXPERIMENTOS DENSIFICADOS (ronda 62, AUDITADO Y FORTALECIDO en ronda 63, 2026-10-31)
 
 > **Qué es este archivo:** el boceto que pidió el Director ("en una nueva carpeta realiza
 > pseudocodigo... tratara sobre toda la ronda y los experimentos densificados, en un solo
@@ -14,6 +14,10 @@
 > `InformacionCritica/configs/config.txt` (receta real leída esta ronda),
 > `para-el-log-final.md`. Ollas hermanas re-verificadas: CAMPANA.py `65D33CBA...DA4B1`,
 > CAMPANA-v2.py `52996E67...B1E86`.
+> **Auditoría r63:** todas las ramas de veredicto, puertas, rc y cirugía del boceto fueron
+> contrastadas función por función contra el código fuente (hallazgos F1-F12 en §9 BITÁCORA;
+> trampas nuevas T11-T14). El boceto describe la CONDUCTA real, incluido un cosmético de la
+> olla anotado (P9 dice "1 corrida" y corre MED3) — la olla sigue byte-intacta.
 > **Convención del pseudocódigo:** `FUN` = función/paso; `PUERTA ROJA` = frena el turno
 > con causa escrita (nunca se salta sola); `MED3` = mediana de 3 corridas; `→` = escribe
 > en estado/informe/CSV; los comentarios `#` son las reglas de la casa que evitan bugs.
@@ -55,6 +59,16 @@ MAPA GRANDE (los 5 niveles, orden aprobado r12: N1 → N3 → N2 → N4 → RUTA
   1ª olla CAMPANA.py/CAMPANA-v2.py: P1..P6 → N1 y N3 CERRADAS (puerta de entrada)
   2ª olla CAMPANA-6A10.py (ESTE BOCETO): P7=N2 · P8=N4 · P9=RUTA 0 · P10=N5+cierre
 
+ORDEN DE CORRIDA (runbook — una lectura y sabes dónde estás):
+  DOOR(1ª olla cerrada) → P7[ancla → candidatas → sanity] → DOOR(p7 verde) →
+  P8[vuelta 1 subida NCM → vuelta 2 pila sobre el ganador + bookend ‖ avulsos
+  A0/R0/V1 aparte] → DOOR(p8 verde) → P9[6 checks b11901] → DOOR(p9 verde) →
+  P10[A/B(/C) → duelo → receta final → cierre] → CAMPAÑA CERRADA
+
+PUERTA DE ENTRADA (EXACTA, _primera_olla [M]): cerrada = (olla1.n3.cerrado == True
+  O olla1.pasos["3"] in VERDES_OLLA1) **Y** olla1.pasos["6"] in VERDES_OLLA1 —
+  leído del campana-estado.json de la 1ª olla en la MISMA base.
+
 FUN arranque():                                  # herencia del guardián (R51)
     huella_ok, causa = autoverifica_sha_propio() # excluye la línea del SHA del cálculo
     SI NOT huella_ok: PAUSA + rc=3 + PARADA LIMPIA (no se ejecuta NADA)
@@ -78,11 +92,31 @@ FUN modo_auto():
         SI rc != 0: return DETENER_LIMPIO("P%s rc=%s" ...)   # re-doble-click retoma
     excepciones: SystemExit→causa visible+rc; Ctrl+C→rc=130, lo hecho queda escrito;
                  Exception→traceback+rc=1. NUNCA una ventana sin causa visible.
+    estado corrupto: NUNCA se descarta en silencio (herencia r50) → queda
+                 .corrupto-<sello> como evidencia y arranca limpio [M leer_estado].
 
 FUN DETENER_LIMPIO(causa):  todo_lo_hecho→informe (append-only) + causa + rc=2
 
 REGLA DE ORO DE LA OLLA: lo ya medido se SUMA al CSV; "edita la tabla y vuelve a
 correr pN" es el flujo oficial; ANCLA SIEMPRE primero y no se edita.
+
+MUNDO PROPIO (rutas, _rutas [M]): base = junto al script (o --dir) · estado
+campana-6a10-estado.json · informe campana-6a10-INFORME.md (APPEND-ONLY) · config:
+base/config.txt, con fallback ../configs/config.txt si en la base no está · lee
+campana-estado.json (1ª olla) para la puerta · carpetas campana-6a10-p7/ p8/ p9/ p10/
+con resultados.csv — UNA fila POR CORRIDA, 9 columnas (dosis,corrida,viva,mediana_tps,
+errores,vram_mb,pageouts,spot_ok,acciones), nunca se pisa: se suma — y logs
+server-<ETIQUETA>-c<k>.log · tablas editables: campana-6a10-p7-candidatas.txt ·
+campana-6a10-p8-escalera.txt · campana-6a10-p10/brazos.txt
+
+TABLA DE RC (los 5 del guardián): 0 = verde · 2 = puerta roja/FATAL/DUDOSO/FALLA
+(fatal() SIEMPRE sale rc=2) · 1 = excepción inesperada o sys.exit("texto") ·
+130 = Ctrl+C (lo hecho queda escrito) · 3 = huella manipulada (PARADA LIMPIA).
+
+CLI (argparse, main): estado | plan | p7..p10 | (sin argumento = MODO AUTO) ·
+--dir --config --puerto(9932) --corridas(3) --m-prompts(8) · p7/p8: --archivo
+--previa · p7: --sin-sanity · p9: --build-dir · --fuerza (queda escrito; en AUTO
+NO existe). Uso manual de un paso NO pausa la ventana (solo AUTO/estado pausan).
 ```
 
 ---
@@ -101,6 +135,9 @@ FUN paso7():
         K-N1-7/9   | vecinos de la escalera k | inactiva
         SIN-UB1K   | delpair:-ub;delpair:-b   | inactiva (activar solo si el cuant se porta como NCM)
         CTXCP4     | add:--ctxcp,4            | inactiva (verificar flag en el dump)
+        # DOS ramas [M _deriva_candidatas]: receta SIN pin de k (HOY, sin --override-kv)
+        #   → PIN desde EXPERTOS_TRABAJO=8 ACTIVA + vecinos 7 y 9 inactivos;
+        #   receta CON pin → re-aplica el pin ACTIVA + solo el vecino pin-1 inactivo.
   SI --previa: listar y rc=0 (ni un server arranca)
 
   1) ANCLA = MED3(receta tal cual)               # "el cuant nuevo es un mundo nuevo"
@@ -117,6 +154,9 @@ FUN paso7():
         sanity FALLA                → FALLA (rc=2)
         mejor delta >= +8 pp y OK   → GO   ("%s transfiere +x pp con sanity OK")
         si no                       → REGISTRADO (se registra y se decide con datos [N2 s5])
+        # ⚠ T11 [M código]: con --sin-sanity el GO es IMPOSIBLE (la rama GO exige
+        #   sanity_ok en True; None corta) → techo REGISTRADO. P8 abre igual (REGISTRADO
+        #   es verde), pero el N2 no cierra como GO sin su juez de calidad.
   → estado["7"], informe, rc = 0 si GO/REGISTRADO; 2 si no
 ```
 
@@ -152,7 +192,13 @@ FUN paso8():
         cae_cliff = (sin datos) O (server muerto) O (m < ANCLA × 0.70)
         SI cae_cliff: CLIFF en peldaño → stop  (jamás se compra el traje que rasga [F cliff×10: 12.70→1.28])
         SI NO: frontera = peldaño; avisar si VRAM > 3712 MB
-  3) VEREDICTO: sin peldaños → REGISTRADO (solo ancla) · con cliff → GO si hay frontera · sin cliff → GO
+        # VRAM = certificado BLANDO [M _vram_usada_mb]: nvidia-smi ausente → None →
+        #   solo aviso, NUNCA frena. Lo que SÍ frena es el cliff (t/s < 70% o muerto).
+  3) VEREDICTO [M código — TRES ramas exactas]:
+       sin peldaños activos          → REGISTRADO (solo ancla)
+       con cliff Y hay frontera      → GO (frontera = un peldaño antes del rasgón)
+       con cliff Y SIN frontera      → DUDOSO, rc=2 (el PRIMER peldaño activo fue el que rasgó)
+       sin cliff (escalera completa) → GO
   → estado["8"] (peldaños, cliff, frontera), informe por peldaño, CSV, rc
 
 PREFLIGHT de higiene ANTES de subir (manual, cada sesión, ~10 min — plan R61 §1):
@@ -172,7 +218,9 @@ VUELTA 2 — la pila sobre el GANADOR (sustituir NCM37 por el ganador real) + bo
   WIN+KVF16 (diagnóstico; un solo sub:q8_0>f16 pisa AMBOS -ctk y -ctv) ·
   WIN+CHARLA4 (activa; ratificación dual k=4) → al cerrar, BOOKEND: re-corrida del ANCLA ≈ ancla
 
-AVULSOS (manual, fuera de la olla, cualquier sesión):
+AVULSOS + BOOKEND (MANUAL, FUERA de la olla — el código NO los ejecuta; cualquier sesión).
+  Dentro de la olla, en cambio, SÍ es automático: CADA corrida descarta un calentamiento
+  ("Calienta la plancha") antes de medir — la GPU fría miente [M _corrida]. Lo manual:
   R0 (10 min): Get-Counter '\Memory\Page Reads/sec','\Memory\Pages Input/sec' durante decode
                ≈0 → frente RAM CERRADO con certificado; >0 sostenido → WIN+DIO
   V1 (1-10 min): Vulkan con el binario del release; arch GDN no carga → NO-GO automático;
@@ -216,6 +264,8 @@ FUN paso9():
        contar "restored context checkpoint" en el log
        VIVO → la familia ORO-SHIFT vuelve a la mesa · MUERTO → motivo cerrado con certificado
   6) RE-ANCLA del mundo nuevo: MED3 con la receta vigente (build nuevo = mundo nuevo)
+       # (cosmético cazado r63: el print de la olla dice "1 corrida" pero _lanza_corridas
+       #  corre --corridas=3; el boceto describe la CONDUCTA: MED3. Olla byte-intacta.)
   VEREDICTO: receta viva + reuse muerto → MOTIVO-CERRADO | receta viva → GO | sin datos → DUDOSO
   → estado["9"], informe, dumps de help, rc
 ```
@@ -235,8 +285,10 @@ FUN paso10():
             |                                    |          | n-max y p-min SIEMPRE explícitos
     C-KVOFF | B + add:--kv-unified,off           | inactiva | fallback #25345: se activa SOLA si B < 90% de A
 
-  1) PARA cada brazo ACTIVO: MED3 × 8 prompts = mediana de medianas + SPOT ES (5 prompts:
-       anclas 391/verde/Valparaíso + tool + trampa "no lo sé") → fila (mediana, spot, errores, muertos)
+  1) PARA cada brazo ACTIVO: MED3 (3 corridas × 8 prompts; la "mediana de medianas" del plan)
+       + SPOT ES POR CORRIDA (5 prompts: anclas 391/verde/Valparaíso + tool + trampa "no lo
+       sé"; el brazo queda elegible solo con spot limpio en TODAS sus corridas) [M _corrida]
+       → fila (mediana, spot, errores, muertos)
   2) FALLBACK: SI B < 0.90 × A → el draft CALLA → C-KVOFF se corre sola (#25345)
   3) VEREDICTO: ganador = max(mediana) entre brazos con spot limpio (OK o sin spot)
        ninguno elegible → DUDOSO + rc=2
@@ -247,6 +299,8 @@ FUN paso10():
        ESCRITURA SEGURA (el ÚNICO sitio de la olla que toca config.txt):
            backup config.txt.bak-antes-receta-final-<sello> → tmp + os.replace →
            RE-LECTURA de verificación; si NO coincide → FATAL + restaurar backup
+       SI el Director cancela → DUELO-HECHO "(receta final cancelada)", config intacto, rc=0
+       SI la re-lectura NO coincide → FATAL + restaurar backup (no debería pasar NUNCA)
        SAMPLING, RUTA_* y el cuant NUNCA se tocan (RUTA_MODELO manda)
   CIERRE DE CAMPAÑA: tabla de los 5 niveles (N1=primera olla, N2=P7, N3=CERRADO si olla1.n3,
        N4=P8, RUTA 0+N5=P9/P10) → informe "CIERRE DE CAMPAÑA — receta final certificada"
@@ -349,6 +403,13 @@ T7 no comparar t/s entre sesiones (regla anti-cruce R40)
 T8 config.txt solo se toca en P10 con confirmación + backup + re-lectura
 T9 en AUTO, --fuerza NO existe; puerta roja = turno detenido limpio con causa
 T10 el MEC y las capas compiten por los mismos ~1885 MB libres; draft con prioridad cuando entre
+T11 --sin-sanity en P7 ⇒ techo REGISTRADO (la rama GO exige sanity; P8 abre igual, el N2 no cierra GO)
+T12 tabla editable: fila con <3 celdas " | " se IGNORA EN SILENCIO (¡peldaño que creías activo
+    y no corre!); ninguna celda puede llevar "|"; activa/inactiva se lee por PREFIJO "activa" [M _leer_tabla]
+T13 VRAM (nvidia-smi) = certificado BLANDO: ausente → aviso, nunca frena; el cliff SÍ frena [M]
+T14 cirugía exacta [M _acciona]: add → al final (último valor gana) · del → borra TODAS las
+    apariciones del token · delpair → flag+valor (si lo que sigue no es flag) · sub:viejo>nuevo
+    → sustituye TODAS las apariciones · acción desconocida → se ignora y queda en el informe
 ```
 
 ---
@@ -364,3 +425,28 @@ T10 el MEC y las capas compiten por los mismos ~1885 MB libres; draft con priori
 ```
 (reservado — vacío a la espera del log final del Director)
 ```
+
+---
+
+## 9. BITÁCORA DEL BOCETO (append-only — cada ronda anuda aquí qué cambió y por qué)
+
+**R62 (2026-10-31) — creación** (pedido del Director: pseudocódigo de toda la ronda + experimentos densificados en UN archivo, con hueco reservado para el log final).
+
+**R63 (2026-10-31) — AUDITORÍA + FORTALEZA** (pedido del Director: "encuentra inconsistencias incoherencias en el pseudocodigo, fortificalo hazlo mas eficiente"). Método: contraste función por función del boceto contra `CAMPANA-6A10.py` (P7-P10, hornilla, rutas, cirugía de flags y bloque final leídos en fuente). HALLAZGOS CORREGIDOS:
+
+| # | Inconsistencia/incoherencia encontrada (antes) | Fortaleza (ahora) | Fuente verificada [M] |
+|---|---|---|---|
+| F1 | Veredicto P8 INCOMPLETO: "con cliff → GO si hay frontera" sin cubrir cliff-en-el-primer-peldaño | TRES ramas exactas; cliff sin frontera → DUDOSO rc=2 | paso8 (ramas del veredicto) |
+| F2 | P7 no documentaba que --sin-sanity hace el GO IMPOSIBLE | T11: techo REGISTRADO (rama GO exige sanity_ok True); P8 abre igual | paso7 (rama del veredicto) |
+| F3 | Puerta de entrada genérica ("primera_olla_cerrada()") | Definición EXACTA: (n3.cerrado O P3 verde_olla1) **Y** P6 verde_olla1 | _primera_olla |
+| F4 | Faltaban rutas del mundo propio y el detalle del CSV | Bloque MUNDO PROPIO + 9 columnas del CSV, una fila POR CORRIDA | _rutas + _guarda_csv |
+| F5 | Faltaba la tabla de rc del guardián | TABLA DE RC: 0/1/2/3/130 con su causa | bloque final + fatal() |
+| F6 | Faltaba el mapa CLI completo | Bloque CLI: estado|plan|pN|AUTO + flags por paso + quién pausa | main() |
+| F7 | Spot de P10 parecía UNO por brazo | Spot POR CORRIDA; elegible solo con spot limpio en TODAS sus corridas | _corrida(con_spot) |
+| F8 | Bookend/avulsos sonaban a automáticos; calentamiento sin citar | Avulsos+bookend = MANUAL fuera de la olla; calentamiento descartado POR CORRIDA = automático | plan §4 vuelta 2 + _corrida |
+| F9 | Derivación de candidatas mostraba UNA sola rama | DOS ramas: sin pin → PIN EXPERTOS_TRABAJO+vecinos 7/9; con pin → re-aplica+pin-1 | _deriva_candidatas |
+| F10 | Estado corrupto sin cobertura en el ciclo de la ronda | Nunca se descarta en silencio → .corrupto-<sello> como evidencia | leer_estado |
+| F11 | (DE LA OLLA, no del boceto) print de P9 dice "1 corrida" pero _lanza_corridas corre --corridas=3 | Anotado en §4 y aquí; el boceto describe la CONDUCTA (MED3); olla BYTE-INTACTA, no se toca | paso9 paso 6 |
+| F12 | Faltaba la semántica exacta de la cirugía de flags | T14: add/del/delpair/sub — sub y del pisan TODAS las apariciones; desconocida → informe | _acciona |
+
+EFICIENCIA añadida (misma información, menos lectura para operar): runbook de una lectura (§1), MUNDO PROPIO, TABLA DE RC y CLI como bloques de consulta rápida — preparar una sesión ya no exige re-derivar nada del código. NINGÚN criterio del plan cambió: cliff-1, MED3, ≥ +5 pp, ≥ +8 pp, 3712 MB, fallback 90%, spot limpio — todo INTACTO (el boceto sigue espejando R61).
