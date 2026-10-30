@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-abrir-qwen-apex.py v3.0 — abrir el modelo, nada mas (todo sale de config.txt)
+abrir-qwen-apex.py v3.1 — abrir el modelo, nada mas (todo sale de config.txt)
 =============================================================================
 Doble click en ABRIR-QWEN.bat        -> perfil TRABAJO (8 expertos, fabrica)
 Doble click en ABRIR-QWEN-CHARLA.bat -> perfil CHARLA  (4 expertos, +41% t/s)
@@ -21,6 +21,13 @@ modo dual SS25 Opcion A — el perfil charla anade
 --override-kv qwen35moe.expert_used_count=int:K SOLO si K != 8
 (8 es el default del modelo: el perfil trabajo no toca nada).
 Cambiar de perfil = cerrar esta ventana y abrir el otro .bat (~1 min).
+
+v3.1 (30-oct-2026): PROMOCION NP2 (R53, aprobacion del Director) — config.txt
+FLAGS_BASE lleva -np 2 (campeon del N3: mediana de 3 = 21.45 t/s, +19.8% vs
+ancla propia; con 4 sesiones 21.43 / +21.3%). Matices: contexto 8192 por
+sesion (con -c 16384); MTP/speculative exige -np 1 y se decide en el duelo
+N5. El comando generado YA NO es identico al v2.1 (suma -np 2): el T06 del
+test fija la receta promovida. LOGICA INTACTA (la receta vive en config.txt).
 """
 import os
 import subprocess

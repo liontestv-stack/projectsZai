@@ -8,8 +8,9 @@ Unitarios:
   T03 perfil trabajo (k=8): SIN override de expertos
   T04 perfil charla (k=4): CON --override-kv ... int:4
   T05 FLAGS_GANADORAS van DETRAS de la base (last-wins: -ub 1024 tras -ub 256)
-  T06 REGRESION v2.1: el set de flags del comando es EXACTAMENTE el del
-      lanzador v2.1 (base campeona + -lm none + ORO-UB1K + sampling think)
+  T06 REGRESION: el set de flags del comando es EXACTAMENTE la receta
+      promovida R53 (base campeona + -lm none + ORO-UB1K + sampling think
+      + -np 2 — promocion NP2 aprobada por el Director)
   T07 claves faltantes -> rc=1 con aviso claro
   T08 sin config.txt -> rc=1 con mensaje "No encontre config.txt"
 E2E (fake server HTTP que solo responde /health):
@@ -25,7 +26,6 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
@@ -111,18 +111,22 @@ check("T05 ganadoras al final: -ub 1024 despues de -ub 256",
       and cmd_t[-2] == "--port")
 
 # ------------------------------------------------------------ T06 regresion
-EXPECTED_V21 = ["-ngl", "99", "-cmoe", "-c", "16384", "-b", "2048", "-ub", "256",
+# R53: la receta promovida = la de v2.1 (base campeona + ORO-UB1K + sampling)
+# MAS -np 2 (NP2: mediana de 3 = 21.45 t/s, +19.8% vs ancla propia —
+# cosecha R32 + mediana R52, aprobacion del Director; fuente config.txt).
+EXPECTED_R53 = ["-np", "2",
+                "-ngl", "99", "-cmoe", "-c", "16384", "-b", "2048", "-ub", "256",
                 "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-t", "4",
                 "--prio", "2", "--no-mmproj", "-lm", "none",
                 "--temp", "1.0", "--top-k", "20", "--top-p", "0.95",
                 "--min-p", "0.0", "--presence-penalty", "0.0",
                 "-ub", "1024", "-b", "4096"]
 flags_t = cmd_t[5:-4]           # sin [server, -m, modelo, -a, alias] ni [host H port P]
-check("T06 REGRESION v2.1: set de flags EXACTO (multiset igual)",
-      sorted(flags_t) == sorted(EXPECTED_V21),
-      "" if sorted(flags_t) == sorted(EXPECTED_V21)
-      else "extra=%s falta=%s" % (set(flags_t) - set(EXPECTED_V21),
-                                  set(EXPECTED_V21) - set(flags_t)))
+check("T06 REGRESION: set de flags EXACTO (receta promovida R53, multiset igual)",
+      sorted(flags_t) == sorted(EXPECTED_R53),
+      "" if sorted(flags_t) == sorted(EXPECTED_R53)
+      else "extra=%s falta=%s" % (set(flags_t) - set(EXPECTED_R53),
+                                  set(EXPECTED_R53) - set(flags_t)))
 
 # ------------------------------------------------- T07 claves faltantes
 CFG_INCOMPLETA = os.path.join(DIR, "incompleta.txt")
@@ -208,5 +212,5 @@ print("\n" + "=" * 60)
 if ok_fallos:
     print("FALLOS: %d -> %s" % (len(ok_fallos), ", ".join(ok_fallos)))
     sys.exit(1)
-print("TEST ABRIR v3.0 (config.txt): TODO VERDE")
+print("TEST ABRIR v3.1 (config.txt, receta promovida R53): TODO VERDE")
 sys.exit(0)

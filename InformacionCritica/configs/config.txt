@@ -23,6 +23,18 @@ EXPERTOS_CHARLA = 4
 # oficial de la card Qwen3.6. FLAGS_GANADORAS van AL FINAL y el
 # ultimo valor gana (así se pisa -ub/-b de la base).
 # (Las flags PERMITIDAS se auditan contra InformacionCritica\llama-flags-nuevo.txt)
-FLAGS_BASE = -ngl 99 -cmoe -c 16384 -b 2048 -ub 256 -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj -lm none
+#
+# PROMOCION NP2 (2026-10-30, ronda 53, aprobacion del Director):
+#   FLAGS_BASE lleva -np 2. Fuente: cosecha N3 R32 (+22.8% en dia lento,
+#   21.41 t/s) + mediana de 3 R52 (trio canonico b1/b2/b3: mediana 21.45 t/s,
+#   mediana de deltas +19.8% vs ancla propia, criterio GO >= +15%; con las 4
+#   sesiones: 21.43 t/s / +21.3%, dispersion entre sesiones 1.0%).
+#   Matices aceptados:
+#   - contexto por sesion 8192 (con -c 16384 y -np 2);
+#   - WorkingSet +965 MiB visto en R32 NO se reprodujo en b2/b3 (vigilancia);
+#   - MTP/speculative exige -np 1 (SS11.4): se decide en el duelo N5 (P10).
+#   Reversible: quitar "-np 2" de la linea. CMS1024 (-cms 1024, +5.2%) queda
+#   APARCADA como plan B; NP2+CMS1024 juntas NO se midieron (no apilar).
+FLAGS_BASE = -ngl 99 -cmoe -c 16384 -b 2048 -ub 256 -fa on -ctk q8_0 -ctv q8_0 -t 4 --prio 2 --no-mmproj -lm none -np 2
 SAMPLING = --temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0 --presence-penalty 0.0
 FLAGS_GANADORAS = -ub 1024 -b 4096
