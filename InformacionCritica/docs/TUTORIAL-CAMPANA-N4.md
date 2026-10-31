@@ -198,6 +198,21 @@ no por impresiones.
      justos: libera espacio.
   "[FATAL] auto-verificacion de huella"      -> el archivo fue tocado o
      se re-guardo con otro formato: re-descarga CAMPANA-N4.py.
+  "sanity ... hay respuestas vacias (sin carne)" -> el cuant nuevo
+     PIENSA (familia Qwen3, thinking de fabrica) y las 220 fichas del
+     medidor se gastan enteras en el pensar: el contenido llega vacio
+     (el ancla no lo nota: mide t/s del server, no carne). Arreglo de
+     UNA vez, en TU config.txt: al final de la linea FLAGS_BASE (la
+     que empieza con -ngl 99) agrega un espacio y  --reasoning-budget 0
+     (plan B si TU build no conoce la flag: el server no levantaria con
+     rc=1, temprano y sin romper nada; usa entonces
+     --chat-template-kwargs {"enable_thinking":false}  sin comillas y
+     sin espacios dentro de las llaves). Re-doble-click: p7 re-ancla
+     solo y la comparacion queda limpia.
+  "el server NO levanto con esta dosis (rc=1)" en UNA candidata ->
+     peldano muerto, queda como dato (viva=False): no rompe nada.
+     Tachala en campana-n4-p7-candidatas.txt (activa -> inactiva) y
+     re-doble-click; los candidatos con la misma flag moriran igual.
   La regla general: la causa queda ESCRITA (consola + informe). Lee la
   ultima seccion del informe, resuelve, re-doble-click.
 
