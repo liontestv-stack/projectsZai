@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-campana-6a10-v2.py v1.0 — LA SEGUNDA MITAD, REAL DESDE EL BOCETO
-================================================================
+campana-n4-n5.py v1.0 — VIA ACTIVA N4 -> N5, REAL DESDE EL BOCETO
+=================================================================
 Encargo del Director (31-oct-2026): "bien, ahora si, crea el archivo
 python puro real, siguiendo la guia del pseudocodigo". Este archivo es
 la transcripcion EJECUTABLE del boceto de la ronda completa
 (pseudocodigo/boceto-ronda-completa-p7-p10.md, nacido en la ronda 62,
 auditado funcion por funcion en la r63 (F1-F12) y re-auditado en la
 r64 (F13-F24) contra el codigo fuente): el plano ya paso sus dos
-auditorias, este es el edificio. Cocina la SEGUNDA MITAD del plan de
-10 pasos (plan-siguientes-10-pasos.md):
+auditorias, este es el edificio. Cocina la cola activa de la ruta
+(reencuadre del Director, ronda 66/apendice R66: fuera el mapa de
+pasos, mandan los NIVELES N4 -> N5; los nombres de subcomando p7..p10
+quedan como MECANISMO, no como mapa). P7 quedo FUERA de la ruta
+critica (solo aplicaba a cambio de cuant y el cuant ya cerro, R59):
+la ruta viva es:
 
   P7   N2 dosis: re-ancla con el cuant nuevo + candidatas que transfieren
        (escalera k de N1, UB, ctxcp) + sanity CON tool-calling OBLIGATORIO
@@ -33,16 +37,18 @@ auditorias, este es el edificio. Cocina la SEGUNDA MITAD del plan de
 FAMILIA (regla del Director, r50: "crear otro, NO borrar el antiguo"):
   CAMPANA.py v1.7.2 (65D33CBA...DA4B1) y CAMPANA-v2.py v2.0 (52996E67...)
   cocinan los pasos 1..6; CAMPANA-6A10.py v1.0 (CFEADBEA...D1947) es la
-  olla original de esta segunda mitad. Este archivo es su HERMANO:
+  olla original de la que nacio este archivo (antes CAMPANA-6A10-v2.py,
+  renombrado r67). Este archivo es su HERMANO:
   - NO borra, NO pisa y NO re-escribe NINGUNA de las tres ollas mayores:
     las tres quedan BYTE-INTACTAS y este archivo nace aparte.
-  - MUNDO PROPIO COMPARTIDO: usa el mismo mundo que CAMPANA-6A10.py
-    (campana-6a10-estado.json + campana-6a10-INFORME.md append-only +
-    carpetas campana-6a10-p7../p10 + puerto propio 9932), porque el
-    estado, el CSV y el informe SON la campana: cualquiera de las dos
-    ollas puede retomarla donde quedo. Cada seccion del informe que
-    escribe esta olla lleva la linea "- script: CAMPANA-6A10-v2.py"
-    (evidencia clara de quien escribio que).
+  - MUNDO PROPIO NUEVO (r67, orden del Director "si ahora es n4
+    cambiale el titulo, no mezcles cosas": ya NO comparte mundo con
+    CAMPANA-6A10.py, que queda byte-intacta con el SUYO, virgen -
+    nunca corrio): campana-n4-n5-estado.json + campana-n4-n5-INFORME.md
+    append-only + carpetas campana-n4-n5-p7../p10 + puerto propio
+    9932. Cada seccion del informe que escribe esta olla lleva la
+    linea "- script: CAMPANA-N4-N5.py" (evidencia clara de quien
+    escribio que).
 
 DELTAS DOCUMENTADOS frente a CAMPANA-6A10.py byte-intacta (SOLO estos
 tres; todo lo demas es conducta identica, verificada funcion por
@@ -74,7 +80,7 @@ del boceto §7 viven incrustadas donde corresponden):
     confirmacion, backup con marca de tiempo, escritura atomica tmp +
     os.replace y re-lectura de verificacion). Ningun otro paso lo toca.
     [T8] SAMPLING, RUTA_* y el cuant NUNCA se tocan (RUTA_MODELO manda).
-  - el informe (campana-6a10-INFORME.md) es APPEND-ONLY: cada accion
+  - el informe (campana-n4-n5-INFORME.md) es APPEND-ONLY: cada accion
     anade una seccion con fecha; nada se borra ni re-escribe.
   - MEDICION [T15/T16/T17]: calentamiento descartado al arrancar cada
     server (la GPU fria miente ~-15%, T6); sampling del medidor FIJO
@@ -219,9 +225,12 @@ def gb_libres(ruta):
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
-VERSION = ("campana-6a10-v2 v1.0 LA SEGUNDA MITAD REAL DESDE EL BOCETO "
-           "(2026-10-31, ronda 65: pedido del Director 'crea el archivo "
-           "python puro real, siguiendo la guia del pseudocodigo' — "
+VERSION = ("campana-n4-n5 v1.0 LA VIA ACTIVA N4 -> N5 REAL DESDE EL "
+           "BOCETO (2026-10-31, ronda 65: pedido del Director 'crea el "
+           "archivo python puro real, siguiendo la guia del "
+           "pseudocodigo'; ronda 67: renombrada CAMPANA-6A10-v2.py -> "
+           "CAMPANA-N4-N5.py por orden del Director 'si ahora es n4 "
+           "cambiale el titulo, no mezcles cosas' — "
            "transcripcion ejecutable del boceto r62 auditado r63/r64; "
            "conducta identica a CAMPANA-6A10.py byte-intacta salvo los "
            "deltas D1/D2/D3 documentados en la cabecera; CAMPANA.py "
@@ -255,7 +264,7 @@ VERDES_OLLA1 = ("GO", "PROMOVIDA", "YA-PROMOVIDA", "OK", "DESCARGADA",
                 "VERIFICADO-HUMO-OK", "EJECUTADO", "REGISTRADO")
 
 # confirmacion de huella: el builder incrusta el SHA en esta linea
-SHA_AUTOCHEQUEO = "E3E0F08AFDCC892930F97A24E3BFD852FBE9B0D4A88A5937D9F0EC589C750965"
+SHA_AUTOCHEQUEO = "F6BD479DCBA1CAA1A3A80000D392A93EC80C59191A1BB02E3D89F7E56053D041"
 
 # MODO AUTO: cuando esta activo, las confirmaciones se auto-aceptan y
 # quedan escritas. NUNCA activa --fuerza: puerta roja = turno detenido.
@@ -351,8 +360,8 @@ def _rutas(args):
             config = _cfg_repo
     return {
         "base": base,
-        "estado": os.path.join(base, "campana-6a10-estado.json"),
-        "informe": os.path.join(base, "campana-6a10-INFORME.md"),
+        "estado": os.path.join(base, "campana-n4-n5-estado.json"),
+        "informe": os.path.join(base, "campana-n4-n5-INFORME.md"),
         "config": config,
         "models": os.path.join(base, "models"),
         "olla1": os.path.join(base, "campana-estado.json"),
@@ -380,7 +389,7 @@ def leer_estado(ruta_estado):
                     ruta_estado,
                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
                 os.replace(ruta_estado, _podrido)
-                print(yellow("  aviso: campana-6a10-estado.json ilegible; "
+                print(yellow("  aviso: campana-n4-n5-estado.json ilegible; "
                              "evidencia guardada en %s" % os.path.basename(_podrido)))
             except Exception:
                 pass
@@ -416,11 +425,11 @@ def informe(ruta_informe, titulo, lineas):
 
 def _inf(rutas, titulo, lineas):
     """informe() de esta olla (delta D3): anade la linea de identidad del
-    script, para que el informe compartido append-only sepa quien escribio
-    cada seccion (esta olla y CAMPANA-6A10.py comparten mundo)."""
+    script, para que el informe append-only sepa quien escribio cada
+    seccion."""
     return informe(rutas["informe"], titulo,
-                   ["- script: CAMPANA-6A10-v2.py v1.0 (real desde el "
-                    "boceto, r65)"] + list(lineas))
+                   ["- script: CAMPANA-N4-N5.py v1.0 (real desde el "
+                    "boceto, r65; renombre r67)"] + list(lineas))
 
 
 def fatal(msg, pistas=()):
@@ -619,8 +628,8 @@ def _color_estado(est):
 
 
 def mostrar_estado(rutas, estado):
-    print(bold(cyan("\n=== CAMPANA-6A10-v2 (la segunda mitad, real desde el "
-                    "boceto) — %s ==="
+    print(bold(cyan("\n=== CAMPANA-N4-N5 (la via activa N4 -> N5, real "
+                    "desde el boceto) — %s ==="
                     % (estado.get("actualizado") or "sin empezar"))))
     print("  informe append-only: %s" % rutas["informe"])
     cerrada, det = _primera_olla(rutas)
@@ -709,7 +718,7 @@ def _arranca_server(cmd, log_path, puerto, timeout_s=TIMEOUT_CARGA):
     min, F21). Si muere en la carga devuelve (None, rc) — en un barrido un
     peldano muerto es DATO (cliff), no un accidente. (proc, None) si vivo."""
     flog = open(log_path, "a", encoding="utf-8")
-    flog.write("===== server de campana-6a10 %s (puerto %d) =====\n"
+    flog.write("===== server de campana-n4-n5 %s (puerto %d) =====\n"
                % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), puerto))
     flog.write("$ %s\n" % " ".join(cmd))
     flog.flush()
@@ -884,7 +893,7 @@ def _lanza_corridas(args, rutas, etiqueta, acciones, carpeta, con_spot=False):
 
 # ============ §2 P7 — N2 DOSIS (re-ancla + candidatas + sanity) ==============
 
-ARCHIVO_P7 = "campana-6a10-p7-candidatas.txt"
+ARCHIVO_P7 = "campana-n4-n5-p7-candidatas.txt"
 
 
 def _deriva_candidatas(cfg):
@@ -1020,7 +1029,7 @@ def paso7(args, rutas, estado):
                      "si de verdad quieres seguir sin cerrarla: --fuerza "
                      "(queda escrito)"])
     cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-6a10-p7")
+    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p7")
     os.makedirs(carpeta, exist_ok=True)
     ruta_tabla = _p7_archivo(rutas, args, cfg)
     candidatas = _leer_tabla(ruta_tabla)
@@ -1149,7 +1158,7 @@ def paso7(args, rutas, estado):
 #   T3/R61-c: los peldanos NO son acumulativos; las pilas del ganador se
 #             escriben combinadas con ';' en UNA fila.
 
-ARCHIVO_P8 = "campana-6a10-p8-escalera.txt"
+ARCHIVO_P8 = "campana-n4-n5-p8-escalera.txt"
 
 
 def _deriva_escalera(cfg):
@@ -1271,7 +1280,7 @@ def paso8(args, rutas, estado):
     _puerta(args, "p8", estado["pasos"].get("7", {}), "P7",
             ("GO", "REGISTRADO"), ("Se sube a la escalera.",))
     cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-6a10-p8")
+    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p8")
     os.makedirs(carpeta, exist_ok=True)
     ruta_tabla = _p8_archivo(rutas, args, cfg)
     peldanos = _leer_tabla(ruta_tabla)
@@ -1459,7 +1468,7 @@ def paso9(args, rutas, estado):
               ["revisa RUTA_SERVER en config.txt"])
     build_dir = args.build_dir or os.path.join(
         os.path.dirname(os.path.abspath(servidor_viejo)), BUILD_B11901)
-    carpeta = os.path.join(rutas["base"], "campana-6a10-p9")
+    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p9")
     os.makedirs(carpeta, exist_ok=True)
     servidor_nuevo = os.path.join(build_dir, "llama-server.exe")
     if not os.path.exists(servidor_nuevo):
@@ -1719,7 +1728,7 @@ def paso10(args, rutas, estado):
         print(yellow("  P10 ya estaba cerrado: se corre solo si lo pides "
                      "explicito (la receta final ya esta escrita)."))
     cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-6a10-p10")
+    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p10")
     os.makedirs(carpeta, exist_ok=True)
     _escribe_tabla(os.path.join(carpeta, "brazos.txt"), _brazos_tabla())
     # 1) cada brazo ACTIVO: mediana de medianas (la mecanica de TODA la
@@ -1843,8 +1852,8 @@ def paso10(args, rutas, estado):
 
 # ============ MODO AUTO de la segunda mitad (boceto §1) ======================
 
-PASOS_6A10 = {"7": paso7, "8": paso8, "9": paso9, "10": paso10}
-TITULOS_6A10 = {"7": "N2 dosis re-aplicadas", "8": "N4 escalera VRAM",
+PASOS_N4N5 = {"7": paso7, "8": paso8, "9": paso9, "10": paso10}
+TITULOS_N4N5 = {"7": "N2 dosis re-aplicadas", "8": "N4 escalera VRAM",
                 "9": "RUTA 0 build b11901", "10": "N5 duelo + receta final"}
 
 
@@ -1904,7 +1913,7 @@ def modo_auto(args, rutas, estado):
     resumen_prevuelo = ("OK" if not fatales and not avisos
                         else ("avisos: " + "; ".join(avisos) if avisos and not fatales
                               else "FATAL"))
-    _inf(rutas, "MODO AUTO 6a10-v2 arrancado (la segunda mitad)",
+    _inf(rutas, "MODO AUTO n4-n5 arrancado (la via activa N4 -> N5)",
          ["- pasos 7..10 en orden, sin preguntas; mundo propio "
           "(estado/informe/puerto propios)",
           "- puerta de entrada: primera olla %s" % ("CERRADA" if cerrada
@@ -1923,8 +1932,8 @@ def modo_auto(args, rutas, estado):
             if est in VERDES:
                 print(cyan("\n  P%s ya estaba hecho (%s): se salta." % (n, est)))
                 continue
-            print(bold(cyan("\n--- P%s - %s ---" % (n, TITULOS_6A10[n]))))
-            rc = PASOS_6A10[n](args, rutas, estado)
+            print(bold(cyan("\n--- P%s - %s ---" % (n, TITULOS_N4N5[n]))))
+            rc = PASOS_N4N5[n](args, rutas, estado)
             _auto_informe_trail(rutas, "P%s" % n)
             if rc != 0:
                 return _auto_detener(rutas, "P%s devolvio rc=%s (mira su "
@@ -1934,7 +1943,7 @@ def modo_auto(args, rutas, estado):
         estado = leer_estado(rutas["estado"])
         hechos = [n for n in ("7", "8", "9", "10")
                   if estado["pasos"].get(n, {}).get("estado") in VERDES]
-        _inf(rutas, "AUTO 6a10-v2 FIN DE TURNO: pasos 7..10 gestionados",
+        _inf(rutas, "AUTO n4-n5 FIN DE TURNO: pasos 7..10 gestionados",
              ["- verdes ahora: %s" % (", ".join("P%s" % x for x in hechos)
                                       or "ninguno")])
         print(green(bold("\n  FIN DE TURNO AUTO: pasos 7..10 gestionados.")))
@@ -1952,7 +1961,7 @@ def modo_auto(args, rutas, estado):
                               "y re-doble-click"])
     except KeyboardInterrupt:
         _auto_informe_trail(rutas, "al interrumpirse")
-        _inf(rutas, "AUTO 6a10-v2 INTERRUMPIDO (Ctrl+C)",
+        _inf(rutas, "AUTO n4-n5 INTERRUMPIDO (Ctrl+C)",
              ["- lo hecho queda escrito; re-doble-click retoma donde quedo"])
         print(yellow("\n[AUTO] interrumpido (Ctrl+C): lo hecho queda escrito."))
         return 130
@@ -1961,7 +1970,7 @@ def modo_auto(args, rutas, estado):
         traceback.print_exc()
         _auto_informe_trail(rutas, "al fallar")
         try:
-            _inf(rutas, "AUTO 6a10-v2 INTERRUMPIDO (error inesperado)",
+            _inf(rutas, "AUTO n4-n5 INTERRUMPIDO (error inesperado)",
                  ["- el traceback completo quedo en consola; el turno se "
                   "detuvo con lo hecho escrito",
                   "- re-doble-click cuando resuelvas la causa"])
@@ -1984,7 +1993,7 @@ def _auto_detener(rutas, causa, lineas):
     """Detencion LIMPIA del turno: todo lo hecho queda escrito y se explica
     la causa. Devuelve rc 2 (nunca se salta una puerta roja)."""
     _auto_informe_trail(rutas, "al detenerse")
-    _inf(rutas, "AUTO 6a10-v2 DETENIDO: %s" % causa, lineas)
+    _inf(rutas, "AUTO n4-n5 DETENIDO: %s" % causa, lineas)
     print(red("\n[AUTO DETENIDO] %s" % causa))
     for ln in lineas:
         print(yellow("  %s" % ln))
@@ -2035,8 +2044,8 @@ def main():
         mostrar_estado(rutas, estado)
         print(gray("  detalle completo: plan-siguientes-10-pasos.md en el repo"))
         return 0
-    if paso in PASOS_6A10:
-        return PASOS_6A10[paso](args, rutas, estado)
+    if paso in PASOS_N4N5:
+        return PASOS_N4N5[paso](args, rutas, estado)
     print(red("paso desconocido: %s (usa estado | plan | p7..p10)" % args.paso))
     return 1
 
@@ -2044,13 +2053,15 @@ def main():
 # ------------------------------------------------------------------ R65
 # GUARDIAN DE HUELLA (herencia del guardian de la casa): auto-verificacion
 # de huella propia, errores con causa visible y pausa garantizada al
-# terminar o fallar. Este archivo es CAMPANA-6A10-v2.py, la SEGUNDA MITAD
+# terminar o fallar. Este archivo es CAMPANA-N4-N5.py (hasta la ronda 67
+# se llamo CAMPANA-6A10-v2.py; renombre por orden del Director "si ahora
+# es n4 cambiale el titulo, no mezcles cosas"), la via activa N4 -> N5
 # REAL DESDE EL BOCETO (ronda 65): hermano de CAMPANA.py v1.7.2
 # (65D33CBA...DA4B1), CAMPANA-v2.py v2.0 (52996E67...B1E86) y de
 # CAMPANA-6A10.py v1.0 (CFEADBEA...D1947), que quedan BYTE-INTACTAS.
-# Mundo propio COMPARTIDO con CAMPANA-6A10.py (estado/informe/puerto
-# propios); config.txt solo se toca en el cierre confirmado de P10 (con
-# backup y re-lectura de verificacion).
+# Mundo propio nuevo campana-n4-n5-* (desde r67 ya no compartido con la
+# olla retirada); config.txt solo se toca en el cierre confirmado de P10
+# (con backup y re-lectura de verificacion).
 
 def _autoverifica_huella():
     """Anti-manipulacion: compara el SHA256 del propio archivo en disco
@@ -2081,7 +2092,7 @@ if __name__ == "__main__":
         if not ok:
             print(red(bold("\n[FATAL] auto-verificacion de huella: %s" % causa)))
             print(red("         PARADA LIMPIA: no se ejecuta nada."))
-            print(red("         Re-descarga CAMPANA-6A10-v2.py del repo y "
+            print(red("         Re-descarga CAMPANA-N4-N5.py del repo y "
                       "verifica su huella."))
             rc = 3
             _pausa_doble_click()  # FATAL de huella: ventana abierta SIEMPRE

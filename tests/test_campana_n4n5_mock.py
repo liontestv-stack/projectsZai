@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Test de CAMPANA-6A10-v2.py v1.0 con taller falso (sin GPU, sin red, sin
+"""Test de CAMPANA-N4-N5.py v1.0 con taller falso (sin GPU, sin red, sin
 13 GB). Patron de la casa (test_campana6a10_mock): el modulo se carga por
 importlib desde InformacionCritica/scripts, los directorios del rig son
 temporales y los objetos pesados son FALSOS PERO REALISTAS.
 
 Es la bateria de su hermana CAMPANA-6A10.py ADAPTADA a la olla real nacida
-del boceto (r65), con los checks nuevos de los deltas documentados:
+del boceto (r65; renombrada CAMPANA-N4-N5.py en r67 por orden del
+Director "si ahora es n4 cambiale el titulo, no mezcles cosas"), con los
+checks nuevos de los deltas documentados:
 
   - config.txt falso, SERVER FALSO (--version b11901, --help para el diff,
     --die para el cliff, /health + /v1/chat/completions con timings y las
@@ -36,7 +38,7 @@ import types
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(RAIZ, "..", "InformacionCritica", "scripts",
-                      "CAMPANA-6A10-v2.py")
+                      "CAMPANA-N4-N5.py")
 
 SERVER_FALSO = r'''#!/usr/bin/env python3
 import json, sys
@@ -125,7 +127,7 @@ def puerto_libre():
 
 
 def carga_modulo():
-    spec = importlib.util.spec_from_file_location("campana6a10v2_test", SCRIPT)
+    spec = importlib.util.spec_from_file_location("campanan4n5_test", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -149,7 +151,7 @@ def args_falsos(mod, base, puerto, **kw):
 
 def main():
     m = carga_modulo()
-    tmp = tempfile.mkdtemp(prefix="c6a10v2-")
+    tmp = tempfile.mkdtemp(prefix="cn4n5-")
     try:
         # ---------- taller falso ----------
         base = os.path.join(tmp, "rig")
@@ -255,7 +257,7 @@ def main():
         check("U18 anclas FALLA senala motivos", (not ok_b) and len(motivos) == 4)
 
         # ---------- unidad: estado corrupto -> evidencia ----------
-        podrido = os.path.join(base, "campana-6a10-estado.json")
+        podrido = os.path.join(base, "campana-n4-n5-estado.json")
         with open(podrido, "w", encoding="utf-8") as f:
             f.write("{esto no es json")
         buf = io.StringIO()
@@ -284,16 +286,16 @@ def main():
         check("P04 sanity con anclas OK",
               est7.get("sanity", {}).get("ok") is True)
         check("P05 CSV de p7 existe",
-              os.path.exists(os.path.join(base, "campana-6a10-p7",
+              os.path.exists(os.path.join(base, "campana-n4-n5-p7",
                                           "resultados.csv")))
-        candidatas_txt = open(os.path.join(base, "campana-6a10-p7-candidatas.txt"),
+        candidatas_txt = open(os.path.join(base, "campana-n4-n5-p7-candidatas.txt"),
                               encoding="utf-8").read()
         check("P06 candidatas generadas con K-N1-PIN8 activa",
               "K-N1-PIN8" in candidatas_txt and "ANCLA" in candidatas_txt)
         inf7 = open(rutas["informe"], encoding="utf-8").read()
         check("P07 informe append-only con seccion P7", "P7 N2 dosis" in inf7)
         check("P07b informe lleva la linea - script: (delta D3)",
-              "- script: CAMPANA-6A10-v2.py" in inf7)
+              "- script: CAMPANA-N4-N5.py" in inf7)
 
         # p7 --previa: rc 0 y NINGUN server (rapido)
         a_prev = args_falsos(m, base, puerto_libre(), previa=True)
@@ -345,7 +347,7 @@ def main():
               isinstance(est9.get("flags_nacidas"), list)
               and "--expert-used-count" in est9["flags_nacidas"])
         check("P18 dumps de --help escritos",
-              os.path.exists(os.path.join(base, "campana-6a10-p9",
+              os.path.exists(os.path.join(base, "campana-n4-n5-p9",
                                           "help-b11901.txt")))
 
         # ---------- P10: duelo + receta final (AUTO auto-acepta) ----------
@@ -363,7 +365,7 @@ def main():
         check("P21 duelo registro con brazos A y B",
               {f["nombre"] for f in d["brazos"]} >= {"A-NP2", "B-SPEC"})
         check("P22 DUELO.md escrito",
-              os.path.exists(os.path.join(base, "campana-6a10-p10", "DUELO.md")))
+              os.path.exists(os.path.join(base, "campana-n4-n5-p10", "DUELO.md")))
         backups = [x for x in os.listdir(base)
                    if x.startswith("config.txt.bak-antes-receta-final")]
         check("P23 receta final con backup", len(backups) == 1)
@@ -381,7 +383,7 @@ def main():
             m.mostrar_estado(rutas, m.leer_estado(rutas["estado"]))
         out = buf.getvalue()
         check("M01 estado muestra la puerta y los 4 pasos",
-              "CAMPANA-6A10-v2" in out and "P7" in out and "P10" in out)
+              "CAMPANA-N4-N5" in out and "P7" in out and "P10" in out)
 
         # ---------- AUTO end-to-end con todo verde: retoma y salta ----------
         m.AUTO["on"] = True
