@@ -52,10 +52,13 @@ R28: la medicion es de RAM, una ventana abierta la ensucia).
 
 Dobles clicks (los .bat van JUNTO a la olla en D:\ZLia):
 
-  - CAMPANA-N4-AUTO.bat    = MODO AUTO: corre P7 -> P8 en orden, sin
-                             preguntas, y retoma donde quedo si lo
-                             re-doble-clickas. (Correr la olla sin
-                             argumentos ES el AUTO.)
+  - CAMPANA-N4.bat         = EL DOBLE CLICK Y YA: corre P7 y P8 en
+                             orden, sin preguntas. Si la base tiene el
+                             recibo, es la campana normal; si no lo
+                             tiene, cruza la puerta A PROPOSITO y lo
+                             deja escrito, y cocina igual.
+  - CAMPANA-N4-AUTO.bat    = mismo contenido (por si ya le tenias
+                             hecho el acceso directo).
   - CAMPANA-N4-ESTADO.bat  = solo la FOTO: que paso toca, como esta la
                              puerta, que queda escrito. Nunca bloquea.
 
@@ -76,26 +79,26 @@ config.txt), --puerto (def 9932), --corridas (def 3 = MED3),
 ---
 ## 3) EL CAMINO AL COMPLETO
 
-CAMINO A — base con recibo (recomendado; es el disenado):
-  1. Copia a D:\ZLia: la olla + campana-estado.json (recibo) + config.txt.
-  2. Cierra el charlatan y las apps (rig quieto).
-  3. Doble click en CAMPANA-N4-ESTADO.bat: la puerta debe decir
-     CERRADA (se puede cocinar).
-  4. Doble click en CAMPANA-N4-AUTO.bat. Ella sola: prevuelo -> P7 ->
-     P8 -> veredicto. Si se corta la luz o cierras la ventana:
-     re-doble-click y retoma donde quedo (lo hecho queda escrito).
+EL CAMINO — un solo doble click y ya:
+  1. Doble click en CAMPANA-N4.bat. Ella sola: P7 (rampa RAM) y luego
+     P8 (escalera de VRAM), sin preguntas.
+  2. Si la base tiene el recibo (campana-estado.json), la puerta pasa
+     verde y todo es campana normal. Si NO lo tiene, el lanzador cruza
+     la puerta A PROPOSITO (queda ESCRITO en el informe) y cocina igual:
+     mismo resultado, salto firmado.
+  3. Corte de luz o ventana cerrada? Re-doble-click y retoma donde
+     quedo (lo hecho queda escrito).
+  4. Cuando puedas, trae el recibo de la base de la primera campana a
+     esta carpeta (seccion 1): con recibo, ninguna puerta se cruza.
 
-CAMINO B — base sin recibo (el recibo no aparece; queda ESCRITO):
-  Si no encuentras campana-estado.json, la puerta se cruza A PROPOSITO
-  con --fuerza en comandos sueltos (cada salto queda anotado en el
-  informe; NUNCA se salta sola):
-
+COMANDOS EQUIVALENTES (si prefieres consola — es lo mismo que hace el
+doble click):
   py CAMPANA-N4.py p7 --fuerza
   py CAMPANA-N4.py p8 --fuerza
 
-  OJO: en AUTO la fuerza NO existe (T9): mientras la base no tenga el
-  recibo, el AUTO se detendra limpio en el prevuelo. Es de diseno: el
-  AUTO pide cadena completa, los pasos sueltos permiten saltos firmados.
+OJO: el MODO AUTO puro (py CAMPANA-N4.py sin argumentos) pide recibo
+SI o SI y se detiene limpio sin el (T9): por eso el doble click usa
+los pasos sueltos. Con recibo en la base, AUTO y doble click coinciden.
 
 ---
 ## 4) QUE HACE CADA PASO Y QUE CERTIFICA
@@ -178,9 +181,10 @@ no por impresiones.
 ---
 ## 9) SI ALGO FALLA (causas visibles, por orden probable)
 
-  "no encuentro campana-estado.json en ..."  -> base nueva sin recibo:
-     camino A (copiar el recibo de la base de la primera campana) o
-     camino B (p7/p8 sueltos con --fuerza). Seccion 1 y 3.
+  "no encuentro campana-estado.json en ..."  -> solo bloquea al AUTO
+     puro (py CAMPANA-N4.py sin argumentos). El doble click de
+     CAMPANA-N4.bat ya lo cruza a proposito (queda escrito); igual,
+     trae el recibo de la base vieja cuando puedas (seccion 1).
   "no hay config.txt en ..."                 -> copia el config.txt vivo
      de la casa a la base (seccion 1).
   "RUTA_SERVER no existe / RUTA_MODELO no existe" -> el config.txt de
