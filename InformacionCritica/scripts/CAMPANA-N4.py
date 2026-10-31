@@ -1,54 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-campana-n4-n5.py v1.0 — VIA ACTIVA N4 -> N5, REAL DESDE EL BOCETO
-=================================================================
+campana-n4.py v1.0 — NIVEL 4: MEMORIA (VRAM/RAM) Y BALANCE DE RECURSOS
+=====================================================================
 Encargo del Director (31-oct-2026): "bien, ahora si, crea el archivo
-python puro real, siguiendo la guia del pseudocodigo". Este archivo es
-la transcripcion EJECUTABLE del boceto de la ronda completa
-(pseudocodigo/boceto-ronda-completa-p7-p10.md, nacido en la ronda 62,
-auditado funcion por funcion en la r63 (F1-F12) y re-auditado en la
-r64 (F13-F24) contra el codigo fuente): el plano ya paso sus dos
-auditorias, este es el edificio. Cocina la cola activa de la ruta
-(reencuadre del Director, ronda 66/apendice R66: fuera el mapa de
-pasos, mandan los NIVELES N4 -> N5; los nombres de subcomando p7..p10
-quedan como MECANISMO, no como mapa). P7 quedo FUERA de la ruta
-critica (solo aplicaba a cambio de cuant y el cuant ya cerro, R59):
-la ruta viva es:
+python puro real, siguiendo la guia del pseudocodigo" (r65) + "vamos
+por orden, el archivo debe ser solo campana n4, este nivel 4
+mencionado previamente el tema ram y cosas del estilo lo en un archivo
+todas las pruebas y logs necesarios antibugs anti malware" (r68): UNA
+olla POR NIVEL, con su bateria, sus logs, sus trampas anti-bugs y su
+huella anti-tamper. Este archivo es SOLO el NIVEL 4 (el tema RAM y
+recursos del encargo R60: "memoria vram ram, analizar como gestionar
+la ram y balancear los recursos del modelo para que no se realentice
+por falta de recursos"): transcripcion EJECUTABLE de la parte del
+boceto que le corresponde (pseudocodigo/boceto-ronda-completa-p7-p10.md,
+nacido en la ronda 62, auditado r63 (F1-F12) y re-auditado r64
+(F13-F24)): el plano ya paso sus dos auditorias, este es el edificio.
+La ruta se gobierna por NIVELES desde la ronda 66 (apendice R66); los
+nombres de subcomando quedan como MECANISMO, no como mapa:
 
-  P7   N2 dosis: re-ancla con el cuant nuevo + candidatas que transfieren
-       (escalera k de N1, UB, ctxcp) + sanity CON tool-calling OBLIGATORIO
-       en cambio de cuant. Criterio de salida: >= +8% t/s con calidad
-       intacta; si no llega, se REGISTRA y se decide con datos.
-  P8   N4 escalera de VRAM sobre el cuant nuevo: peldanos (NCM primero,
-       MEC dosis fina en MiB), certificados (nvidia-smi, pageouts) y
-       regla cliff-1 automatica. Las dosis VRAM NO transfieren entre
-       cuants: se miden UNA vez aqui.
-  P9   RUTA 0: build b11901 (2 zips que DESCARGA el Director, sin
-       compilar): version + cudart vivo, re-auditoria de defaults (diff
-       de --help), re-certificar la clave del override, sondeo
-       cache-reuse ("restored context checkpoint") y re-ancla: build
-       nuevo = mundo nuevo.
-  P10  N5 duelo spec vs NP2 (mediana de 3 medianas por brazo, spot ES
-       POR CORRIDA, fallback --kv-unified off #25345) + RECETA FINAL con
-       confirmacion, backup y re-lectura + el CIERRE DE CAMPAÑA (los 5
-       niveles, escrito en el informe).
+  P7   la rampa RAM del NIVEL 4: re-ancla + candidatas de dosis fina
+       (CTXCP4 libera ~1.5-1.8 GB de RAM — el "tema ram" literal; la
+       leccion R32 manda: las promesas de RAM SE MIDEN, no se creen)
+       + sanity con anclas (sin sanity el GO queda imposible, techo
+       REGISTRADO, T11). Criterio de salida: >= +8% t/s con calidad
+       intacta; si no llega, se REGISTRA y se decide con datos. La
+       dosis N2 del mapa viejo quedo fuera de la ruta critica (R59:
+       el cuant ya cerro); aqui vive como rampa y puerta de P8.
+  P8   el cuerpo del NIVEL 4: escalera de VRAM (peldanos NCM primero,
+       MEC dosis fina en MiB), certificados por arranque (nvidia-smi
+       <= 3712 MB, pageouts ~= 0 = el "no se realentice por falta de
+       recursos" literal) y regla cliff-1 automatica. Las dosis VRAM
+       NO transfieren entre cuants: se miden UNA vez aqui.
+
+NO vive aqui el N5 (RUTA 0 + duelo spec vs NP2 + receta final): vamos
+por orden — nacera en SU archivo CAMPANA-N5.py cuando el Director lo
+ordene. Su material queda vivo en tres sitios: los bloques p9/p10 de
+CAMPANA-6A10.py byte-intacta, el git history de esta familia y el
+boceto §4/§5. NADA se pierde.
 
 FAMILIA (regla del Director, r50: "crear otro, NO borrar el antiguo"):
   CAMPANA.py v1.7.2 (65D33CBA...DA4B1) y CAMPANA-v2.py v2.0 (52996E67...)
   cocinan los pasos 1..6; CAMPANA-6A10.py v1.0 (CFEADBEA...D1947) es la
-  olla original de la que nacio este archivo (antes CAMPANA-6A10-v2.py,
-  renombrado r67). Este archivo es su HERMANO:
+  olla original de la que nacio este archivo (CAMPANA-6A10-v2.py r65 ->
+  CAMPANA-N4-N5.py r67 -> CAMPANA-N4.py r68). Este archivo es su
+  HERMANO:
   - NO borra, NO pisa y NO re-escribe NINGUNA de las tres ollas mayores:
     las tres quedan BYTE-INTACTAS y este archivo nace aparte.
   - MUNDO PROPIO NUEVO (r67, orden del Director "si ahora es n4
-    cambiale el titulo, no mezcles cosas": ya NO comparte mundo con
-    CAMPANA-6A10.py, que queda byte-intacta con el SUYO, virgen -
-    nunca corrio): campana-n4-n5-estado.json + campana-n4-n5-INFORME.md
-    append-only + carpetas campana-n4-n5-p7../p10 + puerto propio
-    9932. Cada seccion del informe que escribe esta olla lleva la
-    linea "- script: CAMPANA-N4-N5.py" (evidencia clara de quien
-    escribio que).
+    cambiale el titulo, no mezcles cosas"; r68 lo acota al nivel:
+    "el archivo debe ser solo campana n4"): campana-n4-estado.json +
+    campana-n4-INFORME.md append-only + carpetas campana-n4-p7../p8 +
+    puerto propio 9932. Cada seccion del informe que escribe esta
+    olla lleva la linea "- script: CAMPANA-N4.py" (evidencia clara de
+    quien escribio que).
 
 DELTAS DOCUMENTADOS frente a CAMPANA-6A10.py byte-intacta (SOLO estos
 tres; todo lo demas es conducta identica, verificada funcion por
@@ -62,25 +67,31 @@ funcion contra el boceto auditado y el codigo fuente):
       headroom demostrado, plan R3: la variante RAM es WIN+DIO, solo si
       R0 detecta pageouts). La olla original deriva la tabla vieja y
       confia en la edicion manual del Director; esta nace lista.
-  D2. Impresiones honestas: P9 anuncia "mediana de N corridas x M
-      prompts" (la olla original decia "1 corrida" y corria MED3:
-      cosmético F11 de la auditoria r63; la CONDUCTA MED3 es identica),
-      al generar las tablas se muestran los avisos de la derivacion y el
-      informe de P8 anota el HUECO para P10 como dato (4096 - VRAM del
-      ganador; criterio de salida del PASO 8, plan R61).
+  D2. Impresiones honestas: las mediciones anuncian "mediana de N
+      corridas x M prompts" (la olla original decia "1 corrida" y
+      corria MED3: cosmético F11 de la auditoria r63; la CONDUCTA MED3
+      es identica), al generar las tablas se muestran los avisos de la
+      derivacion y el informe de P8 anota el HUECO para el draft (N5)
+      como dato (4096 - VRAM del ganador; criterio de salida del N4,
+      plan R61).
   D3. Las secciones del informe llevan la linea "- script:" (ver
       arriba). Nada mas.
+  R68. Alcance N4 puro ("vamos por orden"): los bloques p9/p10 de la
+      olla original NO viven aqui (el N5 nacera en SU archivo
+      CAMPANA-N5.py). Consecuencia de casa: esta olla NO escribe
+      config.txt NUNCA (la receta final era del cierre de P10/N5 y
+      vive fuera).
 
 REGLAS que el script hace cumplir (las de la casa; las trampas T1-T18
 del boceto §7 viven incrustadas donde corresponden):
-  - PUERTAS: p8 exige p7 verde; p9 exige p8; p10 exige p9. --fuerza las
-    salta A PROPOSITO y lo deja escrito en el informe. En MODO AUTO no
-    existe fuerza: una puerta roja DETIENE el turno limpio (rc 2). [T9]
-  - config.txt: SOLO el cierre de P10 escribe en el (receta final, con
-    confirmacion, backup con marca de tiempo, escritura atomica tmp +
-    os.replace y re-lectura de verificacion). Ningun otro paso lo toca.
-    [T8] SAMPLING, RUTA_* y el cuant NUNCA se tocan (RUTA_MODELO manda).
-  - el informe (campana-n4-n5-INFORME.md) es APPEND-ONLY: cada accion
+  - PUERTA: p8 exige p7 verde (o --fuerza, que la salta A PROPOSITO y
+    lo deja escrito en el informe). En MODO AUTO no existe fuerza: una
+    puerta roja DETIENE el turno limpio (rc 2). [T9]
+  - config.txt: NINGUN paso de esta olla escribe en el (diferencia con
+    la olla original: la receta final era del cierre de P10/N5 y vive
+    fuera, r68). [T8] SAMPLING, RUTA_* y el cuant NUNCA se tocan
+    (RUTA_MODELO manda).
+  - el informe (campana-n4-INFORME.md) es APPEND-ONLY: cada accion
     anade una seccion con fecha; nada se borra ni re-escribe.
   - MEDICION [T15/T16/T17]: calentamiento descartado al arrancar cada
     server (la GPU fria miente ~-15%, T6); sampling del medidor FIJO
@@ -102,20 +113,20 @@ del boceto §7 viven incrustadas donde corresponden):
     es el cliff), regla cliff-1 (t/s < 70% del ancla o muertos > 0).
   - stdlib-ONLY: cero dependencias nuevas, cero red salvo el localhost
     del propio server. Sin maleta: este archivo viaja SOLO.
-  - HUELLA: auto-verificacion de huella propia al arranque (tamper ->
-    parada limpia, rc 3), herencia del guardian de la casa. [tabla de
-    rc del boceto §1: 0 verde, 2 puerta/fatal/dudoso/falla, 1
-    excepcion, 130 Ctrl+C, 3 huella manipulada]
-  - DOBLE CLICK = MODO AUTO: corre P7..P10 en orden, sin preguntas;
-    las confirmaciones se auto-aceptan y quedan escritas; re-doble-
-    click retoma donde quedo. --ofrecer no existe aqui: foto con
-    `estado`. [T9: en AUTO --fuerza se ignora con aviso]
+  - HUELLA (anti-tamper): auto-verificacion de huella propia al
+    arranque (manipulacion -> parada limpia, rc 3), herencia del
+    guardian de la casa. [tabla de rc: 0 verde, 2 puerta/fatal/dudoso/
+    falla, 1 excepcion, 130 Ctrl+C, 3 huella manipulada]
+  - DOBLE CLICK = MODO AUTO: corre P7..P8 en orden (el NIVEL 4), sin
+    preguntas; las confirmaciones se auto-aceptan y quedan escritas;
+    re-doble-click retoma donde quedo. --ofrecer no existe aqui: foto
+    con `estado`. [T9: en AUTO --fuerza se ignora con aviso]
 
 Todo vive junto al script (en el rig: D:\\ZLia). --dir cambia la base
 y --config la receta. Cero toques a CAMPANA.py, CAMPANA-v2.py,
-CAMPANA-6A10.py, config.txt (salvo el cierre confirmado de P10) ni a la
-evidencia de la primera olla. Si este archivo y la olla byte-intacta se
-pelearan en el futuro, manda el byte-intacto (boceto §0).
+CAMPANA-6A10.py, config.txt ni a la evidencia de la primera olla. Si
+este archivo y una olla byte-intacta se pelearan en el futuro, manda
+el byte-intacto (boceto §0).
 """
 import argparse
 import csv
@@ -225,15 +236,16 @@ def gb_libres(ruta):
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
-VERSION = ("campana-n4-n5 v1.0 LA VIA ACTIVA N4 -> N5 REAL DESDE EL "
-           "BOCETO (2026-10-31, ronda 65: pedido del Director 'crea el "
-           "archivo python puro real, siguiendo la guia del "
-           "pseudocodigo'; ronda 67: renombrada CAMPANA-6A10-v2.py -> "
-           "CAMPANA-N4-N5.py por orden del Director 'si ahora es n4 "
-           "cambiale el titulo, no mezcles cosas' — "
-           "transcripcion ejecutable del boceto r62 auditado r63/r64; "
-           "conducta identica a CAMPANA-6A10.py byte-intacta salvo los "
-           "deltas D1/D2/D3 documentados en la cabecera; CAMPANA.py "
+VERSION = ("campana-n4 v1.0 NIVEL 4: MEMORIA (VRAM/RAM) Y RECURSOS "
+           "(2026-10-31, ronda 65: pedido del Director 'crea el archivo "
+           "python puro real, siguiendo la guia del pseudocodigo'; "
+           "ronda 67: renombrada CAMPANA-6A10-v2.py -> CAMPANA-N4-N5.py "
+           "('si ahora es n4 cambiale el titulo, no mezcles cosas'); "
+           "ronda 68: recorte por orden del Director 'vamos por orden, "
+           "el archivo debe ser solo campana n4' — UNA olla POR NIVEL: "
+           "solo P7 (rampa RAM) y P8 (escalera VRAM) viven aqui, el N5 "
+           "(p9/p10) nacera en SU archivo CAMPANA-N5.py; transcripcion "
+           "ejecutable del boceto r62 auditado r63/r64; CAMPANA.py "
            "v1.7.2, CAMPANA-v2.py v2.0 y CAMPANA-6A10.py v1.0 quedan "
            "BYTE-INTACTAS)")
 
@@ -264,7 +276,7 @@ VERDES_OLLA1 = ("GO", "PROMOVIDA", "YA-PROMOVIDA", "OK", "DESCARGADA",
                 "VERIFICADO-HUMO-OK", "EJECUTADO", "REGISTRADO")
 
 # confirmacion de huella: el builder incrusta el SHA en esta linea
-SHA_AUTOCHEQUEO = "F6BD479DCBA1CAA1A3A80000D392A93EC80C59191A1BB02E3D89F7E56053D041"
+SHA_AUTOCHEQUEO = "5F24E8CF369DBF393672EFE8F7ABF69860FF96BA566A5BE62A77AC6B6EE87ED1"
 
 # MODO AUTO: cuando esta activo, las confirmaciones se auto-aceptan y
 # quedan escritas. NUNCA activa --fuerza: puerta roja = turno detenido.
@@ -288,7 +300,9 @@ PROMPTS_MEDIDA = [
 ]
 
 # SPOT (5): el spot-check ES por config (anclas deterministas + tool + trampa).
-# En P10 corre POR CORRIDA (F7): el brazo queda elegible solo con spot
+# El spot POR CORRIDA (F7) es capacidad del motor de medición: un brazo
+# queda elegible solo con spot limpio en TODAS sus corridas (uso
+# previsto: el duelo del N5, en su propio archivo — vamos por orden).
 # limpio en TODAS sus corridas.
 
 PROMPTS_SPOT = [
@@ -360,8 +374,8 @@ def _rutas(args):
             config = _cfg_repo
     return {
         "base": base,
-        "estado": os.path.join(base, "campana-n4-n5-estado.json"),
-        "informe": os.path.join(base, "campana-n4-n5-INFORME.md"),
+        "estado": os.path.join(base, "campana-n4-estado.json"),
+        "informe": os.path.join(base, "campana-n4-INFORME.md"),
         "config": config,
         "models": os.path.join(base, "models"),
         "olla1": os.path.join(base, "campana-estado.json"),
@@ -375,11 +389,8 @@ def leer_estado(ruta_estado):
                 datos = json.load(f)
             if isinstance(datos, dict):
                 datos.setdefault("pasos", {})
-                datos.setdefault("duelo", {})
                 if not isinstance(datos["pasos"], dict):
                     datos["pasos"] = {}
-                if not isinstance(datos["duelo"], dict):
-                    datos["duelo"] = {}
                 return datos
         except Exception:
             # un estado corrupto NO se descarta en silencio (herencia r50,
@@ -389,11 +400,11 @@ def leer_estado(ruta_estado):
                     ruta_estado,
                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
                 os.replace(ruta_estado, _podrido)
-                print(yellow("  aviso: campana-n4-n5-estado.json ilegible; "
+                print(yellow("  aviso: campana-n4-estado.json ilegible; "
                              "evidencia guardada en %s" % os.path.basename(_podrido)))
             except Exception:
                 pass
-    return {"version": VERSION, "actualizado": "", "pasos": {}, "duelo": {}}
+    return {"version": VERSION, "actualizado": "", "pasos": {}}
 
 
 def guardar_estado(ruta_estado, estado):
@@ -428,8 +439,8 @@ def _inf(rutas, titulo, lineas):
     script, para que el informe append-only sepa quien escribio cada
     seccion."""
     return informe(rutas["informe"], titulo,
-                   ["- script: CAMPANA-N4-N5.py v1.0 (real desde el "
-                    "boceto, r65; renombre r67)"] + list(lineas))
+                   ["- script: CAMPANA-N4.py v1.0 (NIVEL 4, real desde el "
+                    "boceto; r65/r67/r68)"] + list(lineas))
 
 
 def fatal(msg, pistas=()):
@@ -628,8 +639,8 @@ def _color_estado(est):
 
 
 def mostrar_estado(rutas, estado):
-    print(bold(cyan("\n=== CAMPANA-N4-N5 (la via activa N4 -> N5, real "
-                    "desde el boceto) — %s ==="
+    print(bold(cyan("\n=== CAMPANA-N4 (NIVEL 4: memoria VRAM/RAM y "
+                    "recursos) — %s ==="
                     % (estado.get("actualizado") or "sin empezar"))))
     print("  informe append-only: %s" % rutas["informe"])
     cerrada, det = _primera_olla(rutas)
@@ -638,10 +649,8 @@ def mostrar_estado(rutas, estado):
              else red("AUN ABIERTA (corre primero CAMPANA.py del 1 al 6)")))
     for d in det:
         print("    %s" % gray("- " + d))
-    tabla = [("7", "N2 dosis re-aplicadas + sanity tool-calling"),
-             ("8", "N4 escalera de VRAM (cliff-1)"),
-             ("9", "RUTA 0: build b11901 + defaults + reuse"),
-             ("10", "N5 duelo spec vs NP2 + receta final + cierre")]
+    tabla = [("7", "rampa RAM: re-ancla + dosis fina (CTXCP4) + sanity"),
+             ("8", "N4 escalera de VRAM (cliff-1) + certificados")]
     for n, titulo in tabla:
         paso = estado["pasos"].get(n, {})
         print("  P%-2s %-8s %s" % (n, _color_estado(paso.get("estado")),
@@ -718,7 +727,7 @@ def _arranca_server(cmd, log_path, puerto, timeout_s=TIMEOUT_CARGA):
     min, F21). Si muere en la carga devuelve (None, rc) — en un barrido un
     peldano muerto es DATO (cliff), no un accidente. (proc, None) si vivo."""
     flog = open(log_path, "a", encoding="utf-8")
-    flog.write("===== server de campana-n4-n5 %s (puerto %d) =====\n"
+    flog.write("===== server de campana-n4 %s (puerto %d) =====\n"
                % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), puerto))
     flog.write("$ %s\n" % " ".join(cmd))
     flog.flush()
@@ -893,7 +902,7 @@ def _lanza_corridas(args, rutas, etiqueta, acciones, carpeta, con_spot=False):
 
 # ============ §2 P7 — N2 DOSIS (re-ancla + candidatas + sanity) ==============
 
-ARCHIVO_P7 = "campana-n4-n5-p7-candidatas.txt"
+ARCHIVO_P7 = "campana-n4-p7-candidatas.txt"
 
 
 def _deriva_candidatas(cfg):
@@ -1029,7 +1038,7 @@ def paso7(args, rutas, estado):
                      "si de verdad quieres seguir sin cerrarla: --fuerza "
                      "(queda escrito)"])
     cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p7")
+    carpeta = os.path.join(rutas["base"], "campana-n4-p7")
     os.makedirs(carpeta, exist_ok=True)
     ruta_tabla = _p7_archivo(rutas, args, cfg)
     candidatas = _leer_tabla(ruta_tabla)
@@ -1158,7 +1167,7 @@ def paso7(args, rutas, estado):
 #   T3/R61-c: los peldanos NO son acumulativos; las pilas del ganador se
 #             escriben combinadas con ';' en UNA fila.
 
-ARCHIVO_P8 = "campana-n4-n5-p8-escalera.txt"
+ARCHIVO_P8 = "campana-n4-p8-escalera.txt"
 
 
 def _deriva_escalera(cfg):
@@ -1280,7 +1289,7 @@ def paso8(args, rutas, estado):
     _puerta(args, "p8", estado["pasos"].get("7", {}), "P7",
             ("GO", "REGISTRADO"), ("Se sube a la escalera.",))
     cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p8")
+    carpeta = os.path.join(rutas["base"], "campana-n4-p8")
     os.makedirs(carpeta, exist_ok=True)
     ruta_tabla = _p8_archivo(rutas, args, cfg)
     peldanos = _leer_tabla(ruta_tabla)
@@ -1379,7 +1388,7 @@ def paso8(args, rutas, estado):
                " [AVISO VRAM > %d MB]" % VRAM_CERTIFICADO_MB
                if (f["vram_max_mb"] or 0) > VRAM_CERTIFICADO_MB else ""))
     lineas_inf.append("- CSV: %s" % os.path.join(carpeta, "resultados.csv"))
-    lineas_inf.append("- HUECO para P10 (dato): hueco = 4096 - VRAM(ganador); "
+    lineas_inf.append("- HUECO para el draft (N5, dato): hueco = 4096 - VRAM(ganador); "
                       "si la frontera es NCM37 -> ~901 MB (el nextn 858 cabe "
                       "sin margen); si es NCM36 -> ~572 MB (no cabe: -cmoed o "
                       "bajar una capa)")
@@ -1388,473 +1397,13 @@ def paso8(args, rutas, estado):
     return 0 if est_p8 in ("GO", "REGISTRADO") else 2
 
 
-# ============ §4 P9 — RUTA 0 (build b11901, el mundo nuevo) ==================
-
-BUILD_B11901 = "b11901"
 
 
-def _version_de(server):
-    """Texto de `llama-server --version` (o None si no corre)."""
-    try:
-        out = subprocess.run([server, "--version"], capture_output=True,
-                             text=True, timeout=60)
-        return (out.stdout or "") + (out.stderr or "")
-    except Exception:
-        return None
+# ============ MODO AUTO del NIVEL 4 (boceto §1) ==============================
 
-
-def _flags_de_help(texto):
-    """Set de flags de un `--help` completo (lineas tipo '  -ngl, --n-gpu-layers')."""
-    flags = set()
-    for ln in (texto or "").splitlines():
-        s = ln.strip()
-        if not s.startswith("-"):
-            continue
-        for tok in s.split(","):
-            tok = tok.strip().split(" ")[0].strip()
-            if tok.startswith("-") and len(tok) > 1:
-                flags.add(tok)
-    return flags
-
-
-def _sondea_reuse(args, rutas, cfg, servidor_nuevo, carpeta):
-    """(vivo, evidencia): levanta el build nuevo con --cache-reuse 256, manda
-    DOS prompts con el MISMO prefijo y busca 'restored context checkpoint'
-    en el log. #24055 (r32): en b11856 reuse estaba MUERTO en ambas
-    colocaciones — si aqui revive, la familia ORO-SHIFT vuelve a la mesa.
-    TRES salidas (F15): True (VIVO) / False (MUERTO: 0 lineas) / None
-    (INDETERMINADO: el server del sondeo no levanto -> GO con reuse '?')."""
-    tokens = _acciona(_tokens_de_receta(cfg), "add:--cache-reuse,256")
-    cmd = [servidor_nuevo] + tokens + ["-m", cfg["RUTA_MODELO"],
-                                       "--host", "127.0.0.1",
-                                       "--port", str(args.puerto)]
-    log_srv = os.path.join(carpeta, "server-reuse.log")
-    proc, rc = _arranca_server(cmd, log_srv, args.puerto)
-    if proc is None:
-        return None, "el build nuevo NO levanto con la receta + --cache-reuse 256 (rc=%s)" % rc
-    evidencia = []
-    try:
-        try:
-            # el sondeo tambien calienta plancha antes de sus 2 prompts (F24)
-            _chat_uno(args.puerto, "Calienta la plancha: responde 'lista'.", timeout=300)
-        except Exception:
-            pass
-        prefijo = ("Eres un cocinero de datos. Receta del dia: llama.cpp b11901. "
-                   "Pregunta %d: ")
-        for n in (1, 2):
-            try:
-                contenido, _ = _chat_uno(args.puerto, (prefijo % n) +
-                                         "resume en una frase que es la VRAM.")
-                evidencia.append("prompt %d: %s" % (n, (contenido.strip().splitlines()
-                                                        or ["(vacia)"])[0][:60]))
-            except Exception as exc:
-                evidencia.append("prompt %d: ERROR %r" % (n, exc))
-    finally:
-        _auto_apaga(proc)
-    n = _cuenta_en_log(log_srv, "restored context checkpoint")
-    return (bool(n), "lineas 'restored context checkpoint' en el log: %s%s"
-            % (n, ("; " + "; ".join(evidencia)) if evidencia else ""))
-
-
-def paso9(args, rutas, estado):
-    print(bold(cyan("\n=== P9 - RUTA 0: build b11901 (el mundo nuevo) ===")))
-    # PUERTA ROJA: p9 exige p8 verde. --fuerza lo deja escrito.
-    _puerta(args, "p9", estado["pasos"].get("8", {}), "P8",
-            ("GO", "REGISTRADO"), ("Al taller.",))
-    cfg = leer_config(rutas["config"])
-    servidor_viejo = cfg.get("RUTA_SERVER", "")
-    if not servidor_viejo or not os.path.exists(servidor_viejo):
-        fatal("RUTA_SERVER (b11856) no valido: %r" % servidor_viejo,
-              ["revisa RUTA_SERVER en config.txt"])
-    build_dir = args.build_dir or os.path.join(
-        os.path.dirname(os.path.abspath(servidor_viejo)), BUILD_B11901)
-    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p9")
-    os.makedirs(carpeta, exist_ok=True)
-    servidor_nuevo = os.path.join(build_dir, "llama-server.exe")
-    if not os.path.exists(servidor_nuevo):
-        # en taller POSIX (tests) el nombre puede venir sin .exe
-        alt = os.path.join(build_dir, "llama-server")
-        servidor_nuevo = alt if os.path.exists(alt) else servidor_nuevo
-    if not os.path.exists(servidor_nuevo):
-        estado["pasos"]["9"] = {"estado": "PENDIENTE",
-                                "resumen": "no esta el build b11901 en %s" % build_dir}
-        guardar_estado(rutas["estado"], estado)
-        fatal("no encuentro llama-server.exe del build nuevo en %s" % build_dir,
-              ["PASO 9 del plan: TU descargas los 2 zips cuando el rig NO mide:",
-               "  llama-b11901-bin-win-cuda-12.4-x64.zip  (binario, sin compilar)",
-               "  + el zip de cudart DLLs del MISMO release (sin el, la GPU duerme)",
-               "descomprime los DOS en esa carpeta y vuelve a correr p9",
-               "o pasa --build-dir D:\\ruta\\donde\\descomprimiste"])
-    # 1) version honesta del binario nuevo (E31)
-    texto_ver = _version_de(servidor_nuevo)
-    tiene_b = (texto_ver or "").lower().find(BUILD_B11901) >= 0
-    print("  1) version: %s" % (green("b11901 detectado") if tiene_b
-                                else red("NO se ve '%s' en --version" % BUILD_B11901)))
-    if texto_ver:
-        primera = (texto_ver.strip().splitlines() or [""])[0]
-        print(gray("    %s" % primera[:100]))
-    if not tiene_b:
-        estado["pasos"]["9"] = {"estado": "FALLO-CERTIFICADO",
-                                "resumen": "el binario de %s no es b11901" % build_dir}
-        guardar_estado(rutas["estado"], estado)
-        _inf(rutas, "P9 version -> FALLO",
-             ["- --version de %s no contiene '%s'" % (servidor_nuevo, BUILD_B11901)])
-        fatal("el binario nuevo NO es b11901: no se cocina un mundo sin saber cual es",
-              ["descarga el zip oficial b11901 o revisa --build-dir"])
-    # 2) cudart vivo (sin el, la GPU queda dormida: N3 s16, E32)
-    dlls = [d for d in os.listdir(build_dir)
-            if d.lower().startswith("cudart") and d.lower().endswith(".dll")]
-    print("  2) cudart DLLs en el build: %s" %
-          (green(", ".join(sorted(dlls))) if dlls else
-           yellow("NINGUNA (extrae tambien el zip de cudart EN esta carpeta)")))
-    if not dlls:
-        estado["pasos"]["9"] = {"estado": "PENDIENTE",
-                                "resumen": "falta el cudart en el build nuevo"}
-        guardar_estado(rutas["estado"], estado)
-        fatal("sin cudart la GPU queda DORMIDA (motivo certificado N3 s16)",
-              ["extrae el zip de cudart DLLs del mismo release EN %s" % build_dir])
-    # 3) re-auditoria de defaults: dump --help viejo vs nuevo (diff, E33)
-    print(cyan("  3) re-auditoria de defaults (--help b11856 vs b11901)..."))
-    help_viejo = ""
-    try:
-        out_v = subprocess.run([servidor_viejo, "--help"], capture_output=True,
-                               text=True, timeout=120)
-        help_viejo = (out_v.stdout or "") + (out_v.stderr or "")
-    except Exception:
-        help_viejo = ""
-    try:
-        out_n = subprocess.run([servidor_nuevo, "--help"], capture_output=True,
-                               text=True, timeout=120)
-        help_nuevo = (out_n.stdout or "") + (out_n.stderr or "")
-    except Exception:
-        help_nuevo = ""
-    with open(os.path.join(carpeta, "help-b11856.txt"), "w", encoding="utf-8") as f:
-        f.write(help_viejo or "")
-    with open(os.path.join(carpeta, "help-b11901.txt"), "w", encoding="utf-8") as f:
-        f.write(help_nuevo or "")
-    fv, fn = _flags_de_help(help_viejo), _flags_de_help(help_nuevo)
-    muertas = sorted(fv - fn)
-    nacidas = sorted(fn - fv)
-    print("    flags que MUEREN del 11856: %s" % (", ".join(muertas) or "(ninguna)"))
-    print("    flags que NACEN en el 11901 : %s" % (", ".join(nacidas) or "(ninguna)"))
-    # 4) re-certificar la clave del override (puede cambiar de nombre: E34)
-    clave_viva = "expert-used-count" in help_nuevo or "expert_used_count" in help_nuevo
-    print("  4) override de expertos: %s"
-          % (green("la familia expert_used_count sigue en el --help nuevo")
-             if clave_viva else
-             yellow("NO se ve expert_used_count en el --help nuevo: revisa "
-                    "el nuevo nombre de la clave antes de fiarte del pin")))
-    # 5) sondeo cache-reuse (#24055: muerto en b11856, E35)
-    print(cyan("  5) sondeo cache-reuse (--cache-reuse 256, prefijo repetido)..."))
-    reuse_vivo, evi_reuse = _sondea_reuse(args, rutas, cfg, servidor_nuevo, carpeta)
-    print("    reuse: %s (%s)" % (green("VIVO") if reuse_vivo else
-                                  (red("MUERTO (motivo cerrado con certificado)")
-                                   if reuse_vivo is False else yellow("INDETERMINADO")),
-                                  evi_reuse))
-    # 6) re-ancla en el mundo nuevo (E36): MED3 con la receta vigente —
-    #    build nuevo = mundo nuevo. [delta D2: la olla original imprimia
-    #    "1 corrida" y corria MED3 (cosmetico F11); aqui se imprime la
-    #    verdad. La CONDUCTA (mediana de medianas) es identica.]
-    print(cyan("  6) re-ancla del mundo nuevo (mediana de %d corridas x %d "
-               "prompts)..." % (max(1, args.corridas), max(1, args.m_prompts))))
-    ms_nuevo, por = _lanza_corridas(args, rutas, "B11901", "", carpeta)
-    ancla_nueva = mediana(ms_nuevo)
-    receta_viva = bool(ms_nuevo)
-    resumen = ("b11901 vivo con la receta (ancla %s t/s); reuse %s; "
-               "flags muertas: %d, nacidas: %d"
-               % (("%.2f" % ancla_nueva) if ancla_nueva else "SIN DATOS",
-                  "VIVO" if reuse_vivo else ("muerto" if reuse_vivo is False else "?"),
-                  len(muertas), len(nacidas)))
-    # VEREDICTO con las salidas exactas (F15): el sondeo tiene TRES salidas
-    est_p9 = "MOTIVO-CERRADO" if (reuse_vivo is False and receta_viva) else \
-             ("GO" if receta_viva else "DUDOSO")
-    estado["pasos"]["9"] = {"estado": est_p9, "resumen": resumen,
-                            "build_dir": build_dir, "reuse_vivo": reuse_vivo,
-                            "ancla_tps": ancla_nueva,
-                            "flags_muertas": muertas, "flags_nacidas": nacidas,
-                            "override_familia": clave_viva}
-    guardar_estado(rutas["estado"], estado)
-    lineas_inf = ["- veredicto: %s — %s" % (est_p9, resumen),
-                  "- build: %s (cudart: %s)" % (build_dir,
-                                                ", ".join(sorted(dlls)) or "NINGUNA"),
-                  "- defaults que mueren del 11856: %s" % (", ".join(muertas) or "(ninguna)"),
-                  "- defaults que nacen en el 11901: %s" % (", ".join(nacidas) or "(ninguna)"),
-                  "- override expertos: familia %s" %
-                  ("presente" if clave_viva else "NO vista en --help (revisar clave)"),
-                  "- cache-reuse: %s (%s)" % (reuse_vivo, evi_reuse),
-                  "- dumps: %s y %s" % (os.path.join(carpeta, "help-b11856.txt"),
-                                        os.path.join(carpeta, "help-b11901.txt"))]
-    if muertas:
-        lineas_inf.append("- AVISO del plan: los alias que mueren tras RUTA 0 "
-                          "(PR #28334) hay que traducirlos a la -lm/-flag nueva "
-                          "en config.txt ANTES de seguir midiendo.")
-    _inf(rutas, "P9 RUTA 0 b11901 -> %s" % est_p9, lineas_inf)
-    print(green(bold("  P9 -> %s: %s" % (est_p9, resumen))))
-    return 0 if est_p9 in ("GO", "MOTIVO-CERRADO", "REGISTRADO") else 2
-
-
-# ============ §5 P10 — N5 DUELO SPEC vs NP2 + RECETA FINAL + CIERRE ==========
-
-BRAZOS = [
-    # (nombre, acciones, activa, nota)
-    ("A-NP2", "", True,
-     "la receta promovida tal cual: NP2 (+22.8% [N3]) sin spec"),
-    ("B-SPEC", "delpair:-np;add:--spec-draft-n-max,2;add:--spec-draft-p-min,0.75",
-     True, "MTP-n2 sin NP2 (SS11.4: MTP exige -np 1); n-max y p-min "
-           "SIEMPRE explicitos (defaults b11856: 16 y 0.75)"),
-    ("C-KVOFF", "delpair:-np;add:--spec-draft-n-max,2;add:--spec-draft-p-min,0.75;"
-                "add:--kv-unified,off",
-     False, "fallback #25345: si el draft calla (kv-unified), se activa "
-            "sola cuando B no llega al 90% de A"),
-]
-
-
-def _brazos_tabla():
-    lineas = ["# BRAZOS del duelo N5 (p10). Formato: nombre | acciones | "
-              "activa|inactiva | nota",
-              "# El duelo: NP2 sin spec (A) vs spec sin NP2 (B). Gana el mejor "
-              "t/s x calidad.",
-              "# C-KVOFF se activa SOLA si B < 90% de A (#25345 kv-unified).",
-              "ANCLA | | ancla | (interno: la receta diaria, para comparar)"]
-    for nombre, acciones, activa, nota in BRAZOS:
-        lineas.append("%s | %s | %s | %s" % (
-            nombre, acciones, "activa" if activa else "inactiva", nota))
-    return lineas
-
-
-def _brazos_por_nombre():
-    return {n: (a, nota) for n, a, _, nota in BRAZOS}
-
-
-def _fila_brazo(nombre, acciones, ms, por):
-    """Fila del duelo para un brazo: mediana de medianas + spot POR CORRIDA
-    (F7: el brazo queda elegible solo con spot limpio en TODAS sus
-    corridas) + errores + muertos. Usada por A, B y el fallback C."""
-    spots_ok = [d["spot_ok"] for d in por if d["spot_ok"] is not None]
-    return {"nombre": nombre, "mediana": mediana(ms), "acciones": acciones,
-            "errores": sum(d["errores"] for d in por),
-            "spot_resumen": ("OK (anclas)" if spots_ok and all(spots_ok)
-                             else ("MIXTO" if spots_ok else "sin spot")),
-            "muertos": sum(1 for d in por if not d["viva"])}
-
-
-def _escribe_resumen_duelo(ruta, filas, ganador, motivo):
-    with open(ruta, "w", encoding="utf-8") as f:
-        f.write("# Duelo N5: spec vs NP2 — %s\n\n" % ganador)
-        f.write("%s\n\n" % motivo)
-        f.write("| brazo | mediana t/s (mediana de medianas) | spot ES | errores |"
-                "\n|-------|-----------------------------------|---------|---------|\n")
-        for f2 in filas:
-            f.write("| %s | %s | %s | %d |\n" % (
-                f2["nombre"],
-                ("%.2f" % f2["mediana"]) if f2["mediana"] else "SIN DATOS",
-                f2["spot_resumen"] or "-", f2["errores"]))
-    return ruta
-
-
-def _receta_final(cfg, acciones_ganadoras):
-    """(nuevas_base, nuevas_ganadoras): aplica la cirugia del brazo ganador a
-    la receta por tokens. FLAGS_BASE conserva la estructura (se le aplican
-    los del/delpair/sub); FLAGS_GANADORAS recibe los add (el ultimo valor
-    gana, regla de la casa). El modelo NUNCA va dentro (RUTA_MODELO manda)."""
-    base = _quita_modelo(cfg.get("FLAGS_BASE", "").split())
-    ganad = _quita_modelo(cfg.get("FLAGS_GANADORAS", "").split())
-    todo = _acciona(base + ganad, acciones_ganadoras)
-    # separar de vuelta: los 'del/delpair/sub' cambiaron la base; los 'add'
-    # nuevos son los tokens que no estaban ni en base ni en ganadoras.
-    add_nuevos = []
-    conjunto = set(base) | set(ganad)
-    acciones_split = [a.strip() for a in (acciones_ganadoras or "").split(";") if a.strip()]
-    for a in acciones_split:
-        verbo, _, cuerpo = a.partition(":")
-        if verbo.strip().lower() == "add":
-            add_nuevos.extend(t for t in cuerpo.split(",") if t)
-    nueva_base = [t for t in todo if not (t in add_nuevos and t not in conjunto)]
-    nueva_ganad = ganad + [t for t in add_nuevos if t not in conjunto]
-    return nueva_base, nueva_ganad
-
-
-def _escribe_receta_final(rutas, estado, cfg, acciones_ganadoras, nombre_brazo):
-    """EL UNICO sitio de esta olla que toca config.txt (T8): confirmacion,
-    backup con marca de tiempo, escritura atomica (tmp + os.replace) y
-    RE-LECTURA de verificacion. Devuelve (ruta_backup, ok)."""
-    if not confirmar("SI", "RECETA FINAL del brazo %s: se reescriben "
-                         "FLAGS_BASE/FLAGS_GANADORAS en config.txt (con backup; "
-                         "el cuant viejo y SAMPLING no se tocan). Confirmar?" % nombre_brazo):
-        _inf(rutas, "P10 receta final CANCELADA por el Director",
-             ["- no se toco config.txt (la autoridad es del Director)"])
-        print(yellow("  receta final cancelada: config.txt intacto."))
-        return None, False
-    base_nueva, ganad_nueva = _receta_final(cfg, acciones_ganadoras)
-    sello = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = rutas["config"] + ".bak-antes-receta-final-%s" % sello
-    shutil.copy2(rutas["config"], backup)
-    with open(rutas["config"], encoding="utf-8") as f:
-        texto = f.read()
-
-    def _sustituye_clave(texto, clave, valor):
-        patron = r"(?m)^(%s\s*=\s*).*$" % re.escape(clave)
-        if re.search(patron, texto):
-            return re.sub(patron, r"\g<1>%s" % valor, texto)
-        return texto + "\n%s = %s\n" % (clave, valor)
-
-    texto = _sustituye_clave(texto, "FLAGS_BASE", " ".join(base_nueva))
-    texto = _sustituye_clave(texto, "FLAGS_GANADORAS", " ".join(ganad_nueva))
-    tmp = rutas["config"] + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(texto)
-        os.replace(tmp, rutas["config"])
-    except BaseException:
-        try:
-            os.remove(tmp)
-        except Exception:
-            pass
-        raise
-    cfg2 = leer_config(rutas["config"])
-    ok = (cfg2.get("FLAGS_BASE", "").split() == base_nueva and
-          cfg2.get("FLAGS_GANADORAS", "").split() == ganad_nueva)
-    return backup, ok
-
-
-def paso10(args, rutas, estado):
-    print(bold(cyan("\n=== P10 - N5: duelo spec vs NP2 + receta final ===")))
-    # PUERTA ROJA: p10 exige p9 verde. --fuerza lo deja escrito.
-    _puerta(args, "p10", estado["pasos"].get("9", {}), "P9",
-            ("GO", "MOTIVO-CERRADO", "REGISTRADO"), ("A la apuesta grande.",))
-    if estado["pasos"].get("10", {}).get("estado") in VERDES:
-        # P10 ya cerrado -> no se re-corre salvo pedido explicito (la
-        # receta final ya esta escrita).
-        print(yellow("  P10 ya estaba cerrado: se corre solo si lo pides "
-                     "explicito (la receta final ya esta escrita)."))
-    cfg = leer_config(rutas["config"])
-    carpeta = os.path.join(rutas["base"], "campana-n4-n5-p10")
-    os.makedirs(carpeta, exist_ok=True)
-    _escribe_tabla(os.path.join(carpeta, "brazos.txt"), _brazos_tabla())
-    # 1) cada brazo ACTIVO: mediana de medianas (la mecanica de TODA la
-    #    olla, F13) + spot ES POR CORRIDA (F7)
-    filas, datos_brazos = [], {}
-    for nombre, acciones, activa, _nota in BRAZOS:
-        if not activa and not args.fuerza:
-            print(gray("  brazo %s en reposo (fallback: se activa solo si "
-                       "B < 90%% de A)" % nombre))
-            continue
-        print(cyan("  1) BRAZO %s (%s): mediana de %d corridas x %d prompts + spot ES..."
-                   % (nombre, acciones or "receta tal cual",
-                      args.corridas, args.m_prompts)))
-        ms, por = _lanza_corridas(args, rutas, nombre, acciones, carpeta,
-                                  con_spot=True)
-        fila = _fila_brazo(nombre, acciones, ms, por)
-        filas.append(fila)
-        datos_brazos[nombre] = fila
-        print("    %s -> %s" % (nombre,
-                                green("%.2f t/s" % fila["mediana"]) if fila["mediana"]
-                                else red("SIN DATOS")))
-    # 2) fallback kv-unified (#25345): B calla -> C se activa sola
-    a, b = datos_brazos.get("A-NP2"), datos_brazos.get("B-SPEC")
-    if a and b and b["mediana"] and a["mediana"] and \
-            b["mediana"] < a["mediana"] * 0.90 and "C-KVOFF" not in datos_brazos:
-        print(yellow("  el draft CALLA (B < 90% de A): fallback #25345 -> "
-                     "C-KVOFF se activa sola (--kv-unified off)."))
-        acciones_c = _brazos_por_nombre()["C-KVOFF"][0]
-        ms, por = _lanza_corridas(args, rutas, "C-KVOFF", acciones_c, carpeta,
-                                  con_spot=True)
-        fila = _fila_brazo("C-KVOFF", acciones_c, ms, por)
-        filas.append(fila)
-        datos_brazos["C-KVOFF"] = fila
-    # 3) el veredicto del duelo: mejor t/s con calidad limpia
-    elegibles = [f for f in filas if f["mediana"] and
-                 (f["spot_resumen"] == "OK (anclas)" or
-                  f["spot_resumen"] == "sin spot")]
-    ganador = max(elegibles, key=lambda f: f["mediana"]) if elegibles else None
-    if ganador is None:
-        estado["pasos"]["10"] = {"estado": "DUDOSO", "resumen": "ningun brazo "
-                                 "midio con calidad limpia", "brazos": filas}
-        guardar_estado(rutas["estado"], estado)
-        _inf(rutas, "P10 duelo SIN veredicto",
-             ["- ningun brazo midio con spot limpio; revisa los logs en %s" % carpeta])
-        return 2
-    motivo = ("gana %s: %.2f t/s con spot ES limpio (mediana de medianas de %d "
-              "corridas)" % (ganador["nombre"], ganador["mediana"], args.corridas))
-    ruta_res = os.path.join(carpeta, "DUELO.md")
-    _escribe_resumen_duelo(ruta_res, filas, ganador["nombre"], motivo)
-    print(green(bold("  DUELO: %s" % motivo)))
-    estado["duelo"] = {"ganador": ganador["nombre"],
-                       "mediana_tps": ganador["mediana"],
-                       "brazos": filas, "resumen": ruta_res}
-    estado["pasos"]["10"] = {"estado": "DUELO-HECHO",
-                             "resumen": motivo, "brazos": filas,
-                             "ganador": ganador["nombre"]}
-    guardar_estado(rutas["estado"], estado)
-    _inf(rutas, "P10 duelo spec vs NP2 -> gana %s" % ganador["nombre"],
-         ["- %s" % motivo] +
-         ["- %s: %s t/s, spot %s" % (f["nombre"],
-                                     ("%.2f" % f["mediana"]) if f["mediana"] else "SIN DATOS",
-                                     f["spot_resumen"]) for f in filas] +
-         ["- detalle: %s" % ruta_res])
-    # 4) el CIERRE: receta final (config.txt) + informe de campana
-    cerrar = confirmar("SI", "Ultima olla del dia: escribir la RECETA FINAL "
-                             "(brazo %s) en config.txt y cerrar la campana de "
-                             "los 5 niveles?" % ganador["nombre"])
-    if not cerrar:
-        _inf(rutas, "P10 cierre APLAZADO por el Director",
-             ["- el duelo quedo escrito; la receta final no se toco"])
-        print(cyan("  cierre aplazado: el duelo queda escrito, config.txt intacto."))
-        return 0
-    if ganador["nombre"] == "A-NP2":
-        # la receta vigente YA es la ganadora: ratificar (backup igualmente)
-        backup, ok = _escribe_receta_final(rutas, estado, cfg, "", "A-NP2 (ratificada)")
-    else:
-        backup, ok = _escribe_receta_final(rutas, estado, cfg,
-                                           ganador["acciones"], ganador["nombre"])
-    if backup is None:
-        estado["pasos"]["10"]["estado"] = "DUELO-HECHO"
-        estado["pasos"]["10"]["resumen"] += " (receta final cancelada)"
-        guardar_estado(rutas["estado"], estado)
-        return 0
-    if not ok:
-        fatal("la re-lectura de config.txt NO coincide con la receta final "
-              "esperada (integridad de la cirugia)",
-              ["restaura el backup %s" % backup,
-               "avisa con el log: esto NO deberia pasar nunca"])
-    lineas_inf = ["- receta final escrita y VERIFICADA por re-lectura "
-                  "(brazo %s)" % ganador["nombre"],
-                  "- backup del config anterior: %s" % backup,
-                  "- SAMPLING, RUTA_* y el cuant vigente NO se tocaron"]
-    # cierre de campana: los 5 niveles en una tabla final
-    ol1 = {}
-    try:
-        with open(rutas["olla1"], encoding="utf-8") as f:
-            ol1 = json.load(f)
-    except Exception:
-        ol1 = {}
-    p1 = ol1.get("pasos", {}) if isinstance(ol1.get("pasos"), dict) else {}
-    niveles = [("N1", p1.get("6", {}).get("estado", "en la primera olla")),
-               ("N2", estado["pasos"].get("7", {}).get("estado", "PENDIENTE")),
-               ("N3", "CERRADO" if (ol1.get("n3", {}) or {}).get("cerrado")
-                else "en la primera olla"),
-               ("N4", estado["pasos"].get("8", {}).get("estado", "PENDIENTE")),
-               ("RUTA 0+N5", estado["pasos"].get("9", {}).get("estado", "PENDIENTE") +
-                " / " + estado["pasos"].get("10", {}).get("estado", "PENDIENTE"))]
-    lineas_inf.append("- CIERRE DE CAMPAÑA (los 5 niveles): " +
-                      "; ".join("%s=%s" % (n, e) for n, e in niveles))
-    lineas_inf.append("- duelo: %s" % motivo)
-    _inf(rutas, "CIERRE DE CAMPAÑA — receta final certificada", lineas_inf)
-    estado["pasos"]["10"]["estado"] = "CERRADO"
-    estado["pasos"]["10"]["resumen"] = motivo + " | receta final escrita (" + \
-        os.path.basename(backup) + ")"
-    guardar_estado(rutas["estado"], estado)
-    print(green(bold("  CAMPAÑA CERRADA: receta final certificada (brazo %s)."
-                     % ganador["nombre"])))
-    print(cyan("  el informe final vive en %s" % rutas["informe"]))
-    return 0
-
-
-# ============ MODO AUTO de la segunda mitad (boceto §1) ======================
-
-PASOS_N4N5 = {"7": paso7, "8": paso8, "9": paso9, "10": paso10}
-TITULOS_N4N5 = {"7": "N2 dosis re-aplicadas", "8": "N4 escalera VRAM",
-                "9": "RUTA 0 build b11901", "10": "N5 duelo + receta final"}
+PASOS_N4 = {"7": paso7, "8": paso8}
+TITULOS_N4 = {"7": "rampa RAM (re-ancla + dosis fina + sanity)",
+              "8": "N4 escalera de VRAM"}
 
 
 def _prevuelo_auto(args, rutas, estado):
@@ -1890,7 +1439,7 @@ def _prevuelo_auto(args, rutas, estado):
 
 
 def modo_auto(args, rutas, estado):
-    """DOBLE CLICK = MODO AUTO de la segunda mitad: corre P7..P10 en orden,
+    """DOBLE CLICK = MODO AUTO del NIVEL 4: corre P7..P8 en orden,
     sin preguntas. Hereda la disciplina de sus hermanas mayores:
     confirmaciones auto-aceptadas quedan escritas; puertas rojas DETIENEN
     el turno limpio (nunca se saltan solas, T9); re-doble-click retoma
@@ -1901,7 +1450,7 @@ def modo_auto(args, rutas, estado):
         print(yellow("  aviso: --fuerza no existe en AUTO (se ignora): las "
                      "puertas rojas mandan."))
         args.fuerza = False
-    print(bold(cyan("\n=== MODO AUTO — la segunda mitad (pasos 7..10) ===")))
+    print(bold(cyan("\n=== MODO AUTO — NIVEL 4 (pasos 7..8) ===")))
     print(cyan("  sin preguntas: confirmaciones auto-aceptadas y escritas."))
     cerrada, det = _primera_olla(rutas)
     if cerrada:
@@ -1913,8 +1462,9 @@ def modo_auto(args, rutas, estado):
     resumen_prevuelo = ("OK" if not fatales and not avisos
                         else ("avisos: " + "; ".join(avisos) if avisos and not fatales
                               else "FATAL"))
-    _inf(rutas, "MODO AUTO n4-n5 arrancado (la via activa N4 -> N5)",
-         ["- pasos 7..10 en orden, sin preguntas; mundo propio "
+    _inf(rutas, "MODO AUTO n4 arrancado (el NIVEL 4: memoria VRAM/RAM y "
+                "recursos)",
+         ["- pasos 7..8 en orden, sin preguntas; mundo propio "
           "(estado/informe/puerto propios)",
           "- puerta de entrada: primera olla %s" % ("CERRADA" if cerrada
                                                     else "ABIERTA: %s" % "; ".join(det)),
@@ -1926,14 +1476,14 @@ def modo_auto(args, rutas, estado):
                              "ahora que a media medicion)",
                              ["- %s" % f for f in fatales])
     try:
-        for n in ("7", "8", "9", "10"):
+        for n in ("7", "8"):
             estado = leer_estado(rutas["estado"])   # re-lee estado en CADA vuelta
             est = estado["pasos"].get(n, {}).get("estado")
             if est in VERDES:
                 print(cyan("\n  P%s ya estaba hecho (%s): se salta." % (n, est)))
                 continue
-            print(bold(cyan("\n--- P%s - %s ---" % (n, TITULOS_N4N5[n]))))
-            rc = PASOS_N4N5[n](args, rutas, estado)
+            print(bold(cyan("\n--- P%s - %s ---" % (n, TITULOS_N4[n]))))
+            rc = PASOS_N4[n](args, rutas, estado)
             _auto_informe_trail(rutas, "P%s" % n)
             if rc != 0:
                 return _auto_detener(rutas, "P%s devolvio rc=%s (mira su "
@@ -1941,12 +1491,12 @@ def modo_auto(args, rutas, estado):
                                      ["- el paso no quedo verde; el "
                                       "re-doble-click retoma"])
         estado = leer_estado(rutas["estado"])
-        hechos = [n for n in ("7", "8", "9", "10")
+        hechos = [n for n in ("7", "8")
                   if estado["pasos"].get(n, {}).get("estado") in VERDES]
-        _inf(rutas, "AUTO n4-n5 FIN DE TURNO: pasos 7..10 gestionados",
+        _inf(rutas, "AUTO n4 FIN DE TURNO: pasos 7..8 gestionados",
              ["- verdes ahora: %s" % (", ".join("P%s" % x for x in hechos)
                                       or "ninguno")])
-        print(green(bold("\n  FIN DE TURNO AUTO: pasos 7..10 gestionados.")))
+        print(green(bold("\n  FIN DE TURNO AUTO: pasos 7..8 gestionados.")))
         print(green("  verdes: %s" % (", ".join("P%s" % x for x in hechos)
                                      or "ninguno")))
         print("  log completo : %s" % rutas["informe"])
@@ -1961,7 +1511,7 @@ def modo_auto(args, rutas, estado):
                               "y re-doble-click"])
     except KeyboardInterrupt:
         _auto_informe_trail(rutas, "al interrumpirse")
-        _inf(rutas, "AUTO n4-n5 INTERRUMPIDO (Ctrl+C)",
+        _inf(rutas, "AUTO n4 INTERRUMPIDO (Ctrl+C)",
              ["- lo hecho queda escrito; re-doble-click retoma donde quedo"])
         print(yellow("\n[AUTO] interrumpido (Ctrl+C): lo hecho queda escrito."))
         return 130
@@ -1970,7 +1520,7 @@ def modo_auto(args, rutas, estado):
         traceback.print_exc()
         _auto_informe_trail(rutas, "al fallar")
         try:
-            _inf(rutas, "AUTO n4-n5 INTERRUMPIDO (error inesperado)",
+            _inf(rutas, "AUTO n4 INTERRUMPIDO (error inesperado)",
                  ["- el traceback completo quedo en consola; el turno se "
                   "detuvo con lo hecho escrito",
                   "- re-doble-click cuando resuelvas la causa"])
@@ -1993,7 +1543,7 @@ def _auto_detener(rutas, causa, lineas):
     """Detencion LIMPIA del turno: todo lo hecho queda escrito y se explica
     la causa. Devuelve rc 2 (nunca se salta una puerta roja)."""
     _auto_informe_trail(rutas, "al detenerse")
-    _inf(rutas, "AUTO n4-n5 DETENIDO: %s" % causa, lineas)
+    _inf(rutas, "AUTO n4 DETENIDO: %s" % causa, lineas)
     print(red("\n[AUTO DETENIDO] %s" % causa))
     for ln in lineas:
         print(yellow("  %s" % ln))
@@ -2007,7 +1557,7 @@ def _auto_detener(rutas, causa, lineas):
 def main():
     ap = argparse.ArgumentParser(description=VERSION)
     ap.add_argument("paso", nargs="?", default=None,
-                    help="estado | plan | p7..p10 (sin argumento = MODO AUTO)")
+                    help="estado | plan | p7..p8 (sin argumento = MODO AUTO)")
     ap.add_argument("--dir", help="carpeta base de la campana (def: junto al script)")
     ap.add_argument("--config", help="ruta de config.txt (def: base/config.txt)")
     ap.add_argument("--puerto", type=int, default=PUERTO_DEF,
@@ -2022,8 +1572,6 @@ def main():
     ap.add_argument("--sin-sanity", action="store_true",
                     help="p7: saltar el sanity tool-calling (queda escrito; T11: "
                          "el GO queda imposible, techo REGISTRADO)")
-    ap.add_argument("--build-dir", help="p9: carpeta del build b11901 (def: "
-                                        "junto a RUTA_SERVER, %s\\)" % BUILD_B11901)
     ap.add_argument("--fuerza", action="store_true",
                     help="saltar puertas A PROPOSITO (queda escrito; en AUTO no existe)")
     args = ap.parse_args()
@@ -2042,26 +1590,34 @@ def main():
         return rc
     if paso == "plan":
         mostrar_estado(rutas, estado)
-        print(gray("  detalle completo: plan-siguientes-10-pasos.md en el repo"))
+        print(gray("  detalle completo: plan-p8-n4-experimentos.md (R61) + "
+                   "nivel-4-memoria-vram-ram.md en el repo"))
         return 0
-    if paso in PASOS_N4N5:
-        return PASOS_N4N5[paso](args, rutas, estado)
-    print(red("paso desconocido: %s (usa estado | plan | p7..p10)" % args.paso))
+    if paso in PASOS_N4:
+        return PASOS_N4[paso](args, rutas, estado)
+    if paso in ("9", "10"):
+        print(red("paso %s = N5: NO vive aqui (vamos por orden: UNA olla "
+                  "por nivel). El N5 nacera en SU archivo CAMPANA-N5.py "
+                  "cuando el Director lo ordene; su material esta vivo en "
+                  "CAMPANA-6A10.py byte-intacta, el git history y el "
+                  "boceto §4/§5." % args.paso))
+        return 1
+    print(red("paso desconocido: %s (usa estado | plan | p7..p8)" % args.paso))
     return 1
 
 
 # ------------------------------------------------------------------ R65
 # GUARDIAN DE HUELLA (herencia del guardian de la casa): auto-verificacion
 # de huella propia, errores con causa visible y pausa garantizada al
-# terminar o fallar. Este archivo es CAMPANA-N4-N5.py (hasta la ronda 67
-# se llamo CAMPANA-6A10-v2.py; renombre por orden del Director "si ahora
-# es n4 cambiale el titulo, no mezcles cosas"), la via activa N4 -> N5
-# REAL DESDE EL BOCETO (ronda 65): hermano de CAMPANA.py v1.7.2
+# terminar o fallar. Este archivo es CAMPANA-N4.py (historia: nacio
+# CAMPANA-6A10-v2.py en la ronda 65, renombrado CAMPANA-N4-N5.py en la
+# ronda 67 y CAMPANA-N4.py en la ronda 68 por orden del Director "vamos
+# por orden, el archivo debe ser solo campana n4"), el NIVEL 4
+# (memoria VRAM/RAM y recursos): hermano de CAMPANA.py v1.7.2
 # (65D33CBA...DA4B1), CAMPANA-v2.py v2.0 (52996E67...B1E86) y de
 # CAMPANA-6A10.py v1.0 (CFEADBEA...D1947), que quedan BYTE-INTACTAS.
-# Mundo propio nuevo campana-n4-n5-* (desde r67 ya no compartido con la
-# olla retirada); config.txt solo se toca en el cierre confirmado de P10
-# (con backup y re-lectura de verificacion).
+# Mundo propio campana-n4-*; esta olla NO escribe config.txt NUNCA (la
+# receta final es del N5, en su archivo cuando llegue).
 
 def _autoverifica_huella():
     """Anti-manipulacion: compara el SHA256 del propio archivo en disco
@@ -2092,7 +1648,7 @@ if __name__ == "__main__":
         if not ok:
             print(red(bold("\n[FATAL] auto-verificacion de huella: %s" % causa)))
             print(red("         PARADA LIMPIA: no se ejecuta nada."))
-            print(red("         Re-descarga CAMPANA-N4-N5.py del repo y "
+            print(red("         Re-descarga CAMPANA-N4.py del repo y "
                       "verifica su huella."))
             rc = 3
             _pausa_doble_click()  # FATAL de huella: ventana abierta SIEMPRE

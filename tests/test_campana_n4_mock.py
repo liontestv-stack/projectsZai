@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Test de CAMPANA-N4-N5.py v1.0 con taller falso (sin GPU, sin red, sin
-13 GB). Patron de la casa (test_campana6a10_mock): el modulo se carga por
-importlib desde InformacionCritica/scripts, los directorios del rig son
+"""Test de CAMPANA-N4.py v1.0 (NIVEL 4) con taller falso (sin GPU, sin red,
+sin 13 GB). Patron de la casa (test_campana6a10_mock): el modulo se carga
+por importlib desde InformacionCritica/scripts, los directorios del rig son
 temporales y los objetos pesados son FALSOS PERO REALISTAS.
 
 Es la bateria de su hermana CAMPANA-6A10.py ADAPTADA a la olla real nacida
-del boceto (r65; renombrada CAMPANA-N4-N5.py en r67 por orden del
-Director "si ahora es n4 cambiale el titulo, no mezcles cosas"), con los
-checks nuevos de los deltas documentados:
+del boceto (r65; CAMPANA-N4-N5.py r67; recortada a NIVEL 4 PURO en r68 por
+orden del Director "vamos por orden, el archivo debe ser solo campana n4"),
+con los checks nuevos de los deltas documentados:
 
-  - config.txt falso, SERVER FALSO (--version b11901, --help para el diff,
-    --die para el cliff, /health + /v1/chat/completions con timings y las
-    3 ANCLAS de calidad), MODELO falso y primera olla falsa.
+  - config.txt falso, SERVER FALSO (--die para el cliff, /health +
+    /v1/chat/completions con timings y las 3 ANCLAS de calidad), MODELO
+    falso y primera olla falsa.
   - Verifica: huella anti-tamper, cirugia de flags por tokens, tablas
     candidatas/escalera derivadas de la receta REAL (v2: NCM primero y
     activo, NGL inactivas al final, --moe-cache-mib nombre real, pilas
     con ';', sin mlock), estado corrupto -> evidencia .corrupto, anclas
-    de calidad, PUERTAS, P7 completa (ancla + candidata + sanity),
-    P8 con cliff real y regla cliff-1 + hueco para P10 en el informe,
-    P9 (version + cudart + diff --help + reuse vivo + re-ancla MED3),
-    P10 (duelo A/B + fallback C + receta final con backup y re-lectura),
-    informes APPEND-ONLY con linea "- script:" (delta D3) y MODO AUTO
-    end-to-end (7..10 verdes).
+    de calidad, PUERTA p7->p8, P7 completa (ancla + candidata + sanity),
+    P8 con cliff real y regla cliff-1 + hueco para el draft en el
+    informe, config.txt INTACTO tras todo (r68: la olla N4 nunca lo
+    escribe), informes APPEND-ONLY con linea "- script:" (delta D3) y
+    MODO AUTO end-to-end (7..8 verdes). El N5 (p9/p10) NO vive aqui: su
+    bateria nacera con CAMPANA-N5.py (vamos por orden).
 """
 import contextlib
 import importlib.util
@@ -38,7 +38,7 @@ import types
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(RAIZ, "..", "InformacionCritica", "scripts",
-                      "CAMPANA-N4-N5.py")
+                      "CAMPANA-N4.py")
 
 SERVER_FALSO = r'''#!/usr/bin/env python3
 import json, sys
@@ -127,7 +127,7 @@ def puerto_libre():
 
 
 def carga_modulo():
-    spec = importlib.util.spec_from_file_location("campanan4n5_test", SCRIPT)
+    spec = importlib.util.spec_from_file_location("campanan4_test", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -151,7 +151,7 @@ def args_falsos(mod, base, puerto, **kw):
 
 def main():
     m = carga_modulo()
-    tmp = tempfile.mkdtemp(prefix="cn4n5-")
+    tmp = tempfile.mkdtemp(prefix="cn4-")
     try:
         # ---------- taller falso ----------
         base = os.path.join(tmp, "rig")
@@ -172,6 +172,8 @@ def main():
             f.write("FLAGS_BASE = -ngl 99 -c 16384 -b 2048 -ub 256 -lm none\n")
             f.write("SAMPLING = --temp 1.0 --top-k 20\n")
             f.write("FLAGS_GANADORAS = -ub 1024 -b 4096\n")
+        cfg_antes = open(os.path.join(base, "config.txt"),
+                         encoding="utf-8").read()
         with open(os.path.join(base, "campana-estado.json"), "w",
                   encoding="utf-8") as f:
             json.dump({"n3": {"cerrado": True},
@@ -257,7 +259,7 @@ def main():
         check("U18 anclas FALLA senala motivos", (not ok_b) and len(motivos) == 4)
 
         # ---------- unidad: estado corrupto -> evidencia ----------
-        podrido = os.path.join(base, "campana-n4-n5-estado.json")
+        podrido = os.path.join(base, "campana-n4-estado.json")
         with open(podrido, "w", encoding="utf-8") as f:
             f.write("{esto no es json")
         buf = io.StringIO()
@@ -286,16 +288,16 @@ def main():
         check("P04 sanity con anclas OK",
               est7.get("sanity", {}).get("ok") is True)
         check("P05 CSV de p7 existe",
-              os.path.exists(os.path.join(base, "campana-n4-n5-p7",
+              os.path.exists(os.path.join(base, "campana-n4-p7",
                                           "resultados.csv")))
-        candidatas_txt = open(os.path.join(base, "campana-n4-n5-p7-candidatas.txt"),
+        candidatas_txt = open(os.path.join(base, "campana-n4-p7-candidatas.txt"),
                               encoding="utf-8").read()
         check("P06 candidatas generadas con K-N1-PIN8 activa",
               "K-N1-PIN8" in candidatas_txt and "ANCLA" in candidatas_txt)
         inf7 = open(rutas["informe"], encoding="utf-8").read()
         check("P07 informe append-only con seccion P7", "P7 N2 dosis" in inf7)
         check("P07b informe lleva la linea - script: (delta D3)",
-              "- script: CAMPANA-N4-N5.py" in inf7)
+              "- script: CAMPANA-N4.py" in inf7)
 
         # p7 --previa: rc 0 y NINGUN server (rapido)
         a_prev = args_falsos(m, base, puerto_libre(), previa=True)
@@ -321,69 +323,22 @@ def main():
               (est8.get("frontera") or {}).get("nombre") == "BUENO")
         check("P12 p8 verde", est8["estado"] in ("GO", "REGISTRADO"))
         inf8 = open(rutas["informe"], encoding="utf-8").read()
-        check("P13 informe p8 con CLIFF y HUECO para P10 (deltas)",
+        check("P13 informe p8 con CLIFF y HUECO para el draft (deltas)",
               "P8 escalera VRAM" in inf8 and "CLIFF" in inf8
               and "HUECO" in inf8)
 
-        # ---------- P9: b11901 falso ----------
-        build = os.path.join(tmp, "llama.cpp", "b11901")
-        os.makedirs(build)
-        srv2 = os.path.join(build, "llama-server")
-        with open(srv2, "w", encoding="utf-8") as f:
-            f.write(SERVER_FALSO)
-        os.chmod(srv2, os.stat(srv2).st_mode | stat.S_IEXEC)
-        with open(os.path.join(build, "cudart64_12.dll"), "wb") as f:
-            f.write(b"dll de mentira")
-        a9 = args_falsos(m, base, puerto_libre(), build_dir=build)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc9 = m.paso9(a9, rutas, m.leer_estado(rutas["estado"]))
-        est9 = m.leer_estado(rutas["estado"])["pasos"]["9"]
-        check("P14 p9 corre con build falso (rc 0)", rc9 == 0)
-        check("P15 p9 verde (reuse vivo -> MOTIVO-CERRADO o GO)",
-              est9["estado"] in ("GO", "MOTIVO-CERRADO"))
-        check("P16 reuse VIVO detectado en el log", est9.get("reuse_vivo") is True)
-        check("P17 diff de defaults queda en el estado",
-              isinstance(est9.get("flags_nacidas"), list)
-              and "--expert-used-count" in est9["flags_nacidas"])
-        check("P18 dumps de --help escritos",
-              os.path.exists(os.path.join(base, "campana-n4-n5-p9",
-                                          "help-b11901.txt")))
-
-        # ---------- P10: duelo + receta final (AUTO auto-acepta) ----------
-        m.AUTO["on"] = True
-        m.AUTO["aceptadas"] = []
-        a10 = args_falsos(m, base, puerto_libre())
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc10 = m.paso10(a10, rutas, m.leer_estado(rutas["estado"]))
-        est10 = m.leer_estado(rutas["estado"])["pasos"]["10"]
-        check("P19 p10 corre (rc 0)", rc10 == 0)
-        check("P20 duelo con ganador y CERRADO",
-              est10["estado"] == "CERRADO" and est10.get("ganador"))
-        d = m.leer_estado(rutas["estado"])["duelo"]
-        check("P21 duelo registro con brazos A y B",
-              {f["nombre"] for f in d["brazos"]} >= {"A-NP2", "B-SPEC"})
-        check("P22 DUELO.md escrito",
-              os.path.exists(os.path.join(base, "campana-n4-n5-p10", "DUELO.md")))
-        backups = [x for x in os.listdir(base)
-                   if x.startswith("config.txt.bak-antes-receta-final")]
-        check("P23 receta final con backup", len(backups) == 1)
-        cfg_post = m.leer_config(rutas["config"])
-        check("P24 config re-leible y SAMPLING intacto (T8)",
-              cfg_post.get("SAMPLING") == "--temp 1.0 --top-k 20")
-        check("P25 informe con CIERRE DE CAMPAÑA",
-              "CIERRE DE CAMPAÑA" in open(rutas["informe"],
-                                          encoding="utf-8").read())
-        m.AUTO["on"] = False
+        # ---------- r68: la olla N4 NUNCA escribe config.txt (T8) ----------
+        check("P14 config.txt intacto tras P7+P8 (la receta final es del N5)",
+              open(rutas["config"], encoding="utf-8").read() == cfg_antes)
 
         # ---------- estado / plan / main ----------
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             m.mostrar_estado(rutas, m.leer_estado(rutas["estado"]))
         out = buf.getvalue()
-        check("M01 estado muestra la puerta y los 4 pasos",
-              "CAMPANA-N4-N5" in out and "P7" in out and "P10" in out)
+        check("M01 estado muestra la puerta y los 2 pasos del N4",
+              "CAMPANA-N4" in out and "P7" in out and "P8" in out
+              and "P9" not in out and "P10" not in out)
 
         # ---------- AUTO end-to-end con todo verde: retoma y salta ----------
         m.AUTO["on"] = True
@@ -394,9 +349,9 @@ def main():
             rc_auto = m.modo_auto(a_auto, rutas, m.leer_estado(rutas["estado"]))
         check("M02 AUTO con todo verde -> FIN DE TURNO (rc 0)", rc_auto == 0)
         est_final = m.leer_estado(rutas["estado"])
-        verdes = [n for n in ("7", "8", "9", "10")
+        verdes = [n for n in ("7", "8")
                   if est_final["pasos"].get(n, {}).get("estado") in m.VERDES]
-        check("M03 los 4 pasos quedaron verdes", len(verdes) == 4)
+        check("M03 los 2 pasos del N4 quedaron verdes", len(verdes) == 2)
         m.AUTO["on"] = False
 
         # ---------- AUTO con primera olla abierta -> detenido limpio ----------
