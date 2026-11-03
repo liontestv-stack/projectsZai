@@ -87,7 +87,7 @@ def find_paths() -> Dict[str, Optional[Path]]:
 
     # Mantener la misma precedencia que el lanzador: config central D:\\ZLia
     # primero; luego config.txt junto al ejecutor; finalmente copias del repo.
-    config_candidates: List[Path] = [Path(r"D:\\ZLia\\config.txt")]
+    config_candidates: List[Path] = [Path(r"D:\ZLia\config.txt")]
     flags_candidates: List[Path] = []
     config_candidates.append(script_dir / "config.txt")
     for root in unique_roots:
