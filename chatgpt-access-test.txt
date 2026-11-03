@@ -1,0 +1,7 @@
+Prueba de acceso de ChatGPT a GitHub
+
+Repositorio: liontestv-stack/projectsZai
+Archivo creado para verificar permisos de escritura.
+Fecha: 2026-11-03
+
+No contiene credenciales ni modifica archivos existentes.
