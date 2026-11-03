@@ -794,11 +794,18 @@ def main() -> int:
     sample_seconds = max(0, min(60, args.sample_seconds))
     sample_interval = max(1, min(10, args.sample_interval))
     if sample_seconds > 0:
-        summary["memory_counters"] = get_memory_counters(sample_seconds, sample_interval)
-        summary["gpu_samples"] = sample_gpu(sample_seconds, sample_interval)
+        # Tomar contadores de memoria y telemetria GPU en paralelo para que
+        # ambas series temporales describan aproximadamente la misma carga.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            memory_future = executor.submit(get_memory_counters, sample_seconds, sample_interval)
+            gpu_future = executor.submit(sample_gpu, sample_seconds, sample_interval)
+            summary["memory_counters"] = memory_future.result()
+            summary["gpu_samples"] = gpu_future.result()
     else:
         summary["memory_counters"] = {"ok": False, "reason": "muestreo desactivado"}
         summary["gpu_samples"] = []
+    summary["memory_after_sample"] = windows_memory_snapshot()
+    summary["processes_after_sample"] = get_process_snapshot()
 
     print("[7/8] Prueba de integridad de caché...")
     if args.probe_cache:
@@ -810,6 +817,7 @@ def main() -> int:
     json_dump(run_dir / "phase1_report.json", summary)
     text_dump(run_dir / "phase1_report.md", build_report(summary))
     json_dump(run_dir / "processes.json", summary.get("processes"))
+    json_dump(run_dir / "processes_after_sample.json", summary.get("processes_after_sample"))
     json_dump(run_dir / "server_endpoints.json", summary.get("server"))
     json_dump(run_dir / "memory_counters.json", summary.get("memory_counters"))
     json_dump(run_dir / "cache_probe.json", summary.get("cache_probe"))
