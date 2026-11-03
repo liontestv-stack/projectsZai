@@ -322,7 +322,7 @@ def powershell_json(script: str, timeout: int = 40) -> Dict[str, Any]:
 def redact_command_line(value: str) -> str:
     if not value:
         return value
-    value = re.sub(r"(?i)(--api-key(?:-file)?|--hf-token)\s+\S+", r"\1 [REDACTED]", value)
+    value = re.sub(r'(?i)(--api-key(?:-file)?|--hf-token)(?:\s+|=)("[^"]*"|\S+)', r"\1 [REDACTED]", value)
     value = re.sub(r"(?i)(HF_TOKEN=)\S+", r"\1[REDACTED]", value)
     return value
 
@@ -349,6 +349,10 @@ ConvertTo-Json -InputObject $items -Depth 4 -Compress
             if isinstance(item, dict) and item.get("CommandLine"):
                 item["CommandLine"] = redact_command_line(str(item["CommandLine"]))
     result["data"] = data
+    # stdout contiene la misma serializacion CIM; eliminarlo para no conservar
+    # una segunda copia de la linea de comandos sin redactar.
+    result.pop("stdout", None)
+    result.pop("stderr", None)
     return result
 
 
