@@ -41,7 +41,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-VERSION_SCRIPT = "1.0.0"
+VERSION_SCRIPT = "1.1.0"
 REPO_NAME = "liontestv-stack/projectsZai"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9931
