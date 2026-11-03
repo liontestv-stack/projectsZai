@@ -1,76 +1,110 @@
-# Fase 1 — Diagnóstico
+# Fase 1 — Diagnóstico de projectsZai
 
-Este directorio contiene un ejecutor único para recopilar la evidencia inicial antes de modificar el runtime o probar optimizaciones.
+## Un solo archivo para ejecutar desde D:\ZLia
 
-## Ejecutable
+El ejecutor es **FASE1-DIAGNOSTICO.py**. Es autónomo: no necesita otros .py, módulos propios, paquetes pip ni un archivo .bat.
 
-- FASE1-DIAGNOSTICO.py
+1. Descarga [FASE1-DIAGNOSTICO.py](https://raw.githubusercontent.com/liontestv-stack/projectsZai/main/investigacion/plan-optimizacion-35b/fase1/FASE1-DIAGNOSTICO.py).
+2. Guárdalo directamente en **D:\ZLia\FASE1-DIAGNOSTICO.py**.
+3. Haz doble clic en ese archivo.
+4. Al finalizar, lee la ruta del ZIP y pulsa ENTER para cerrar la ventana.
 
-Requisitos: Windows 10/11, Python 3.8 o superior y el runtime/modelo que se quiera inspeccionar. El script usa solo la biblioteca estándar de Python. No requiere pip ni paquetes externos.
+Requisitos: Windows 10/11 y Python 3.8+ instalado y asociado a archivos .py. Usa únicamente la biblioteca estándar de Python.
 
-## Ejecución recomendada
+## Dónde busca archivos
 
-1. Actualiza o clona el repositorio en el PC donde está instalado Qwen.
-2. Deja llama-server cargado pero sin conversaciones activas para obtener una captura real de memoria/VRAM.
-3. Abre una consola en esta carpeta.
-4. Ejecuta:
+- Configuración principal: D:\ZLia\config.txt.
+- Ejecutable: valor de RUTA_SERVER en config.txt.
+- Modelo GGUF: valor de RUTA_MODELO en config.txt.
+- Dump permitido de flags, si está disponible: D:\ZLia\InformacionCritica\configs\llama-flags-nuevo.txt o D:\ZLia\llama-flags-nuevo.txt.
 
-   py -3 FASE1-DIAGNOSTICO.py
+El dump de flags es una referencia opcional. Aunque no esté presente, el script puede comparar las flags configuradas con la ayuda del ejecutable local.
 
-La captura predeterminada dura aproximadamente 12 segundos para los contadores y la GPU. Puede tardar más por las consultas WMI/PowerShell y la lectura de ayuda del ejecutable.
+## Salida
 
-El script busca config.txt en InformacionCritica/configs/config.txt y en D:\ZLia\config.txt. Busca también el dump de flags del repositorio y sus ubicaciones habituales en D:\ZLia.
+Al ejecutarlo desde D:\ZLia, crea:
+
+D:\ZLia\salidas\FASE1_<fecha_hora>\
+- phase1_report.md
+- phase1_report.json
+- runtime_version.txt
+- runtime_help.txt
+- allowed_flags_dump.txt (si se encontró el dump)
+- processes.json y processes_after_sample.json
+- server_endpoints.json y slot_activity.json
+- memory_counters.json
+- gpu_samples.csv
+- cache_probe.json
+
+También crea **D:\ZLia\salidas\FASE1_<fecha_hora>.zip**. Ese ZIP es el paquete que debes compartir para el análisis.
 
 ## Qué hace en modo normal
 
-- Lee config.txt sin modificarlo.
-- Consulta llama-server --version y --help; estas opciones finalizan sin cargar el modelo.
-- Compara flags de la configuración con el dump permitido y con la ayuda del ejecutable instalado.
-- Lee solo la cabecera y los metadatos GGUF; no recorre tensores ni calcula un hash del modelo completo.
-- Inspecciona el proceso llama-server y su línea de comandos; redacta argumentos que parezcan claves/tokens.
-- Consulta por GET /health, /slots y /metrics en localhost. En /slots conserva solo estados/contadores, nunca prompts.
-- Captura memoria física, contadores de paginación y muestras NVIDIA SMI cuando están disponibles.
-- Crea un informe Markdown, un JSON estructurado, datos auxiliares y un ZIP.
+Es solo lectura:
+- Lee config.txt, pero no lo modifica.
+- Ejecuta llama-server --version y --help (no carga el modelo).
+- Compara flags configuradas con la ayuda de la build instalada y con el dump de flags, si existe.
+- Lee únicamente cabecera y metadatos del GGUF. No carga ni recorre los tensores.
+- Inspecciona procesos llama-server y redacta argumentos habituales de claves/tokens.
+- Consulta GET /health, /slots y /metrics en localhost. No conserva prompts ni texto de slots.
+- Captura RAM, memoria comprometida, contadores de paginación y VRAM/actividad GPU cuando el sistema lo permite.
+- Contrasta el número de slots y flags configuradas con el proceso actualmente abierto.
 
-No inicia, detiene ni reinicia el servidor. No cambia flags, configuración, slots ni propiedades.
+No inicia, detiene ni reinicia el servidor. No modifica flags, config.txt, propiedades ni slots.
+
+**Recomendación:** deja Qwen cargado y sin peticiones activas mientras haces la captura. Si hay una conversación generándose, los datos de VRAM y paginación reflejarán esa carga y se marcarán los estados de slots que la API permita detectar.
 
 ## Prueba activa opcional de aislamiento de caché
 
-Primero ejecuta el modo normal. Después, solo si el servidor está completamente desocupado y ningún cliente lo está usando, puedes ejecutar:
+El modo normal no envía prompts. Existe una prueba separada que manda canarios aleatorios en parejas concurrentes para buscar marcadores cruzados:
 
-   py -3 FASE1-DIAGNOSTICO.py --probe-cache
+```powershell
+cd D:\ZLia
+py -3 FASE1-DIAGNOSTICO.py --probe-cache
+```
 
-El script solicitará escribir exactamente:
+Solo ejecútala cuando:
+- llama-server esté saludable;
+- todos los slots estén libres;
+- hayas cerrado CHATEAR-QWEN y cualquier otro cliente;
+- nadie más esté usando el servidor.
 
-   PROBAR_CACHE_EN_SERVIDOR_QUIETO
+El programa exige escribir exactamente:
 
-La prueba envía dos solicitudes cortas y concurrentes por ronda, con identificadores aleatorios distintos. No la ejecutes si estás chateando, si hay otra persona conectada o si el servidor está atendiendo trabajo.
+```text
+PROBAR_CACHE_EN_SERVIDOR_QUIETO
+```
+
+Además, comprueba /slots antes de empezar y antes de cada pareja. Si no puede verificar que todos los slots están libres o detecta uno ocupado, se niega a enviar peticiones. Esta comprobación reduce el riesgo, pero no puede impedir que otra aplicación empiece a usar el servidor justo después de la comprobación.
 
 Interpretación:
-- POTENTIAL_CONTAMINATION: se detectó el identificador de una petición dentro de la respuesta de la otra. Es una señal positiva que requiere conservar el ZIP e investigar.
-- NO_CONTAMINATION_OBSERVED: no se vio contaminación en esas rondas; no demuestra que el problema sea imposible.
-- copy_misses: el modelo no copió exactamente su propio marcador; es inconcluso, no una prueba de contaminación.
+- POTENTIAL_CONTAMINATION: apareció el marcador privado de una petición en la respuesta de la otra; señal positiva que requiere investigación.
+- NO_CONTAMINATION_OBSERVED: no apareció un marcador ajeno y las respuestas permitieron evaluar el canario; no demuestra ausencia total del problema.
+- INCONCLUSIVE: el modelo no devolvió suficientes marcadores propios para evaluar el resultado.
+- INCONCLUSIVE_STOPPED_BUSY_OR_UNKNOWN: la prueba se detuvo por actividad o estado no verificable de slots.
 
-La prueba no es una auditoría formal del aislamiento de slots. No sustituye una reproducción determinista ni una revisión del código fuente de la build.
+La prueba es heurística, no una auditoría formal del aislamiento de slots.
 
-## Opciones
+## Parámetros opcionales desde consola
 
-- --sample-seconds 0: no toma muestras temporales de contadores/GPU.
-- --sample-seconds 30: extiende la captura (máximo 60 segundos).
-- --sample-interval 1: intenta muestrear cada segundo.
-- --host 127.0.0.1 --port 9931: cambia el destino local de los endpoints.
-- --output RUTA: guarda los resultados en otra carpeta.
-- --probe-rounds 5: hasta cinco rondas en la prueba activa.
+El doble clic ejecuta el modo seguro predeterminado. Para un muestreo más largo:
 
-## Archivos que debes compartir para el análisis
+```powershell
+py -3 FASE1-DIAGNOSTICO.py --sample-seconds 30 --sample-interval 1
+```
 
-Comparte el ZIP FASE1_<fecha>.zip generado junto al informe. Antes de compartirlo, revisa que las rutas locales y los argumentos de proceso no contengan información privada. Las claves/tokens comunes se redactan automáticamente, pero ningún filtro puede garantizar que detecte toda información sensible.
+Otras opciones: --sample-seconds 0, --host, --port, --output, --probe-rounds y --no-pause.
 
-## Limitaciones conocidas
+## Privacidad
 
-- La telemetría de memoria y procesos está implementada para Windows.
-- Los contadores Page Reads/sec y Pages Input/sec son globales del sistema, no exclusivos de llama-server.
-- En Windows localizado, Get-Counter puede necesitar nombres de contadores traducidos; el error quedará registrado.
-- La comparación de flags es textual y puede necesitar revisión si el formato de --help cambia.
-- La cabecera GGUF informa metadatos, pero no valida el contenido de todos los tensores.
-- El script no realiza benchmarks de tokens/s. Eso pertenece a las fases 2 y 3.
+Antes de compartir el ZIP, revisa las rutas locales y argumentos registrados. Se redactan API keys, HF tokens y opciones MCP habituales, pero ningún filtro puede garantizar detectar todo secreto posible. El script nunca guarda prompts del endpoint /slots.
+
+## Limitaciones
+
+- La telemetría detallada de procesos, RAM y contadores está pensada para Windows.
+- Page Reads/sec y Pages Input/sec son contadores globales del sistema, no exclusivos de llama-server.
+- Windows localizado puede usar nombres traducidos de contadores; el error queda registrado.
+- La comparación de flags es textual; puede haber falsos negativos por aliases o cambios de formato de --help.
+- GGUF se inspecciona solo hasta el final de los metadatos; no se valida el contenido de todos los tensores.
+- La prueba activa no altera la configuración del servidor y no realiza benchmarks de velocidad.
+- No se ha ejecutado contra tu PC desde GitHub; la primera ejecución real debe confirmar rutas, permisos, endpoints y disponibilidad de contadores.
