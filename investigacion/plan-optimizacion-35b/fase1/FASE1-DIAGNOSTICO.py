@@ -33,6 +33,7 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.request
 import zipfile
@@ -220,9 +221,11 @@ def parse_gguf_header(path: Path) -> Dict[str, Any]:
             return value if keep else None
         if kind == 9:
             elem_type, count = struct.unpack("<IQ", read_exact(handle, 12))
-            if count > 100_000_000:
+            if count > 10_000_000:
                 raise ValueError("array GGUF de tamano anomalo")
             if elem_type == 8:
+                if count > 1_000_000:
+                    raise ValueError("array de cadenas GGUF demasiado grande para inspeccion segura")
                 values = []
                 for _ in range(count):
                     item = read_string(handle)
@@ -233,8 +236,10 @@ def parse_gguf_header(path: Path) -> Dict[str, Any]:
             if size is None:
                 raise ValueError("tipo de array GGUF desconocido: %s" % elem_type)
             byte_count = count * size
-            if byte_count > 2 * 1024 * 1024 * 1024:
+            if byte_count > 512 * 1024 * 1024:
                 raise ValueError("array GGUF demasiado grande para saltar")
+            if handle.tell() + byte_count > path.stat().st_size:
+                raise EOFError("array GGUF excede el tamano del archivo")
             if keep and count <= 1000:
                 raw = read_exact(handle, byte_count)
                 if elem_type == 0:
@@ -258,6 +263,8 @@ def parse_gguf_header(path: Path) -> Dict[str, Any]:
             if read_exact(handle, 4) != b"GGUF":
                 raise ValueError("el archivo no empieza con GGUF")
             version, tensor_count, metadata_count = struct.unpack("<IQQ", read_exact(handle, 20))
+            if metadata_count > 200_000:
+                raise ValueError("cantidad de metadatos GGUF anomala")
             metadata: Dict[str, Any] = {}
             for _ in range(metadata_count):
                 key = read_string(handle)
@@ -322,8 +329,16 @@ def powershell_json(script: str, timeout: int = 40) -> Dict[str, Any]:
 def redact_command_line(value: str) -> str:
     if not value:
         return value
-    value = re.sub(r'(?i)(--api-key(?:-file)?|--hf-token)(?:\s+|=)("[^"]*"|\S+)', r"\1 [REDACTED]", value)
+    # Tokens explícitos y blobs de configuración MCP pueden incluir secretos.
+    sensitive_options = (
+        r"--api-key(?:-file)?", r"--hf-token", r"--mcp-servers-json",
+        r"--mcp-servers-config"
+    )
+    option_pattern = r"(?i)(" + "|".join(sensitive_options) + r")(?:\s+|=)(\"[^\"]*\"|\S+)"
+    value = re.sub(option_pattern, r"\1 [REDACTED]", value)
     value = re.sub(r"(?i)(HF_TOKEN=)\S+", r"\1[REDACTED]", value)
+    value = re.sub(r"(?i)(\b(?:token|api[_-]?key|password|secret)=)[^\s,;]+", r"\1[REDACTED]", value)
+    value = re.sub(r"(?i)Bearer\s+[^\s,;]+", "Bearer [REDACTED]", value)
     return value
 
 
@@ -399,8 +414,23 @@ def parse_nvidia_csv(line: str) -> List[str]:
     return [part.strip() for part in next(csv.reader([line]))]
 
 
+def find_nvidia_smi() -> Optional[str]:
+    found = shutil.which("nvidia-smi") or shutil.which("nvidia-smi.exe")
+    if found:
+        return found
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe",
+        Path(os.environ.get("ProgramW6432", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe",
+        Path(r"C:\Windows\System32\nvidia-smi.exe"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def get_gpu_snapshot() -> Dict[str, Any]:
-    nvsmi = shutil.which("nvidia-smi")
+    nvsmi = find_nvidia_smi()
     if not nvsmi:
         return {"available": False, "reason": "nvidia-smi no encontrado en PATH"}
     query = "name,driver_version,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,clocks.gr,clocks.mem,power.draw"
@@ -416,7 +446,7 @@ def get_gpu_snapshot() -> Dict[str, Any]:
 
 
 def sample_gpu(duration: int, interval: int) -> List[Dict[str, Any]]:
-    nvsmi = shutil.which("nvidia-smi")
+    nvsmi = find_nvidia_smi()
     if not nvsmi or duration <= 0:
         return []
     query = "name,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,clocks.gr,power.draw"
@@ -474,6 +504,55 @@ def sanitize_slots(data: Any) -> Any:
                 result[key] = sanitize_slots(value)
         return result
     return {"type": type(data).__name__}
+
+
+def collect_slot_records(data: Any) -> List[Dict[str, Any]]:
+    """Extrae objetos de slot sin persistir prompts ni texto del usuario."""
+    records: List[Dict[str, Any]] = []
+    if isinstance(data, list):
+        for item in data:
+            records.extend(collect_slot_records(item))
+    elif isinstance(data, dict):
+        slot_keys = {"is_processing", "state", "n_ctx", "n_past", "n_tokens"}
+        if "id" in data and slot_keys.intersection(data.keys()):
+            records.append(data)
+        else:
+            for key in ("slots", "data", "result"):
+                if key in data:
+                    records.extend(collect_slot_records(data[key]))
+    return records
+
+
+def inspect_slots_idle(host: str, port: int) -> Dict[str, Any]:
+    """Fail-closed: solo autoriza el canario si todos los slots se ven libres."""
+    response = http_get("http://%s:%d/slots" % (host, port))
+    if not response.get("ok"):
+        return {"known": False, "idle": False, "reason": "endpoint /slots no disponible",
+                "http": response}
+    records = collect_slot_records(response.get("data"))
+    if not records:
+        return {"known": False, "idle": False, "reason": "no se pudieron identificar slots"}
+    active_states = {"processing", "running", "busy", "generating", "pending"}
+    idle_states = {"idle", "empty", "available", "waiting"}
+    unknown = []
+    busy = []
+    for record in records:
+        slot_id = record.get("id", record.get("slot_id", "?"))
+        processing = record.get("is_processing")
+        state = str(record.get("state", "")).strip().lower()
+        if processing is True or processing == 1 or state in active_states:
+            busy.append(slot_id)
+        elif processing is False or processing == 0 or state in idle_states:
+            continue
+        else:
+            unknown.append(slot_id)
+    if busy:
+        return {"known": True, "idle": False, "reason": "hay slots ocupados",
+                "busy_slots": busy, "slot_count": len(records)}
+    if unknown:
+        return {"known": False, "idle": False, "reason": "estado de algunos slots no verificable",
+                "unknown_slots": unknown, "slot_count": len(records)}
+    return {"known": True, "idle": True, "slot_count": len(records)}
 
 
 def server_endpoints(host: str, port: int) -> Dict[str, Any]:
@@ -535,9 +614,20 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
     health = http_get(base + "/health")
     if not health.get("ok"):
         return {"executed": False, "reason": "servidor no saludable", "health": health}
+    preflight = inspect_slots_idle(host, port)
+    if not preflight.get("known") or not preflight.get("idle"):
+        return {"executed": False, "reason": "no se pudo garantizar que todos los slots estuvieran libres",
+                "slot_preflight": preflight}
     results = []
     contamination = []
     for round_index in range(1, rounds + 1):
+        # Revalidar antes de cada pareja, por si otra app comenzó a usar el server.
+        slot_state = inspect_slots_idle(host, port)
+        if not slot_state.get("known") or not slot_state.get("idle"):
+            return {"executed": True, "status": "INCONCLUSIVE_STOPPED_BUSY_OR_UNKNOWN",
+                    "rounds_completed": len(results), "results": results,
+                    "stop_reason": slot_state,
+                    "contamination_findings": contamination}
         nonce = hashlib.sha256((str(time.time_ns()) + str(round_index)).encode()).hexdigest()[:10].upper()
         a = "PZA_A_%s_%d" % (nonce, round_index)
         b = "PZA_B_%s_%d" % (nonce, round_index)
@@ -561,7 +651,15 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
             if response.get("ok") and own not in text_value:
                 pair.setdefault("copy_misses", []).append(own)
         results.append(pair)
-    status = "POTENTIAL_CONTAMINATION" if contamination else "NO_CONTAMINATION_OBSERVED"
+    response_count = sum(1 for pair in results for response in pair.get("responses", {}).values()
+                         if response.get("ok"))
+    copy_misses = sum(len(pair.get("copy_misses", [])) for pair in results)
+    if contamination:
+        status = "POTENTIAL_CONTAMINATION"
+    elif response_count == 0 or copy_misses >= response_count:
+        status = "INCONCLUSIVE"
+    else:
+        status = "NO_CONTAMINATION_OBSERVED"
     return {"executed": True, "status": status, "rounds": rounds,
             "contamination_findings": contamination, "results": results,
             "limitations": [
@@ -634,6 +732,7 @@ def main() -> int:
     parser.add_argument("--probe-cache", action="store_true", help="ejecuta prueba activa de canarios; requiere confirmacion exacta")
     parser.add_argument("--probe-rounds", type=int, default=3, help="rondas de prueba activa (1-5)")
     parser.add_argument("--output", default=None, help="carpeta de salida personalizada")
+    parser.add_argument("--no-pause", action="store_true", help="no esperar Enter al finalizar (uso desde consola/automatizacion)")
     args = parser.parse_args()
 
     print("=" * 72)
@@ -741,10 +840,10 @@ def main() -> int:
     cache_idle_state = ("disabled" if "--no-cache-idle-slots" in all_config_tokens
                         else "enabled" if "--cache-idle-slots" in all_config_tokens
                         else "default_enabled")
+    np_value = read_option_value(["-np", "--parallel"])
     kv_unified_state = ("enabled" if ("-kvu" in all_config_tokens or "--kv-unified" in all_config_tokens)
                         else "disabled" if ("-no-kvu" in all_config_tokens or "--no-kv-unified" in all_config_tokens)
-                        else "default_conditional_on_auto_parallel")
-    np_value = read_option_value(["-np", "--parallel"])
+                        else ("default_with_explicit_parallel" if np_value else "default_auto_parallel"))
     summary["cache_config_review"] = {
         "parallel_slots_configured": np_value,
         "cache_prompt": "disabled" if "--no-cache-prompt" in all_config_tokens else "enabled_or_default",
@@ -753,7 +852,7 @@ def main() -> int:
         "kv_unified": kv_unified_state,
         "needs_manual_isolation_review": bool(np_value and np_value.isdigit() and int(np_value) > 1
                                              and cache_idle_state != "disabled"
-                                             and kv_unified_state == "default_conditional_on_auto_parallel"),
+                                             and kv_unified_state != "enabled"),
         "note": "Revision de configuracion, no diagnostico de vulnerabilidad. Confirmar comportamiento con la build instalada y el test controlado.",
     }
     if flags_path:
@@ -846,8 +945,23 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    exit_code = 0
     try:
-        raise SystemExit(main())
+        exit_code = main()
     except KeyboardInterrupt:
         print("\nInterrumpido por el usuario. Los archivos ya guardados permanecen en salidas/.")
-        raise SystemExit(130)
+        exit_code = 130
+    except Exception as exc:
+        print("\nERROR NO CONTROLADO: %s" % repr(exc))
+        traceback.print_exc()
+        exit_code = 1
+    finally:
+        # Doble click en D:\\ZLia: mantener la consola abierta para leer
+        # el resumen y la ruta del ZIP. --no-pause conserva uso automatizable.
+        if os.name == "nt" and not ("--no-pause" in sys.argv):
+            try:
+                if sys.stdin and sys.stdin.isatty():
+                    input("\nPresiona ENTER para cerrar esta ventana...")
+            except (EOFError, OSError):
+                pass
+    sys.exit(exit_code)
