@@ -90,7 +90,7 @@ No avanzar a experimentos de velocidad hasta:
 - Obtener una captura de RAM/VRAM y contadores de paginación, o documentar por qué no están disponibles.
 - Revisar cualquier señal de contaminación de caché. Si aparece un marcador ajeno, la prioridad pasa a reproducir y aislar el problema, no a acelerar.
 
-**Ejecutor preparado:** investigacion/plan-optimizacion-35b/fase1/FASE1-DIAGNOSTICO.py. Es de solo lectura por defecto; la prueba activa requiere --probe-cache y una confirmación exacta.
+**Ejecutor preparado:** investigacion/plan-optimizacion-35b/fase1/FASE1-DIAGNOSTICO.py (v1.1.0). Para el PC, copiar únicamente este archivo como `D:\\ZLia\\FASE1-DIAGNOSTICO.py` y hacer doble clic; no requiere módulos ni archivos `.py` auxiliares. Lee primero `D:\\ZLia\\config.txt` y guarda resultados en `D:\\ZLia\\salidas\\`. Es de solo lectura por defecto; la prueba activa requiere `--probe-cache`, confirmación exacta y slots verificados como libres.
 
 ---
 
