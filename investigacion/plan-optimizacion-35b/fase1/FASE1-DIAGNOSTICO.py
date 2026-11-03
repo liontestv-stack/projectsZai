@@ -585,6 +585,7 @@ def build_report(summary: Dict[str, Any]) -> str:
         "- Modelo: %s" % summary.get("model", {}).get("path", "no configurado"),
         "- Proceso llama-server detectado: %s" % len((summary.get("processes", {}).get("data") or [])),
         "- API local saludable: %s" % endpoints.get("/health", {}).get("ok", False),
+        "- Revision manual de aislamiento de caché requerida: %s" % summary.get("cache_config_review", {}).get("needs_manual_isolation_review", "n/d"),
         "- RAM disponible: %s GiB" % memory.get("physical_available_gib", "n/d"),
         "- Carga RAM: %s%%" % memory.get("memory_load_percent", "n/d"),
         "- GPU: %s" % (gpu.get("rows", [{}])[0].get("name", "no detectada") if gpu.get("rows") else "no detectada"),
@@ -597,6 +598,8 @@ def build_report(summary: Dict[str, Any]) -> str:
         "Los contadores Page Reads/sec y Pages Input/sec son del sistema completo, no exclusivos de llama-server. Deben interpretarse junto con RAM disponible, memoria comprometida, proceso y actividad de disco.",
         "", "## Integridad de caché", "",
     ]
+    cache_review = summary.get("cache_config_review", {})
+    lines.append("- Politica observada en config: %s" % json.dumps(cache_review, ensure_ascii=False))
     probe = summary.get("cache_probe", {})
     if probe.get("executed"):
         lines.append("- Resultado heuristico: **%s**" % probe.get("status"))
@@ -723,6 +726,32 @@ def main() -> int:
         "K": config.get("FLAGS_BASE", "").split("-ctk", 1)[-1].split()[0] if "-ctk" in config.get("FLAGS_BASE", "") else None,
         "V": config.get("FLAGS_BASE", "").split("-ctv", 1)[-1].split()[0] if "-ctv" in config.get("FLAGS_BASE", "") else None,
     }
+    all_config_tokens = split_flags(" ".join(config.get(k, "") for k in ("FLAGS_BASE", "SAMPLING", "FLAGS_GANADORAS")))
+    def read_option_value(option_names):
+        for option in option_names:
+            if option in all_config_tokens:
+                idx = all_config_tokens.index(option)
+                if idx + 1 < len(all_config_tokens):
+                    return all_config_tokens[idx + 1]
+        return None
+    cache_idle_state = ("disabled" if "--no-cache-idle-slots" in all_config_tokens
+                        else "enabled" if "--cache-idle-slots" in all_config_tokens
+                        else "default_enabled")
+    kv_unified_state = ("enabled" if ("-kvu" in all_config_tokens or "--kv-unified" in all_config_tokens)
+                        else "disabled" if ("-no-kvu" in all_config_tokens or "--no-kv-unified" in all_config_tokens)
+                        else "default_conditional_on_auto_parallel")
+    np_value = read_option_value(["-np", "--parallel"])
+    summary["cache_config_review"] = {
+        "parallel_slots_configured": np_value,
+        "cache_prompt": "disabled" if "--no-cache-prompt" in all_config_tokens else "enabled_or_default",
+        "cache_ram_mib": read_option_value(["-cram", "--cache-ram"]) or "default_8192_mib",
+        "cache_idle_slots": cache_idle_state,
+        "kv_unified": kv_unified_state,
+        "needs_manual_isolation_review": bool(np_value and np_value.isdigit() and int(np_value) > 1
+                                             and cache_idle_state != "disabled"
+                                             and kv_unified_state == "default_conditional_on_auto_parallel"),
+        "note": "Revision de configuracion, no diagnostico de vulnerabilidad. Confirmar comportamiento con la build instalada y el test controlado.",
+    }
     if flags_path:
         text_dump(run_dir / "allowed_flags_dump.txt", dump_text)
 
@@ -739,6 +768,22 @@ def main() -> int:
 
     print("[5/8] Proceso llama-server y endpoints locales GET...")
     summary["processes"] = get_process_snapshot()
+    running_processes = (summary["processes"].get("data") or []) if isinstance(summary["processes"], dict) else []
+    runtime_active_flags = set()
+    for process in running_processes:
+        command_line = process.get("CommandLine", "") if isinstance(process, dict) else ""
+        try:
+            runtime_active_flags.update(flag_tokens(shlex.split(command_line, posix=False)))
+        except Exception:
+            runtime_active_flags.update(flag_tokens(command_line.split()))
+    summary["runtime"]["active_process_count"] = len(running_processes)
+    summary["runtime"]["active_process_flags"] = sorted(runtime_active_flags)
+    summary["runtime"]["configured_flags_missing_from_active_process"] = (
+        sorted(set(configured_unique) - runtime_active_flags) if running_processes else []
+    )
+    summary["runtime"]["active_flags_not_in_config"] = (
+        sorted(runtime_active_flags - set(configured_unique)) if running_processes else []
+    )
     summary["server"] = server_endpoints(args.host, port)
 
     print("[6/8] Contadores de paginacion y muestreo GPU...")
