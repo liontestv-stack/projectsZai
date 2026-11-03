@@ -577,7 +577,7 @@ def cache_canary_request(base: str, marker: str, timeout: int = 120) -> Dict[str
         ],
         "temperature": 0.1,
         "top_p": 1.0,
-        "max_tokens": 32,
+        "max_tokens": 96,
         "stream": False,
     }
     raw = json.dumps(body).encode("utf-8")
@@ -653,10 +653,11 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
         results.append(pair)
     response_count = sum(1 for pair in results for response in pair.get("responses", {}).values()
                          if response.get("ok"))
+    expected_responses = len(results) * 2
     copy_misses = sum(len(pair.get("copy_misses", [])) for pair in results)
     if contamination:
         status = "POTENTIAL_CONTAMINATION"
-    elif response_count == 0 or copy_misses >= response_count:
+    elif response_count != expected_responses or copy_misses > 0:
         status = "INCONCLUSIVE"
     else:
         status = "NO_CONTAMINATION_OBSERVED"
