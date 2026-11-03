@@ -2,7 +2,7 @@
 
 ## Un solo archivo para ejecutar desde D:\ZLia
 
-El ejecutor es **FASE1-DIAGNOSTICO.py**. Es autónomo: no necesita otros .py, módulos propios, paquetes pip ni un archivo .bat.
+El ejecutor es **FASE1-DIAGNOSTICO.py (v1.1.0)**. Es autónomo: no necesita otros .py, módulos propios, paquetes pip ni un archivo .bat.
 
 1. Descarga [FASE1-DIAGNOSTICO.py](https://raw.githubusercontent.com/liontestv-stack/projectsZai/main/investigacion/plan-optimizacion-35b/fase1/FASE1-DIAGNOSTICO.py).
 2. Guárdalo directamente en **D:\ZLia\FASE1-DIAGNOSTICO.py**.
