@@ -85,12 +85,14 @@ def find_paths() -> Dict[str, Optional[Path]]:
         if root not in unique_roots:
             unique_roots.append(root)
 
-    config_candidates: List[Path] = []
+    # Mantener la misma precedencia que el lanzador: config central D:\\ZLia
+    # primero; luego config.txt junto al ejecutor; finalmente copias del repo.
+    config_candidates: List[Path] = [Path(r"D:\\ZLia\\config.txt")]
     flags_candidates: List[Path] = []
+    config_candidates.append(script_dir / "config.txt")
     for root in unique_roots:
         config_candidates.extend([
             root / "InformacionCritica" / "configs" / "config.txt",
-            root / "config.txt",
             root / "configs" / "config.txt",
         ])
         flags_candidates.extend([
@@ -98,7 +100,6 @@ def find_paths() -> Dict[str, Optional[Path]]:
             root / "llama-flags-nuevo.txt",
             root / "configs" / "llama-flags-nuevo.txt",
         ])
-    config_candidates.append(Path(r"D:\ZLia\config.txt"))
     flags_candidates.extend([
         Path(r"D:\ZLia\llama-flags-nuevo.txt"),
         Path(r"D:\ZLia\InformacionCritica\configs\llama-flags-nuevo.txt"),
@@ -365,9 +366,9 @@ ConvertTo-Json -InputObject $items -Depth 4 -Compress
                 item["CommandLine"] = redact_command_line(str(item["CommandLine"]))
     result["data"] = data
     # stdout contiene la misma serializacion CIM; eliminarlo para no conservar
-    # una segunda copia de la linea de comandos sin redactar.
+    # una segunda copia de la linea de comandos sin redactar. Se conserva stderr
+    # porque puede explicar fallos de WMI/PowerShell.
     result.pop("stdout", None)
-    result.pop("stderr", None)
     return result
 
 
