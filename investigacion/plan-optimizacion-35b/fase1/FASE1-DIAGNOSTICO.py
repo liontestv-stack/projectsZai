@@ -49,7 +49,7 @@ MAX_CAPTURE_CHARS = 2_000_000
 
 
 def now_stamp() -> str:
-    return dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+    return dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
 
 
 def json_dump(path: Path, obj: Any) -> None:
@@ -392,7 +392,7 @@ $r = @(Get-CimInstance Win32_PhysicalMemory | ForEach-Object {
 def get_memory_counters(sample_seconds: int, interval: int) -> Dict[str, Any]:
     if os.name != "nt":
         return {"ok": False, "reason": "contadores Windows no disponibles"}
-    samples = max(2, min(60, int(sample_seconds / max(1, interval))))
+    samples = max(2, min(61, int(sample_seconds / max(1, interval)) + 1))
     ps = r'''
 $ErrorActionPreference = 'Stop'
 try {
@@ -853,17 +853,19 @@ def main() -> int:
     cache_idle_state = ("disabled" if "--no-cache-idle-slots" in all_config_tokens
                         else "enabled" if "--cache-idle-slots" in all_config_tokens
                         else "default_enabled")
+    cache_prompt_state = "disabled" if "--no-cache-prompt" in all_config_tokens else "enabled_or_default"
     np_value = read_option_value(["-np", "--parallel"])
     kv_unified_state = ("enabled" if ("-kvu" in all_config_tokens or "--kv-unified" in all_config_tokens)
                         else "disabled" if ("-no-kvu" in all_config_tokens or "--no-kv-unified" in all_config_tokens)
                         else ("default_with_explicit_parallel" if np_value else "default_auto_parallel"))
     summary["cache_config_review"] = {
         "parallel_slots_configured": np_value,
-        "cache_prompt": "disabled" if "--no-cache-prompt" in all_config_tokens else "enabled_or_default",
+        "cache_prompt": cache_prompt_state,
         "cache_ram_mib": read_option_value(["-cram", "--cache-ram"]) or "default_8192_mib",
         "cache_idle_slots": cache_idle_state,
         "kv_unified": kv_unified_state,
         "needs_manual_isolation_review": bool(np_value and np_value.isdigit() and int(np_value) > 1
+                                             and cache_prompt_state != "disabled"
                                              and cache_idle_state != "disabled"
                                              and kv_unified_state != "enabled"),
         "note": "Revision de configuracion, no diagnostico de vulnerabilidad. Confirmar comportamiento con la build instalada y el test controlado.",
