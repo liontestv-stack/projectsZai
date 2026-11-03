@@ -620,6 +620,7 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
                 "slot_preflight": preflight}
     results = []
     contamination = []
+    seen_markers: List[str] = []
     for round_index in range(1, rounds + 1):
         # Revalidar antes de cada pareja, por si otra app comenzó a usar el server.
         slot_state = inspect_slots_idle(host, port)
@@ -632,6 +633,7 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
         a = "PZA_A_%s_%d" % (nonce, round_index)
         b = "PZA_B_%s_%d" % (nonce, round_index)
         pair: Dict[str, Any] = {"round": round_index, "markers": [a, b]}
+        seen_markers.extend([a, b])
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {executor.submit(cache_canary_request, base, marker): marker for marker in (a, b)}
             responses = {}
@@ -642,14 +644,16 @@ def run_cache_probe(host: str, port: int, rounds: int) -> Dict[str, Any]:
                 except Exception as exc:
                     responses[marker] = {"ok": False, "error": repr(exc)}
         pair["responses"] = responses
-        for own, other in ((a, b), (b, a)):
+        for own in (a, b):
             response = responses.get(own, {})
             text_value = response.get("content", "") + " " + response.get("reasoning_content", "")
-            if response.get("ok") and other in text_value:
-                contamination.append({"round": round_index, "response_marker": own,
-                                      "foreign_marker": other, "finding": "foreign marker detected"})
-            if response.get("ok") and own not in text_value:
-                pair.setdefault("copy_misses", []).append(own)
+            if response.get("ok"):
+                for foreign in seen_markers:
+                    if foreign != own and foreign in text_value:
+                        contamination.append({"round": round_index, "response_marker": own,
+                                              "foreign_marker": foreign, "finding": "foreign marker detected"})
+                if own not in text_value:
+                    pair.setdefault("copy_misses", []).append(own)
         results.append(pair)
     response_count = sum(1 for pair in results for response in pair.get("responses", {}).values()
                          if response.get("ok"))
