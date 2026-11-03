@@ -699,9 +699,10 @@ def build_report(summary: Dict[str, Any]) -> str:
         "- GPU: %s" % (gpu.get("rows", [{}])[0].get("name", "no detectada") if gpu.get("rows") else "no detectada"),
         "", "## Auditoria de flags", "",
         "- Flags configuradas: %d" % len(flags.get("configured", [])),
-        "- Presentes en ayuda del ejecutable: %d" % len(flags.get("supported_by_runtime", [])),
-        "- No vistas en ayuda del ejecutable: %s" % (", ".join(flags.get("not_seen_in_runtime", [])) or "ninguna"),
-        "- No vistas en el dump permitido: %s" % (", ".join(flags.get("not_seen_in_dump", [])) or "ninguna"),
+        "- Ayuda runtime: %s (%d flags reconocidas)" % (flags.get("runtime_help_audit_status", "n/d"), len(flags.get("supported_by_runtime", []))),
+        "- No vistas en ayuda: %s" % ((", ".join(flags.get("not_seen_in_runtime", [])) or "ninguna") if flags.get("runtime_help_audit_status") == "available" else "no verificable"),
+        "- Dump permitido: %s (%d flags)" % (flags.get("dump_audit_status", "n/d"), flags.get("dump_flag_count", 0)),
+        "- No vistas en dump: %s" % ((", ".join(flags.get("not_seen_in_dump", [])) or "ninguna") if flags.get("dump_audit_status") == "available" else "no verificable"),
         "", "## Interpretacion de memoria", "",
         "Los contadores Page Reads/sec y Pages Input/sec son del sistema completo, no exclusivos de llama-server. Deben interpretarse junto con RAM disponible, memoria comprometida, proceso y actividad de disco.",
         "", "## Integridad de caché", "",
@@ -817,16 +818,22 @@ def main() -> int:
             summary["flag_audit"]["dump_error"] = repr(exc)
     dump_flags = flags_from_text(dump_text)
     runtime_flags = flags_from_text(runtime_help_text)
+    dump_available = bool(dump_text.strip())
+    runtime_help_available = bool(runtime_help_text.strip())
     summary["flag_audit"].update({
         "dump_path": str(flags_path) if flags_path else None,
+        "dump_audit_status": "available" if dump_available else "not_available",
+        "runtime_help_audit_status": "available" if runtime_help_available else "not_available",
         "configured_by_key": configured_by_key,
         "configured": configured_unique,
         "dump_flag_count": len(dump_flags),
         "runtime_help_flag_count": len(runtime_flags),
-        "not_seen_in_dump": sorted(set(configured_unique) - dump_flags) if dump_flags else configured_unique,
-        "supported_by_runtime": sorted(set(configured_unique) & runtime_flags) if runtime_flags else [],
-        "not_seen_in_runtime": sorted(set(configured_unique) - runtime_flags) if runtime_flags else configured_unique,
-        "note": "La comparacion de ayuda es una deteccion textual; revisar falsos negativos si la build agrupa alias o cambia formato.",
+        "not_seen_in_dump": sorted(set(configured_unique) - dump_flags) if dump_available else [],
+        "supported_by_runtime": sorted(set(configured_unique) & runtime_flags) if runtime_help_available else [],
+        "not_seen_in_runtime": sorted(set(configured_unique) - runtime_flags) if runtime_help_available else [],
+        "not_verifiable_against_dump": not dump_available,
+        "not_verifiable_against_runtime": not runtime_help_available,
+        "note": "La comparacion es textual; aliases o cambios de formato pueden producir falsos negativos. No disponible significa no verificable, no incompatible.",
     })
     summary["flag_audit"]["cmoe_and_ncmoe_both_configured"] = ("-cmoe" in configured_unique and "-ncmoe" in configured_unique)
     base_tokens = split_flags(config.get("FLAGS_BASE", ""))
