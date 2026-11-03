@@ -304,8 +304,8 @@ def windows_memory_snapshot() -> Dict[str, Any]:
         "memory_load_percent": int(state.dwMemoryLoad),
         "physical_total_gib": round(state.ullTotalPhys / gib, 3),
         "physical_available_gib": round(state.ullAvailPhys / gib, 3),
-        "pagefile_commit_limit_gib": round(state.ullTotalPageFile / gib, 3),
-        "pagefile_available_gib": round(state.ullAvailPageFile / gib, 3),
+        "commit_limit_gib": round(state.ullTotalPageFile / gib, 3),
+        "commit_available_gib": round(state.ullAvailPageFile / gib, 3),
         "virtual_total_gib": round(state.ullTotalVirtual / gib, 3),
         "virtual_available_gib": round(state.ullAvailVirtual / gib, 3),
     }
@@ -687,6 +687,7 @@ def build_report(summary: Dict[str, Any]) -> str:
         "- Modelo: %s" % summary.get("model", {}).get("path", "no configurado"),
         "- Proceso llama-server detectado: %s" % len((summary.get("processes", {}).get("data") or [])),
         "- API local saludable: %s" % endpoints.get("/health", {}).get("ok", False),
+        "- Estado de slots: %s" % json.dumps(summary.get("slot_activity", {}), ensure_ascii=False),
         "- Revision manual de aislamiento de caché requerida: %s" % summary.get("cache_config_review", {}).get("needs_manual_isolation_review", "n/d"),
         "- RAM disponible: %s GiB" % memory.get("physical_available_gib", "n/d"),
         "- Carga RAM: %s%%" % memory.get("memory_load_percent", "n/d"),
@@ -888,6 +889,7 @@ def main() -> int:
         sorted(runtime_active_flags - set(configured_unique)) if running_processes else []
     )
     summary["server"] = server_endpoints(args.host, port)
+    summary["slot_activity"] = inspect_slots_idle(args.host, port)
 
     print("[6/8] Contadores de paginacion y muestreo GPU...")
     sample_seconds = max(0, min(60, args.sample_seconds))
@@ -918,6 +920,7 @@ def main() -> int:
     json_dump(run_dir / "processes.json", summary.get("processes"))
     json_dump(run_dir / "processes_after_sample.json", summary.get("processes_after_sample"))
     json_dump(run_dir / "server_endpoints.json", summary.get("server"))
+    json_dump(run_dir / "slot_activity.json", summary.get("slot_activity"))
     json_dump(run_dir / "memory_counters.json", summary.get("memory_counters"))
     json_dump(run_dir / "cache_probe.json", summary.get("cache_probe"))
     if summary.get("gpu_samples"):
