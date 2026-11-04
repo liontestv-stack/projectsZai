@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-diagnostico-velocidad.py v1.1 — el mecanico: ¿va a los t/s que debe?
+diagnostico-velocidad.py v1.2 — el mecanico: ¿va a los t/s que debe?
 ====================================================================
 Pregunta del Director (ronda 25): "crea un nuevo .py que sea diagnostico,
 deberia ir a mas t/s con la receta completa".
@@ -29,7 +29,7 @@ en 4 estaciones, con la honestidad de la casa (nada inventado):
      21.53, ruido +/-0.5 SS8); k=4 = 24-30 (28.85 D-EXP4 / 29.13 D-EXP4-UB1K,
      una sola sesion medida -> banda generosa) con zona gris 22.0-24.0.
 
-QUE NO HACE: no lanza ni toca el server (solo lee /health, /props, /completion
+GUARDARRAILES v1.2: aborta si en Windows hay menos de 1.5 GiB RAM libre; exige /slots verificable y todos los slots libres antes de cada pasada.\n\nQUE NO HACE: no lanza ni toca el server (solo lee /health, /slots, /props, /completion
 y la linea de comandos del proceso), no cambia configs, no usa flags nuevas
 (cero auditoria de dump necesaria), no chatea.
 IMPORTANTE: NO chatear mientras mide (~1 min) — un turno del chat falsea todo.
@@ -301,6 +301,28 @@ def health_ok(puerto, timeout=4):
         return False
 
 
+RAM_MIN_FREE_GB = 1.5
+
+
+def slots_idle(puerto, timeout=4):
+    """Fail-closed: exige /slots verificable y todos los slots libres."""
+    try:
+        with urllib.request.urlopen(
+                "http://%s:%s/slots" % (HOST_DEF, puerto),
+                timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        if not isinstance(data, list) or not data:
+            return False, "/slots no devolvio una lista de slots valida"
+        for slot in data:
+            if not isinstance(slot, dict) or not isinstance(slot.get("is_processing"), bool):
+                return False, "/slots no expone is_processing verificable"
+            if slot["is_processing"]:
+                return False, "hay al menos un slot ocupado"
+        return True, "%d slots libres" % len(data)
+    except Exception as exc:
+        return False, "/slots no verificable: %s" % exc
+
+
 def diferenciar_receta(vivo, esperado):
     """Compara DOS listas de tokens como multiset (orden y repeticiones
     importan: -ub 256 ... -ub 1024 es distinto de solo uno). Devuelve
@@ -397,6 +419,10 @@ def pasadas_medicion(puerto, prompts, n_predict=256, seed=424242,
     decs = []
     detalle = []
     for i, p in enumerate(prompts):
+        idle, estado_slots = slots_idle(puerto)
+        if not idle:
+            raise RuntimeError("guardarrail de slots: %s; no se envia la pasada %d" %
+                               (estado_slots, i + 1))
         cuerpo = {
             "prompt": p, "n_predict": n_predict, "temperature": 0.0,
             "seed": seed, "cache_prompt": True, "ignore_eos": True,
@@ -696,7 +722,7 @@ def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     _blindar_salida()
     print(cia("=" * 70))
-    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.1"))
+    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.2"))
     print(cia("  ¿va a los t/s que debe con la receta completa?"))
     print(cia("=" * 70))
 
@@ -755,7 +781,17 @@ def main(argv=None):
               "Cierra y reabre.")
 
     print("\n[2/4] MEDICION ESTILO LABORATORIO (4 pasadas x 256 tok, temp 0)")
-    print("  NO chatees mientras mide (~1 min).")
+    print("  NO chatees mientras mide (~1 min); /slots se verifica antes de cada pasada.")
+    ram_pre = ram_status()
+    if os.name == "nt":
+        if ram_pre is None:
+            print(rojo("  ABORTADO: no pude verificar la RAM disponible; no se enviaron prompts."))
+            return 2
+        print("  RAM libre antes del test: %.2f GiB" % ram_pre["libre_gb"])
+        if ram_pre["libre_gb"] < RAM_MIN_FREE_GB:
+            print(rojo("  ABORTADO: se requieren al menos %.1f GiB libres para que la presión de memoria no invalide la medición." % RAM_MIN_FREE_GB))
+            print("  Cierra aplicaciones que consuman RAM y vuelve a ejecutar. No se cambió el servidor ni config.txt.")
+            return 2
     try:
         prefill, dec, detalle = pasadas_medicion(puerto, PROMPTS_MEDICION)
     except Exception as e:
@@ -805,8 +841,16 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _codigo = 0
     try:
-        sys.exit(main())
+        _codigo = main()
     except KeyboardInterrupt:
         print("\nInterrumpido por el usuario.")
-        sys.exit(130)
+        _codigo = 130
+    if os.name == "nt":
+        try:
+            if sys.stdin is not None and sys.stdin.isatty():
+                input("\nPulsa ENTER para cerrar...")
+        except Exception:
+            pass
+    raise SystemExit(_codigo)
