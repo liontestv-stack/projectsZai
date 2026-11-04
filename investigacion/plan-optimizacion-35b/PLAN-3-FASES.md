@@ -282,3 +282,9 @@ Cada candidato: baseline K=8, cambio OFAT, mínimo tres repeticiones, registro d
 
 ### Cambio de perfil desde el chat
 Se incorpora /expertos 4..8. Reinicia llama-server porque --override-kv qwen35moe.expert_used_count se aplica al cargar el modelo. El historial local, system prompt y presets permanecen en el cliente; la KV del servidor se reconstruye. El cambio solo procede con /health sano, /slots verificable y todos los slots libres, y una identificación inequívoca del proceso por ejecutable + modelo + puerto. No edita config.txt ni utiliza taskkill /F. K=8 sigue siendo el perfil principal.
+
+## Preparación de MTP y speculative decoding (04-nov-2026)
+
+Se abre investigación separada y no productiva para MTP nativo, DFlash, DSpark y alternativas. La prioridad de optimización sigue siendo K=8 y calidad intacta. La rama speculative será experimental NP1; producción NP2 permanece sin cambios. Hay riesgos upstream documentados de falta de activación en GTX 1650 SUPER/Turing, aceptación bajo multi-slot y divergencia del verify por lotes en qwen35moe. No ejecutar el tester MTP v1.1 con `--si` hasta preparar un instrumento aislado: hoy no fija NP1 de forma explícita, parte de sus medidas usa temp=0 y puede cerrar un servidor activo.
+
+Estudio y protocolo completo: [ESTUDIO-MTP-Y-ALTERNATIVAS.md](ESTUDIO-MTP-Y-ALTERNATIVAS.md).
