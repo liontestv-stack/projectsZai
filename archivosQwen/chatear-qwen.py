@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-chatear-qwen.py — Cliente de chat TOKEN A TOKEN con metricas para el rig
+chatear-qwen.py v1.2 — chat token a token + cambio administrado de expertos
 =========================================================================
 Habla con Qwen APEX-I-MINI servido por llama-server b11856 (9931).
 Companero del lanzador: ABRIR-QWEN.bat abre el server en una ventana;
@@ -38,7 +38,7 @@ HISTORIAL: multi-turno en memoria; la respuesta se guarda SIN thinking
 (limpio) — el server b11856 gestiona el preserve del trace (--reasoning-
 preserve ya ON en el build, dump verbatim). /reset borra la conversacion.
 
-COMANDOS: /ayuda /reset /sistema /preset /temp /modo /stats /guardar /salir
+COMANDOS: /ayuda /reset /sistema /preset /temp /expertos /modo /stats /guardar /salir
 REQUISITOS: Python 3.8+ solo stdlib. Server abierto en otra ventana.
 Rutas y puerto sobreescribibles: CLI --host/--port (default 127.0.0.1:9931).
 """
@@ -47,6 +47,8 @@ import argparse
 import ctypes
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -109,7 +111,8 @@ ESTADO = {
     "messages": [],       # [{role, content}] SIN thinking del assistant
     "system": None,       # system prompt opcional (/sistema)
     "preset": "think",
-    "modo": None,         # expertos del server abierto (/modo 8|4) — etiqueta
+    "modo": None,         # etiqueta para agrupar metricas
+    "expertos_actuales": None,  # K verificado en el proceso vivo
     "temp_override": None,
     "turnos": [],         # resumenes de metricas por turno (para /guardar)
     "acum": {"turnos": 0, "tokens": 0, "t_gen": 0.0, "mejor": 0.0},
@@ -160,6 +163,75 @@ def titulo(s):
             sys.stdout.flush()
     except Exception:
         pass                          # sin titulo: nunca un fallo
+
+
+# -------------------------- cambio de expertos -------------------------------
+def encontrar_lanzador():
+    """Busca el supervisor que administra el reinicio del server."""
+    candidatos = []
+    if os.environ.get("ZLIA_LAUNCHER"):
+        candidatos.append(os.environ["ZLIA_LAUNCHER"])
+    carpeta = os.path.dirname(os.path.abspath(__file__))
+    candidatos.append(os.path.join(carpeta, "abrir-qwen-apex.py"))
+    candidatos.append(LAUNCHER_OFICIAL)
+    candidatos.append(os.path.join(carpeta, "..", "scripts", "abrir-qwen-apex.py"))
+    vistos = set()
+    for ruta in candidatos:
+        if not ruta:
+            continue
+        ruta = os.path.abspath(ruta)
+        if ruta.lower() in vistos:
+            continue
+        vistos.add(ruta.lower())
+        if os.path.isfile(ruta):
+            return ruta
+    return None
+
+
+def consultar_expertos_actuales():
+    """Consulta al supervisor; si no puede certificar K, devuelve None."""
+    launcher = encontrar_lanzador()
+    if not launcher:
+        return None
+    try:
+        r = subprocess.run(
+            [sys.executable, launcher, "--estado-expertos"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30
+        )
+    except Exception:
+        return None
+    m = re.search(r"EXPERTOS_ACTUALES:\\s*(\\d+)", (r.stdout or ""))
+    return int(m.group(1)) if r.returncode == 0 and m else None
+
+
+def cambiar_expertos_desde_chat(k):
+    """Pide el reinicio al supervisor sin borrar historial, presets ni metricas."""
+    launcher = encontrar_lanzador()
+    if not launcher:
+        print(pintar(ROJ, "  No encuentro abrir-qwen-apex.py junto al chat ni en D:\\ZLia."))
+        return False
+    print(pintar(AMA, "  Cambio administrado: se conservara el historial del chat."))
+    try:
+        r = subprocess.run(
+            [sys.executable, launcher, "--expertos", str(k)],
+            timeout=1300
+        )
+    except subprocess.TimeoutExpired:
+        print(pintar(ROJ, "  El supervisor excedio el tiempo limite. Comprueba la ventana del servidor."))
+        return False
+    except Exception as exc:
+        print(pintar(ROJ, "  No pude ejecutar el supervisor: {}".format(exc)))
+        return False
+    if r.returncode == 0:
+        ESTADO["expertos_actuales"] = k
+        ESTADO["modo"] = k
+        return True
+    if r.returncode == 2:
+        print(pintar(AMA, "  Se restauro el perfil anterior; el cambio solicitado no se aplico."))
+    elif r.returncode == 3:
+        print(pintar(ROJ, "  No se pudo confirmar la restauracion. Abre ABRIR-QWEN.bat manualmente."))
+    return False
 
 
 # ------------------------------------------------------------------ servidor
@@ -421,8 +493,9 @@ AYUDA = """  /ayuda                    esta ayuda
   /preset think|coding|fast sampling oficial Qwen3.6 por request (§3.2)
   /temp N                   temperature ad-hoc (/temp solo: volver al preset;
                             NO greedy: temp 0 rechazado — card Qwen3.6)
-  /modo N                   etiqueta los turnos con los expertos del server
-                            abierto (/modo 4 tras abrir CHARLA; /modo solo: quita)
+  /expertos                 consulta K actual verificado
+  /expertos 4..8             reinicia el server con ese K; conserva el chat
+  /modo N                    etiqueta turnos manualmente para /stats y /guardar
   /stats                    metricas acumuladas (agrupa tok/s por /modo)
   /guardar                  transcript a chat-qwen-FECHA.md
   /salir                    cerrar"""
@@ -478,6 +551,32 @@ def ejecutar_comando(linea, host, port):
         ESTADO["temp_override"] = min(v, 2.0)
         print(pintar(VER, "  temperature {} (por request)".format(
             ESTADO["temp_override"])))
+    elif cmd == "/expertos":
+        if not resto:
+            k = ESTADO.get("expertos_actuales")
+            if k is None:
+                k = consultar_expertos_actuales()
+                ESTADO["expertos_actuales"] = k
+            if k is None:
+                print(pintar(AMA, "  expertos actuales: no verificables desde este cliente."))
+            else:
+                print(pintar(VER, "  expertos activos verificados: %d." % k))
+            print(pintar(CIA, "  uso: /expertos 4..8 (el server se reinicia; el historial local se conserva)."))
+        elif resto.isdigit() and 4 <= int(resto) <= 8:
+            k = int(resto)
+            actual = ESTADO.get("expertos_actuales")
+            if actual is None:
+                actual = consultar_expertos_actuales()
+            if actual == k:
+                ESTADO["expertos_actuales"] = k
+                ESTADO["modo"] = k
+                print(pintar(VER, "  Qwen ya esta usando %d expertos." % k))
+            elif cambiar_expertos_desde_chat(k):
+                print(pintar(VER, "  Perfil cambiado a %d expertos. Historial conservado; KV reconstruida." % k))
+            else:
+                print(pintar(ROJ, "  No se cambio el perfil. Revisa el mensaje del supervisor."))
+        else:
+            print(pintar(ROJ, "  /expertos N — usa un entero entre 4 y 8."))
     elif cmd == "/modo":
         if not resto:
             ESTADO["modo"] = None
@@ -591,6 +690,9 @@ def main():
         return 1
 
     ESTADO["preset"] = args.preset
+    ESTADO["expertos_actuales"] = consultar_expertos_actuales()
+    if ESTADO["expertos_actuales"] is not None:
+        ESTADO["modo"] = ESTADO["expertos_actuales"]
     print("=" * 70)
     print(pintar(CIA, "  CHAT QWEN APEX-I-MINI  ·  server b11856 en {}".format(
         url_base(args.host, args.port))))
