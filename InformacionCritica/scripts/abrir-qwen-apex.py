@@ -144,7 +144,7 @@ def _lista_procesos_server(cfg):
         raise RuntimeError("el cambio administrado de expertos requiere Windows")
     nombre = ntpath.basename(cfg["RUTA_SERVER"]).replace("'", "''")
     ps = (
-        "$items = @(Get-CimInstance Win32_Process -Filter \\"Name='%s'\\" | "
+        "$items = @(Get-CimInstance Win32_Process -Filter \"Name='%s'\" | "
         "Select-Object @{Name='pid';Expression={$_.ProcessId}},"
         "@{Name='exe';Expression={$_.ExecutablePath}},"
         "@{Name='cmd';Expression={$_.CommandLine}}); "
@@ -225,7 +225,7 @@ def _slots_libres(cfg):
 
 
 def _pid_existe(pid):
-    ps = "Get-CimInstance Win32_Process -Filter \\"ProcessId=%d\\" | Select-Object -ExpandProperty ProcessId" % int(pid)
+    ps = "Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" | Select-Object -ExpandProperty ProcessId" % int(pid)
     r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                        capture_output=True, text=True, timeout=15)
     if r.returncode != 0:
