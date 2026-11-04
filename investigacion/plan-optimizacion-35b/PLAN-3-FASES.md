@@ -241,18 +241,18 @@ Se recibieron dos paquetes del equipo local:
 
 ## Entrada a Fase 2 — línea base controlada
 
-Primer ejecutor: `InformacionCritica/scripts/diagnostico-velocidad.py` v1.2.
+Primer ejecutor: `InformacionCritica/scripts/diagnostico-velocidad.py` v1.3.
 
 - Mantiene el servidor vivo; no reinicia procesos ni cambia `config.txt`.
 - Certifica la receta activa a partir de la línea de comandos del proceso.
 - Envía cuatro solicitudes secuenciales al endpoint `/completion`, 256 tokens cada una, temperatura 0 y seed fija; registra prefill de la primera y media decode de las pasadas 2–4.
 - Comprueba `/slots` antes de cada solicitud y aborta si no puede verificar que todos estén libres.
-- En Windows exige al menos 1,5 GiB de RAM física disponible antes de enviar prompts.
+- En Windows advierte si hay menos de 1,5 GiB de RAM física, pero no bloquea la captura: se registra la condición y se mide el comportamiento real bajo esa presión.
 - Instrucción operativa: cerrar aplicaciones de alto consumo, mantener Qwen cargado, dejar el chat sin actividad durante la medición y no iniciar otra aplicación cliente.
 
 Salida: `RUTA_LOGS\diagnostico-AAAAMMDD-HHMMSS.md`, normalmente bajo `D:\ZLia\faseD-logs\\`.
 
-La captura actual (0,453 GiB libres) no pasa el umbral. La siguiente medición solo será válida cuando el preflight confirme ≥1,5 GiB y ambos slots estén libres.
+La captura actual (0,453 GiB libres) activa una advertencia, no un bloqueo. La medición podrá ejecutarse con poca RAM si ambos slots están verificablemente libres; el resultado debe interpretarse como rendimiento bajo presión de memoria y no como techo limpio del equipo.
 
 ## Reutilización de evidencia histórica
 
