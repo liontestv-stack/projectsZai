@@ -77,3 +77,8 @@ Notas de la casa
 - Reversible: quitar "-np 2" de la linea FLAGS_BASE de config.txt.
 - El kit NO se edita desde aqui: es una copia a mano; los vivos estan en
   InformacionCritica\ (scripts y bat) y el backup en backup\.
+
+
+Cambio de perfil desde el chat (04-nov-2026)
+-------------------------------------------
+Con el servidor y chat abiertos, usa /expertos para consultar el valor actual, o /expertos 4 hasta /expertos 8 para cambiarlo. El lanzador reinicia el servidor de forma controlada solo cuando todos los slots están libres y puede identificar el proceso exacto. El historial local se conserva; la caché KV se reconstruye. K=8 sigue siendo el perfil principal; reducir K es una opción secundaria que puede reducir capacidad/calidad.
