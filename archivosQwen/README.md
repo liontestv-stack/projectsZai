@@ -23,3 +23,7 @@ Mas detalle de uso (huellas, orden de busqueda del config, pasos en el
 rig): ver `LEEME.txt`, el hermanito de este archivo.
 
 Fecha: 2026-10-31 · Ronda 55-b · pedido del Director.
+
+
+## Cambio de perfil desde el chat
+Usa /expertos para consultar K o /expertos 4 hasta /expertos 8 para cambiarlo. El server reinicia; el historial del cliente se conserva y la KV se reconstruye. Requiere slots libres y proceso verificable. K=8 es la referencia principal; K menor es un perfil secundario con posible coste de calidad.
