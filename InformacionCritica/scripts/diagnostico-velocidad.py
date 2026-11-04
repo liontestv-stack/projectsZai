@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-diagnostico-velocidad.py v1.2 — el mecanico: ¿va a los t/s que debe?
+diagnostico-velocidad.py v1.3 — el mecanico: ¿va a los t/s que debe?
 ====================================================================
 Pregunta del Director (ronda 25): "crea un nuevo .py que sea diagnostico,
 deberia ir a mas t/s con la receta completa".
@@ -29,7 +29,7 @@ en 4 estaciones, con la honestidad de la casa (nada inventado):
      21.53, ruido +/-0.5 SS8); k=4 = 24-30 (28.85 D-EXP4 / 29.13 D-EXP4-UB1K,
      una sola sesion medida -> banda generosa) con zona gris 22.0-24.0.
 
-GUARDARRAILES v1.2: aborta si en Windows hay menos de 1.5 GiB RAM libre; exige /slots verificable y todos los slots libres antes de cada pasada.
+GUARDARRAILES v1.3: RAM baja genera advertencia y no bloquea la captura; exige /slots verificable y todos los slots libres antes de cada pasada.
 
 QUE NO HACE: no lanza ni toca el server (solo lee /health, /slots, /props, /completion
 y la linea de comandos del proceso), no cambia configs, no usa flags nuevas
@@ -724,7 +724,7 @@ def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     _blindar_salida()
     print(cia("=" * 70))
-    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.2"))
+    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.3"))
     print(cia("  ¿va a los t/s que debe con la receta completa?"))
     print(cia("=" * 70))
 
@@ -787,13 +787,12 @@ def main(argv=None):
     ram_pre = ram_status()
     if os.name == "nt":
         if ram_pre is None:
-            print(rojo("  ABORTADO: no pude verificar la RAM disponible; no se enviaron prompts."))
-            return 2
-        print("  RAM libre antes del test: %.2f GiB" % ram_pre["libre_gb"])
-        if ram_pre["libre_gb"] < RAM_MIN_FREE_GB:
-            print(rojo("  ABORTADO: se requieren al menos %.1f GiB libres para que la presión de memoria no invalide la medición." % RAM_MIN_FREE_GB))
-            print("  Cierra aplicaciones que consuman RAM y vuelve a ejecutar. No se cambió el servidor ni config.txt.")
-            return 2
+            print(ambar("  AVISO: no pude verificar la RAM disponible; la medicion seguira, pero no podre evaluar presion de memoria."))
+        else:
+            print("  RAM libre antes del test: %.2f GiB" % ram_pre["libre_gb"])
+            if ram_pre["libre_gb"] < RAM_MIN_FREE_GB:
+                print(ambar("  ADVERTENCIA: hay menos de %.1f GiB libres. El benchmark puede provocar paginacion y sus t/s podrian ser inferiores a lo habitual." % RAM_MIN_FREE_GB))
+                print(ambar("  Continuo porque esta captura es precisamente para observar el comportamiento real bajo esta condicion."))
     try:
         prefill, dec, detalle = pasadas_medicion(puerto, PROMPTS_MEDICION)
     except Exception as e:
