@@ -2,7 +2,7 @@
 
 ## Un solo archivo para ejecutar desde D:\ZLia
 
-El ejecutor es **FASE1-DIAGNOSTICO.py (v1.1.0)**. Es autónomo: no necesita otros .py, módulos propios, paquetes pip ni un archivo .bat.
+El ejecutor es **FASE1-DIAGNOSTICO.py (v1.1.1)**. Es autónomo: no necesita otros .py, módulos propios, paquetes pip ni un archivo .bat.
 
 1. Descarga [FASE1-DIAGNOSTICO.py](https://raw.githubusercontent.com/liontestv-stack/projectsZai/main/investigacion/plan-optimizacion-35b/fase1/FASE1-DIAGNOSTICO.py).
 2. Guárdalo directamente en **D:\ZLia\FASE1-DIAGNOSTICO.py**.
@@ -19,6 +19,8 @@ Requisitos: Windows 10/11 y Python 3.8+ instalado y asociado a archivos .py. Usa
 - Dump permitido de flags, si está disponible: D:\ZLia\InformacionCritica\configs\llama-flags-nuevo.txt o D:\ZLia\llama-flags-nuevo.txt.
 
 El dump de flags es una referencia opcional. Aunque no esté presente, el script puede comparar las flags configuradas con la ayuda del ejecutable local.
+
+El lector detecta UTF-8 y UTF-16 (incluido el dump UTF-16 de la build b11856), evitando falsos resultados de cero flags por codificación.
 
 ## Salida
 
