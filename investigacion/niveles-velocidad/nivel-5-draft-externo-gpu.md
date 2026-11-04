@@ -245,7 +245,7 @@ Auditoría del Director aplicada al nivel con mayor superficie especulativa: re-
 
 ### 17.3 Estado [M]/[T] y dosis
 
-- **[M dump b11856]**: cero dflash/dspark/eagle3/mtp en el dump; enum sin draft — RE-CONFIRMADO como el gate de toda la fase S/E (la card williamliao exige PR #26275 para DSpark: b11856 no basta ni para sidecars). RUTA 0 a b11901 sigue siendo el blanco.
+- **[M dump b11856]**: el dump sí enumera `draft-mtp`, `draft-dflash`, `draft-dspark` y `draft-eagle3`; el código del tag registra esos tipos. Reconocimiento del tipo no prueba activación ni fidelidad. PR #26275 para DSpark ya estaba fusionado antes de b11856; verificar localmente el formato GGUF y el flujo real del target. Véase la corrección de auditoría del 04-nov-2026.
 - **[T] techo ×1.8-2.5 con p 0.7-0.8**: la triple réplica de la forma n2>n3>n4 (v4, MXFP4, 27B-test) y el acc 76-80% externo sitúan el rango en pie; el dato 4GB/Turing sigue [N/D] (será dato propio tras RUTA 0).
 - **Dosis fase S v6 SIN CAMBIOS**: S1 = MTP n2 → S2 = DSpark Q4_K_M (307 MB, SHA256 `a3542c05…`) n2/n3 (+A/B conf-min 0.5-0.7) → S2b = DFlash Q8_0 n2 → S3 = EAGLE3 fallback. Regla de oro intacta: solo GGUF sidecar oficiales, n-max ∈ {2,3}, mediana de 3, spot-check ES.
 
