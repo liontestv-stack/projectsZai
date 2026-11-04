@@ -29,7 +29,9 @@ en 4 estaciones, con la honestidad de la casa (nada inventado):
      21.53, ruido +/-0.5 SS8); k=4 = 24-30 (28.85 D-EXP4 / 29.13 D-EXP4-UB1K,
      una sola sesion medida -> banda generosa) con zona gris 22.0-24.0.
 
-GUARDARRAILES v1.2: aborta si en Windows hay menos de 1.5 GiB RAM libre; exige /slots verificable y todos los slots libres antes de cada pasada.\n\nQUE NO HACE: no lanza ni toca el server (solo lee /health, /slots, /props, /completion
+GUARDARRAILES v1.2: aborta si en Windows hay menos de 1.5 GiB RAM libre; exige /slots verificable y todos los slots libres antes de cada pasada.
+
+QUE NO HACE: no lanza ni toca el server (solo lee /health, /slots, /props, /completion
 y la linea de comandos del proceso), no cambia configs, no usa flags nuevas
 (cero auditoria de dump necesaria), no chatea.
 IMPORTANTE: NO chatear mientras mide (~1 min) — un turno del chat falsea todo.
