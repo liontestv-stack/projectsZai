@@ -63,10 +63,10 @@ def text_dump(path: Path, value: str) -> None:
 def read_text_auto(path: Path) -> str:
     """Lee dumps UTF-8 o UTF-16 (LE/BE), incluso si falta el BOM."""
     raw = path.read_bytes()
-    if raw.startswith((b"\\xff\\xfe", b"\\xfe\\xff")):
+    if raw.startswith((b"\xff\xfe", b"\\xfe\\xff")):
         return raw.decode("utf-16", errors="replace")
     sample = raw[:512]
-    if sample and sample.count(b"\\x00") > max(2, len(sample) // 8):
+    if sample and sample.count(b"\x00") > max(2, len(sample) // 8):
         return raw.decode("utf-16-le", errors="replace")
     return raw.decode("utf-8-sig", errors="replace")
 
