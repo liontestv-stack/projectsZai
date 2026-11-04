@@ -250,3 +250,19 @@ Auditoría del Director aplicada al nivel con mayor superficie especulativa: re-
 - **Dosis fase S v6 SIN CAMBIOS**: S1 = MTP n2 → S2 = DSpark Q4_K_M (307 MB, SHA256 `a3542c05…`) n2/n3 (+A/B conf-min 0.5-0.7) → S2b = DFlash Q8_0 n2 → S3 = EAGLE3 fallback. Regla de oro intacta: solo GGUF sidecar oficiales, n-max ∈ {2,3}, mediana de 3, spot-check ES.
 
 *Referencias de esta auditoría: HF williamliao/Qwen3.6-35B-A3B-DSPARK-GGUF (card completa) y Koopah NVFP4-DSPARK-v2; docs/speculative.md master; github discusión #26230, PR #26275 (referenciado en card), issue #24541, #27210; arXiv 2608.20530 (LiLiCorr); notas oficiales v0.7.0; jetson-ai-lab speculative-decoding; thc1006/qwen3.6-speculative-decoding-rtx3090 + unsloth discussion #14; reddit 1uyg3za (27B all-methods), 1t82zxv, 1v4gzc4, 1wigxje; comentario público benchmark MXFP4 24GB; mdda.net; EntityDeletr card.*
+
+
+---
+
+## Corrección de auditoría — 4 de noviembre de 2026
+
+La frase anterior de §17.3 que decía que b11856 tenía “cero dflash/dspark/eagle3/mtp en el dump” es incorrecta. El dump `InformacionCritica/configs/llama-flags-nuevo.txt` enumera dichos tipos en `--spec-type`, y el código upstream del tag b11856 los registra en `common/speculative.cpp`. El código `src/models/qwen35moe.cpp` contiene además el graph MTP de Qwen35MoE. Por tanto, b11856 reconoce las familias de tipos y contiene implementación MTP; esto no garantiza que el draft se active en una GPU concreta ni que el resultado sea correcto/rápido.
+
+También debe matizarse la nota de DSpark: PR #26275, que añade lectura de checkpoints DSpark en formato Speculators, se fusionó el 17-ago-2026, antes del tag b11856. Las fichas de HF que aún dicen “support being added” pueden ser anteriores a esa integración. La verificación definitiva sigue siendo el cargador local y el log de la build exacta.
+
+Riesgos nuevos descubiertos:
+- llama.cpp #24670: MTP inicializa pero no se activa en un caso GTX 1650 SUPER/Turing + Qwen3.6 híbrido.
+- llama.cpp #31472: divergencia del verify por lotes reportada en qwen35moe con DFlash/DSpark y otro mecanismo MTP; issue abierto al 04-nov-2026.
+- llama.cpp #27572: problema de aceptación MTP bajo `-np N` y múltiples ubatches reportado en otra plataforma/build.
+
+No se borran las referencias históricas; este bloque corrige su interpretación. El protocolo actualizado vive en `investigacion/plan-optimizacion-35b/ESTUDIO-MTP-Y-ALTERNATIVAS.md`.
