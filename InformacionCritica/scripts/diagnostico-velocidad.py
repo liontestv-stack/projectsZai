@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-diagnostico-velocidad.py v1.3 — el mecanico: ¿va a los t/s que debe?
+diagnostico-velocidad.py v1.4 — el mecanico: ¿va a los t/s que debe?
 ====================================================================
 Pregunta del Director (ronda 25): "crea un nuevo .py que sea diagnostico,
 deberia ir a mas t/s con la receta completa".
@@ -29,7 +29,7 @@ en 4 estaciones, con la honestidad de la casa (nada inventado):
      21.53, ruido +/-0.5 SS8); k=4 = 24-30 (28.85 D-EXP4 / 29.13 D-EXP4-UB1K,
      una sola sesion medida -> banda generosa) con zona gris 22.0-24.0.
 
-GUARDARRAILES v1.3: RAM baja genera advertencia y no bloquea la captura; exige /slots verificable y todos los slots libres antes de cada pasada.
+GUARDARRAILES v1.4: no existe umbral ni bloqueo por RAM; solo informa la memoria observada. Exige /slots verificable y todos los slots libres antes de cada pasada.
 
 QUE NO HACE: no lanza ni toca el server (solo lee /health, /slots, /props, /completion
 y la linea de comandos del proceso), no cambia configs, no usa flags nuevas
@@ -303,9 +303,6 @@ def health_ok(puerto, timeout=4):
         return False
 
 
-RAM_MIN_FREE_GB = 1.5
-
-
 def slots_idle(puerto, timeout=4):
     """Fail-closed: exige /slots verificable y todos los slots libres."""
     try:
@@ -535,10 +532,9 @@ def culpritos(ram, gpu, plan):
     Devuelve lista de strings (vacía = sin culpables claros)."""
     out = []
     if ram:
-        if ram["libre_gb"] < 1.5 or ram["carga_pct"] >= 95:
-            out.append("RAM al limite: %.2f GB libres (%d%% en uso) — "
-                       "riesgo pagefile con un modelo de 14.27 GB"
-                       % (ram["libre_gb"], ram["carga_pct"]))
+        out.append("RAM observada: %.2f GB libres de %.2f GB (%d%% de carga); "
+                   "interpretar junto con los t/s y la actividad del sistema."
+                   % (ram["libre_gb"], ram["total_gb"], ram["carga_pct"]))
     if gpu:
         if gpu.get("temp_c") is not None and gpu["temp_c"] >= 80:
             out.append("GPU caliente: %d C (>=80: el reloj ya baja)"
@@ -724,7 +720,7 @@ def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     _blindar_salida()
     print(cia("=" * 70))
-    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.3"))
+    print(cia("  DIAGNOSTICO DE VELOCIDAD — Qwen APEX-I-MINI (b11856) v1.4"))
     print(cia("  ¿va a los t/s que debe con la receta completa?"))
     print(cia("=" * 70))
 
@@ -787,12 +783,9 @@ def main(argv=None):
     ram_pre = ram_status()
     if os.name == "nt":
         if ram_pre is None:
-            print(ambar("  AVISO: no pude verificar la RAM disponible; la medicion seguira, pero no podre evaluar presion de memoria."))
+            print(ambar("  RAM: no disponible en esta captura; se continua sin umbral."))
         else:
-            print("  RAM libre antes del test: %.2f GiB" % ram_pre["libre_gb"])
-            if ram_pre["libre_gb"] < RAM_MIN_FREE_GB:
-                print(ambar("  ADVERTENCIA: hay menos de %.1f GiB libres. El benchmark puede provocar paginacion y sus t/s podrian ser inferiores a lo habitual." % RAM_MIN_FREE_GB))
-                print(ambar("  Continuo porque esta captura es precisamente para observar el comportamiento real bajo esta condicion."))
+            print("  RAM libre antes del test: %.2f GiB (dato informativo; no hay minimo exigido)." % ram_pre["libre_gb"])
     try:
         prefill, dec, detalle = pasadas_medicion(puerto, PROMPTS_MEDICION)
     except Exception as e:
