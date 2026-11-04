@@ -1,6 +1,6 @@
 # Plan maestro — Optimización de Qwen 3.6-35B-A3B en hardware limitado
 
-**Estado:** plan de investigación aprobado para ejecución local; todavía no hay resultados nuevos de esta campaña.  
+**Estado:** Fase 1 ejecutada con salvedades documentadas; Fase 2 preparada y pendiente de capturar la línea base controlada del perfil NP2 actual.  
 **Fecha de creación:** 2026-11-03  
 **Hardware de referencia:** Intel Core i3-10100F (4C/8T), 16 GB DDR4-2666, NVIDIA GTX 1650 4 GB, SSD 500 GB.  
 **Runtime de referencia documentado:** llama.cpp b11856, CUDA 12.4, puerto 9931.  
@@ -205,3 +205,62 @@ Orden de interés para este hardware, no garantía de mejora:
 - Informe del barrido: InformacionCritica/docs/informe-velocidad-sweep.md
 - Script de diagnóstico: InformacionCritica/scripts/diagnostico-velocidad.py
 - Plan de Niveles: investigacion/niveles-velocidad/
+
+
+---
+
+# Bitácora de ejecución — 3 de noviembre de 2026
+
+## Cierre de Fase 1
+
+Se recibieron dos paquetes del equipo local:
+
+1. Primera captura: el servidor no estaba iniciado. Sirvió para verificar rutas, modelo, metadatos GGUF y build sin cargar el modelo.
+2. Segunda captura: el servidor estaba cargado y saludable. Esta es la línea base de estado del sistema, no todavía una medición de velocidad.
+
+### Estado real observado en la segunda captura
+
+- Windows 11, Python 3.14.4.
+- llama.cpp: build 11856, commit 3642238cc.
+- Modelo: GGUF Qwen 3.6-35B-A3B APEX-I-MINI, 14.273.277.376 bytes; arquitectura GGUF `qwen35moe`, 41 bloques, 256 expertos y 8 expertos usados por token.
+- Proceso vivo: `D:\\llama.cpp\\llama-server.exe`, PID 15036.
+- Perfil en ejecución: `-ngl 99 -cmoe -c 16384 -np 2 -ctk q8_0 -ctv q8_0 -t 4 -lm none`, con `-ub 1024 -b 4096` al final (last-wins).
+- `/health`: HTTP 200. `/slots`: dos slots de 8.192 tokens, ambos libres.
+- `/metrics`: HTTP 501 (endpoint no implementado en esta build).
+- RAM física disponible: 0,453 GiB; carga informada: 97%; Working Set de llama-server: 11.136.299.008 bytes (~10,37 GiB).
+- GTX 1650: 2.149 MiB VRAM usados de 4.096 MiB durante reposo.
+
+### Salvedades y correcciones
+
+- El contador de Windows `Page Reads/sec` / `Pages Input/sec` no estuvo disponible: PowerShell devolvió que el objeto no existe. No se interpreta como cero paginación; queda como limitación de telemetría del sistema.
+- El dump `llama-flags-nuevo.txt` es UTF-16. El lector anterior lo interpretó como UTF-8 y produjo un falso cero en el conteo del dump. El ejecutor se corrigió a v1.1.1 para detectar UTF-8/UTF-16. Independientemente de ese fallo de lectura, la ayuda local de b11856 reconoció las 18 flags configuradas y no encontró ninguna ausente.
+- La prueba activa de canarios de caché no se ejecutó. La revisión de configuración sigue marcada como pendiente de aislamiento; no hay evidencia de contaminación en estas capturas, pero tampoco una prueba que la descarte.
+- La RAM libre observada es demasiado baja para benchmarks fiables. No iniciar pruebas de variantes con menos de 1,5 GiB disponibles.
+
+**Criterio de salida:** Fase 1 queda **completada con salvedades**. La build, el modelo, las flags activas, el servidor y el estado de slots están identificados. La telemetría de paginación está documentada como no disponible y la prueba de caché se mantiene diferida. No cambiar la configuración de producción.
+
+## Entrada a Fase 2 — línea base controlada
+
+Primer ejecutor: `InformacionCritica/scripts/diagnostico-velocidad.py` v1.2.
+
+- Mantiene el servidor vivo; no reinicia procesos ni cambia `config.txt`.
+- Certifica la receta activa a partir de la línea de comandos del proceso.
+- Envía cuatro solicitudes secuenciales al endpoint `/completion`, 256 tokens cada una, temperatura 0 y seed fija; registra prefill de la primera y media decode de las pasadas 2–4.
+- Comprueba `/slots` antes de cada solicitud y aborta si no puede verificar que todos estén libres.
+- En Windows exige al menos 1,5 GiB de RAM física disponible antes de enviar prompts.
+- Instrucción operativa: cerrar aplicaciones de alto consumo, mantener Qwen cargado, dejar el chat sin actividad durante la medición y no iniciar otra aplicación cliente.
+
+Salida: `RUTA_LOGS\diagnostico-AAAAMMDD-HHMMSS.md`, normalmente bajo `D:\\ZLia\\faseD-logs\\`.
+
+La captura actual (0,453 GiB libres) no pasa el umbral. La siguiente medición solo será válida cuando el preflight confirme ≥1,5 GiB y ambos slots estén libres.
+
+## Reutilización de evidencia histórica
+
+Antes de repetir experimentos, se deben tener presentes los datos documentados en `InformacionCritica/docs/informe-velocidad-sweep.md` y `investigacion/niveles-velocidad/nivel-1-recorte-expertos-resumen.md`:
+
+- `-lm none`, `-t 4`, MTP y `--moe-cache-mib` ya tienen resultados históricos en el equipo. No repetir sin hipótesis nueva.
+- El barrido histórico reportó 21,50 t/s con `-lm none`, 20,85 t/s para su BASE, pérdidas con las dosis MoE-cache de 256/512 MiB, y MTP por debajo de la base en aquel perfil.
+- La campaña Nivel 1 documenta experimentos de `expert_used_count`, `-ncmoe` y `-ot`, pero se deben conservar sus límites de comparabilidad frente al perfil NP2 actualmente abierto y no mezclar medias entre protocolos distintos.
+- La Fase 2 de esta campaña debe priorizar variables todavía no resueltas y perfiles comparables con NP2; cada variante debe cambiar una sola variable, tener al menos tres repeticiones válidas y conservar logs/resultados crudos.
+
+**Siguiente puerta:** línea base NP2 nueva y limpia. Solo después de revisarla se selecciona el primer experimento OFAT; no se lanzará un barrido amplio a ciegas.
