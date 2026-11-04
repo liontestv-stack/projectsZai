@@ -235,7 +235,7 @@ Se recibieron dos paquetes del equipo local:
 - El contador de Windows `Page Reads/sec` / `Pages Input/sec` no estuvo disponible: PowerShell devolvió que el objeto no existe. No se interpreta como cero paginación; queda como limitación de telemetría del sistema.
 - El dump `llama-flags-nuevo.txt` es UTF-16. El lector anterior lo interpretó como UTF-8 y produjo un falso cero en el conteo del dump. El ejecutor se corrigió a v1.1.1 para detectar UTF-8/UTF-16. Independientemente de ese fallo de lectura, la ayuda local de b11856 reconoció las 18 flags configuradas y no encontró ninguna ausente.
 - La prueba activa de canarios de caché no se ejecutó. La revisión de configuración sigue marcada como pendiente de aislamiento; no hay evidencia de contaminación en estas capturas, pero tampoco una prueba que la descarte.
-- La RAM libre observada es demasiado baja para benchmarks fiables. No iniciar pruebas de variantes con menos de 1,5 GiB disponibles.
+- La RAM libre observada fue muy baja (0,453 GiB), lo que puede reducir los t/s por paginación; se registra como condición de la prueba, pero no existe un umbral de RAM que impida iniciar el diagnóstico.
 
 **Criterio de salida:** Fase 1 queda **completada con salvedades**. La build, el modelo, las flags activas, el servidor y el estado de slots están identificados. La telemetría de paginación está documentada como no disponible y la prueba de caché se mantiene diferida. No cambiar la configuración de producción.
 
