@@ -64,6 +64,7 @@ PORT_DEFAULT = 9931      # dump verbatim: default del server b11856 (v0.7.0)
 CTX_RIG = 16384          # -c del lanzador; ahora se hereda de config.txt
 
 CONFIG_OFICIAL = r"D:\ZLia\config.txt"   # misma fuente que abrir-qwen-apex.py
+LAUNCHER_OFICIAL = r"D:\ZLia\abrir-qwen-apex.py"
 
 
 def _config_central():
