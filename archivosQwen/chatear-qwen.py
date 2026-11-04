@@ -201,7 +201,7 @@ def consultar_expertos_actuales():
         )
     except Exception:
         return None
-    m = re.search(r"EXPERTOS_ACTUALES:\\s*(\\d+)", (r.stdout or ""))
+    m = re.search(r"EXPERTOS_ACTUALES:\s*(\d+)", (r.stdout or ""))
     return int(m.group(1)) if r.returncode == 0 and m else None
 
 
