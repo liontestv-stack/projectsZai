@@ -129,7 +129,7 @@ def _k_desde_tokens(tokens):
     valor = _valor_despues(tokens, "--override-kv")
     if not valor:
         return 8  # default documentado del modelo: 8 expertos usados
-    m = re.search(r"qwen35moe\\.expert_used_count=int:(\\d+)", valor)
+    m = re.search(r"qwen35moe\.expert_used_count=int:(\d+)", valor)
     if not m:
         raise RuntimeError("override-kv presente pero no contiene expert_used_count reconocible")
     k = int(m.group(1))
