@@ -264,3 +264,21 @@ Antes de repetir experimentos, se deben tener presentes los datos documentados e
 - La Fase 2 de esta campaña debe priorizar variables todavía no resueltas y perfiles comparables con NP2; cada variante debe cambiar una sola variable, tener al menos tres repeticiones válidas y conservar logs/resultados crudos.
 
 **Siguiente puerta:** línea base NP2 nueva y limpia. Solo después de revisarla se selecciona el primer experimento OFAT; no se lanzará un barrido amplio a ciegas.
+
+## Política prioritaria de optimización y perfiles de expertos (04-nov-2026)
+
+**Objetivo principal: aumentar tokens/s manteniendo K=8 y la capacidad/inteligencia del modelo.** Reducir expertos usados por token (K=7..4) es una opción secundaria de perfil con intercambio explícito de calidad/capacidad; no será el centro de la campaña ni se promocionará como ganador principal solo por ser más rápido. K=8 permanece como referencia de producción.
+
+### Prioridades de Fase 2: rendimiento sin recortar K
+1. Distribución/offload de expertos y tensores (-ncmoe, -ot) manteniendo K=8; estudiar el equilibrio RAM/VRAM y el cuello de botella de la GTX 1650.
+2. Colocación de KV (-nkvo y variantes admitidas), cuantización asimétrica K/V y contexto efectivo por slot.
+3. Auto-fit y buffers (-ngl auto, -fit, -fit-target, -b, -ub) con una variable por experimento.
+4. Especulación N-gram y otras técnicas solo si la mejora neta se confirma en prompts reales y sin degradar calidad.
+5. Reutilización/caché de prompt y opciones de caché, únicamente tras completar la revisión de integridad de sesiones.
+6. Repack, host buffers, checkpoints y SWA como líneas posteriores según evidencia de memoria.
+7. K=7..4 se estudia por separado como perfil CHARLA opcional, con batería de calidad y sin mezclar sus t/s con las comparaciones K=8.
+
+Cada candidato: baseline K=8, cambio OFAT, mínimo tres repeticiones, registro de prefill/decode, RAM/VRAM, estabilidad y calidad. Un aumento de t/s que reduzca la capacidad de razonamiento o la tasa de éxito no es una optimización ganadora.
+
+### Cambio de perfil desde el chat
+Se incorpora /expertos 4..8. Reinicia llama-server porque --override-kv qwen35moe.expert_used_count se aplica al cargar el modelo. El historial local, system prompt y presets permanecen en el cliente; la KV del servidor se reconstruye. El cambio solo procede con /health sano, /slots verificable y todos los slots libres, y una identificación inequívoca del proceso por ejecutable + modelo + puerto. No edita config.txt ni utiliza taskkill /F. K=8 sigue siendo el perfil principal.
