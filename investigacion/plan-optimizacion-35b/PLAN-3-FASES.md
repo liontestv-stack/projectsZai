@@ -223,7 +223,7 @@ Se recibieron dos paquetes del equipo local:
 - Windows 11, Python 3.14.4.
 - llama.cpp: build 11856, commit 3642238cc.
 - Modelo: GGUF Qwen 3.6-35B-A3B APEX-I-MINI, 14.273.277.376 bytes; arquitectura GGUF `qwen35moe`, 41 bloques, 256 expertos y 8 expertos usados por token.
-- Proceso vivo: `D:\\llama.cpp\\llama-server.exe`, PID 15036.
+- Proceso vivo: `D:\llama.cpp\llama-server.exe`, PID 15036.
 - Perfil en ejecución: `-ngl 99 -cmoe -c 16384 -np 2 -ctk q8_0 -ctv q8_0 -t 4 -lm none`, con `-ub 1024 -b 4096` al final (last-wins).
 - `/health`: HTTP 200. `/slots`: dos slots de 8.192 tokens, ambos libres.
 - `/metrics`: HTTP 501 (endpoint no implementado en esta build).
@@ -250,7 +250,7 @@ Primer ejecutor: `InformacionCritica/scripts/diagnostico-velocidad.py` v1.2.
 - En Windows exige al menos 1,5 GiB de RAM física disponible antes de enviar prompts.
 - Instrucción operativa: cerrar aplicaciones de alto consumo, mantener Qwen cargado, dejar el chat sin actividad durante la medición y no iniciar otra aplicación cliente.
 
-Salida: `RUTA_LOGS\diagnostico-AAAAMMDD-HHMMSS.md`, normalmente bajo `D:\\ZLia\\faseD-logs\\`.
+Salida: `RUTA_LOGS\diagnostico-AAAAMMDD-HHMMSS.md`, normalmente bajo `D:\ZLia\faseD-logs\\`.
 
 La captura actual (0,453 GiB libres) no pasa el umbral. La siguiente medición solo será válida cuando el preflight confirme ≥1,5 GiB y ambos slots estén libres.
 
