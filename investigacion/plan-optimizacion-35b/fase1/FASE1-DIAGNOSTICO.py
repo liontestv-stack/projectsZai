@@ -41,7 +41,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-VERSION_SCRIPT = "1.1.0"
+VERSION_SCRIPT = "1.1.1"
 REPO_NAME = "liontestv-stack/projectsZai"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9931
@@ -58,6 +58,17 @@ def json_dump(path: Path, obj: Any) -> None:
 
 def text_dump(path: Path, value: str) -> None:
     path.write_text(value[:MAX_CAPTURE_CHARS], encoding="utf-8", errors="replace")
+
+
+def read_text_auto(path: Path) -> str:
+    """Lee dumps UTF-8 o UTF-16 (LE/BE), incluso si falta el BOM."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\\xff\\xfe", b"\\xfe\\xff")):
+        return raw.decode("utf-16", errors="replace")
+    sample = raw[:512]
+    if sample and sample.count(b"\\x00") > max(2, len(sample) // 8):
+        return raw.decode("utf-16-le", errors="replace")
+    return raw.decode("utf-8-sig", errors="replace")
 
 
 def parse_config(path: Path) -> Dict[str, str]:
@@ -814,7 +825,7 @@ def main() -> int:
     dump_text = ""
     if flags_path:
         try:
-            dump_text = flags_path.read_text(encoding="utf-8-sig", errors="replace")
+            dump_text = read_text_auto(flags_path)
         except Exception as exc:
             summary["flag_audit"]["dump_error"] = repr(exc)
     dump_flags = flags_from_text(dump_text)
